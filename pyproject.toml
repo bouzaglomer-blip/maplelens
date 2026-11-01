@@ -6,7 +6,11 @@ readme = "README.md"
 license = "MIT"
 authors = [{ name = "or-keren" }]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "mss>=10.2.0",
+    "numpy>=2.5.4",
+    "opencv-python-headless>=5.0.0.93",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
