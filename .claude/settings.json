@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(uv sync)",
+      "Bash(uv sync *)",
+      "Bash(uv run pytest)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run python scripts/check_screen_only.py)",
+      "Bash(uv run python scripts/check_screen_only.py *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)"
+    ],
+    "deny": [
+      "Bash(uv add *frida*)",
+      "Bash(pip install *frida*)",
+      "Bash(uv pip install *frida*)",
+      "Bash(uv add *keyboard*)",
+      "Bash(pip install *keyboard*)",
+      "Bash(uv pip install *keyboard*)",
+      "Bash(uv add *mouse*)",
+      "Bash(pip install *mouse*)",
+      "Bash(uv pip install *mouse*)",
+      "Bash(uv add *pyautogui*)",
+      "Bash(pip install *pyautogui*)",
+      "Bash(uv pip install *pyautogui*)",
+      "Bash(uv add *pydivert*)",
+      "Bash(pip install *pydivert*)",
+      "Bash(uv pip install *pydivert*)",
+      "Bash(uv add *pymem*)",
+      "Bash(pip install *pymem*)",
+      "Bash(uv pip install *pymem*)",
+      "Bash(uv add *pynput*)",
+      "Bash(pip install *pynput*)",
+      "Bash(uv pip install *pynput*)",
+      "Bash(uv add *pyshark*)",
+      "Bash(pip install *pyshark*)",
+      "Bash(uv pip install *pyshark*)",
+      "Bash(uv add *pywinauto*)",
+      "Bash(pip install *pywinauto*)",
+      "Bash(uv pip install *pywinauto*)",
+      "Bash(uv add *scapy*)",
+      "Bash(pip install *scapy*)",
+      "Bash(uv pip install *scapy*)",
+      "Bash(uv add *win32process*)",
+      "Bash(pip install *win32process*)",
+      "Bash(uv pip install *win32process*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --project \"$CLAUDE_PROJECT_DIR\" python \"$CLAUDE_PROJECT_DIR/scripts/check_screen_only.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
