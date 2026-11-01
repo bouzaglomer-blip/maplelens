@@ -140,3 +140,14 @@ def test_close_closes_open_segment():
     m.close(100)
     assert len(m.pop_closed()) == 1
     assert m.open_segment() is None
+
+
+def test_covered_bar_keeps_baseline():
+    m = ExpMeter()
+    steady(m, 3)  # last pct 11.0
+    for i in range(4):
+        r = Reading(90 + i * 10, None, 22, "Rogue", MAP)
+        m.feed(r)
+    feed(m, 130, 1150, 11.5)
+    assert m.open_segment().pct == pytest.approx(1.5)
+    assert m.rate(131).pct_per_min == pytest.approx(1.5 / (131 / 60))

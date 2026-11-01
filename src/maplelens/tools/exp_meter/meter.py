@@ -49,6 +49,7 @@ class ExpMeter:
             _Confirmed() for _ in range(4)
         )
         self._fields = fields
+        self._base: ExpValue | None = None
         self._first_t: float | None = None
         self._window: deque[tuple[float, int, float]] = deque()  # (t, raw, pct) counted gains
         self._recent: deque[float] = deque(maxlen=50)  # pct of the last counted gains
@@ -60,13 +61,16 @@ class ExpMeter:
         t = r.t if r else None
         if r and self._first_t is None:
             self._first_t = t
-        old_exp, old_level = self._exp.value, self._level.value
+        old_level = self._level.value
         vals = (r.exp, r.level, r.job, r.map_name) if r else (None,) * 4
         exp_ch, level_ch, *_ = (f.update(v) for f, v in zip(self._fields, vals, strict=True))
 
         # 1. exp change, credited to the segment open now (a level-up's wrap goes to the old level)
-        if exp_ch and old_exp is not None and self._exp.value is not None:
-            self._on_exp(old_exp, old_level, level_ch, t)
+        # the baseline is the last confirmed non-None exp; an unreadable bar never resets it
+        if exp_ch and self._exp.value is not None:
+            if self._base is not None:
+                self._on_exp(self._base, old_level, level_ch, t)
+            self._base = self._exp.value
 
         # 2. close on a confirmed change to a different non-None value, then open
         seg, level = self._seg, self._level.value
@@ -88,7 +92,9 @@ class ExpMeter:
         new, level = self._exp.value, self._level.value
         gain = None
         if level_ch:
-            # ponytail: level-up needs the level and the % drop to confirm on the same feed; a level misread at that moment counts the wrap as a death. Look at the level one feed later if that shows up.  # noqa: E501
+            # ponytail: level-up needs the level and the % drop to confirm on the same feed; a level
+            # misread at that moment counts the wrap as a death. Look at the level one feed later if
+            # that shows up.
             if old_level is not None and level is not None and level > old_level:
                 base = old.raw / (old.pct / 100) - old.raw if old.pct else 0
                 gain = (round(base) + new.raw, (100 - old.pct) + new.pct)
