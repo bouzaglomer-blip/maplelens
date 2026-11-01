@@ -44,8 +44,18 @@ def list_windows() -> list[str]:
     return [title for _, title in _windows()]
 
 
+def pick_window(titles: list[tuple[int, str]], title: str) -> int | None:
+    """Exact title match wins; otherwise the first substring match."""
+    exact = next((h for h, t in titles if t == title), None)
+    return exact if exact is not None else next((h for h, t in titles if title in t), None)
+
+
 def find_window(title: str) -> int | None:
-    return next((h for h, t in _windows() if title in t), None)
+    return pick_window(_windows(), title)
+
+
+def window_title(hwnd: int) -> str:
+    return next((t for h, t in _windows() if h == hwnd), "")
 
 
 def client_rect(hwnd: int) -> tuple[int, int, int, int] | None:
@@ -56,6 +66,8 @@ def client_rect(hwnd: int) -> tuple[int, int, int, int] | None:
         return None
     origin = wintypes.POINT(0, 0)
     if not user32.ClientToScreen(hwnd, ctypes.byref(origin)):
+        return None
+    if r.right <= 0 or r.bottom <= 0:
         return None
     return origin.x, origin.y, r.right, r.bottom
 
