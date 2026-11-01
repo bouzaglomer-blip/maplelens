@@ -141,13 +141,18 @@ EXP meter needs four:
 - **No fixed coordinates.** Each reader first *finds* its region by searching
   the frame for an anchor that looks the same at every resolution: the `EXP`
   label and `LV.` on the status bar, the `mini map` title bar on the minimap
-  *(my call)*. Then it reads at a fixed offset from the anchor. The game draws
-  its UI at native pixel size and only moves it (status bar bottom-centre,
-  minimap wherever the player drags it), so the same templates work at any
-  resolution. Anchor positions are cached and re-searched only when a read
-  fails, to keep CPU low.
-- Capture reads the window's own client area, so pixels are the game's
-  native pixels. They're never a stretched full-screen image.
+  *(my call)*. Then it reads at a fixed offset from the anchor. Anchor
+  positions are cached and re-searched only when a read fails, to keep CPU
+  low.
+- **The game scales its whole picture with the window** (measured from owner
+  screenshots, 2026-11-01: the status bar is ~795 px wide at 1366x768 and
+  ~1500 px at 2560x1440, the same ratio as the resolutions). So every reader
+  first **resizes the frame to a base height of 768 px** (area interpolation),
+  then finds anchors and reads. Templates are cut from **1366x768** grabs,
+  where the game's pixels map 1:1 *(my call)*. Glyph matching must tolerate
+  the slight blur that rescaling leaves. The anchor search still covers the
+  whole frame, because the minimap can be anywhere.
+- Capture reads the window's own client area.
 - Matching approach is the builder's call, with constraints: no external
   program the end user must install (e.g. no separate OCR engine), and it must
   be deterministic so fixture tests are stable. Template matching against
@@ -215,17 +220,21 @@ The builder can't run the game, so step 1 of the plan is a small script the
 owner runs (`uv run python scripts/grab.py` *(my call)*). It:
 
 - lists visible window titles, so the owner can pick the game's;
-- grabs the game window with the real capture code and saves the frame plus
-  the reader crops (status bar without the name line, minimap title) as PNGs
-  at native pixels, named with resolution + UI scale.
+- grabs the game window with the real capture code and saves full frames as
+  lossless PNGs to `%APPDATA%\MapleLens\grabs\`, never the repo;
+- has an **auto mode**: one frame every N seconds for M minutes while the owner
+  plays normally *(my call, to save the owner from running a command per
+  shot)*. The controller can start it in the background.
 
 If the frame comes back black, capture has to switch to Windows Graphics
-Capture before anything else. The owner runs it on a few maps, at a few EXP
-values, across a level-up, and once with a menu covering the bar. Those crops
-become the fixtures. The owner reviews each crop for names/chat before commit.
-To prove "any resolution", the owner also runs it at **at least two other game
-resolutions** (one small, e.g. 1366x768), and the reader tests run on every
-set. Fixtures are named `<region>_<WxH>_100.png`.
+Capture before anything else. The main session is at **1366x768** (the template
+base): a few maps, a range of EXP values, a level-up if one is close, and a
+menu over the bar once. Shorter sessions at **1920x1080 and 2560x1440** prove
+the rescaling. The builder cuts fixture crops (no name line, chat or other
+players) from those frames. The owner reviews each crop before commit, and
+reader tests run on every resolution. Fixtures are named
+`<reader>_<case>_<WxH>_100.png`. Pasted chat screenshots can't be used: they
+arrive shrunk and lossy.
 
 ## Testing
 
