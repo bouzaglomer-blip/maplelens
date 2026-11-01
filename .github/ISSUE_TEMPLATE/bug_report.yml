@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in MapleLens doesn't work or reads the screen wrong.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Cropped screenshot
+      description: Crop to the part MapleLens misread (EXP bar, minimap…). Remove character names and chat.
+  - type: input
+    id: resolution
+    attributes:
+      label: Game resolution
+      placeholder: 1366x768
+    validations:
+      required: true
+  - type: input
+    id: ui-scale
+    attributes:
+      label: UI scale
+      placeholder: 100%
+  - type: dropdown
+    id: window-mode
+    attributes:
+      label: Window mode
+      options:
+        - Windowed
+        - Borderless
+        - Fullscreen (not supported)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: MapleLens version or commit
+    validations:
+      required: true

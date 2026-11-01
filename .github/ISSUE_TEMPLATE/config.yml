@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem or ban-risk code
+    url: https://github.com/or-keren/maplelens/security/policy
+    about: Report privately. Please don't open a public issue.

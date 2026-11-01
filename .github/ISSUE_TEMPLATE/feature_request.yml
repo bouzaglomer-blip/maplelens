@@ -1,0 +1,23 @@
+name: Feature or tool idea
+description: Suggest something MapleLens could help with in game.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: moment
+    attributes:
+      label: The in-game moment
+      description: When do you wish this existed? Walk us through it.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you use today instead?
+      description: A website, a spreadsheet, a second screen, nothing?
+  - type: checkboxes
+    id: screen-only
+    attributes:
+      label: Screen-only
+      options:
+        - label: This idea only needs what's visible on screen. No game memory, files, network, or input.
+          required: true
