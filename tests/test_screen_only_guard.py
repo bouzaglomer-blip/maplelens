@@ -67,5 +67,35 @@ def test_directory_arg_walks_py_files(tmp_path):
     assert r.returncode == 2 and "pyautogui" in r.stderr and "pymem" not in r.stderr
 
 
+def test_bom_file_still_checked(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_bytes(b"\xef\xbb\xbfimport pymem\n")
+    r = run_guard(str(f))
+    assert r.returncode == 2 and "bad.py:1: banned import 'pymem'" in r.stderr
+
+
+def test_flags_dynamic_import(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text('importlib.import_module("pymem")\n__import__("frida.core")\n', encoding="utf-8")
+    r = run_guard(str(f))
+    assert r.returncode == 2
+    assert "bad.py:1: banned import 'pymem'" in r.stderr
+    assert "bad.py:2: banned import 'frida'" in r.stderr
+
+
+def test_flags_game_input_libs_and_message_variants(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "import pydirectinput\nimport ahk\nwin32gui.SendMessageTimeout(h)\nPostThreadMessageW(t)\n",
+        encoding="utf-8",
+    )
+    r = run_guard(str(f))
+    assert r.returncode == 2
+    assert "bad.py:1: banned import 'pydirectinput'" in r.stderr
+    assert "bad.py:2: banned import 'ahk'" in r.stderr
+    assert "bad.py:3: banned Win32 call 'SendMessageTimeout'" in r.stderr
+    assert "bad.py:4: banned Win32 call 'PostThreadMessage'" in r.stderr
+
+
 def test_repo_is_clean_from_any_cwd(tmp_path):
     assert run_guard(cwd=tmp_path).returncode == 0

@@ -149,13 +149,17 @@ under `src/` and `scripts/` (excluding itself) and fails with file:line on:
 
 - imports of known process-memory / injection / packet-capture modules:
   `pymem`, `frida`, `scapy`, `pydivert`, `pywinauto`, `pyautogui`,
-  `pynput`, `keyboard`, `mouse`, `win32process`, `pyshark`
+  `pynput`, `keyboard`, `mouse`, `win32process`, `pyshark`, `pydirectinput`,
+  `ahk`, `interception`, `vgamepad`, `ReadWriteMemory` — also when loaded via
+  `__import__("x")` / `import_module("x")` with a literal name
   (input-sending libraries are banned because the overlay must never drive
   the game; overlay hotkeys will use Qt's own shortcut handling)
 - string references to Win32 calls: `ReadProcessMemory`,
   `WriteProcessMemory`, `OpenProcess`, `VirtualAllocEx`,
   `CreateRemoteThread`, `SendInput`, `SetWindowsHookEx`, `keybd_event`,
-  `mouse_event`, `PostMessage`, `SendMessage`
+  `mouse_event`, `PostMessage`, `SendMessage`, `SendMessageTimeout`,
+  `SendMessageCallback`, `SendNotifyMessage`, `PostThreadMessage`,
+  `NtReadVirtualMemory`, `NtWriteVirtualMemory`, `DebugActiveProcess`
 
 It is a speed bump against honest mistakes, not a security boundary; README
 says so. Runs in CI and in the Claude hook. The banned list lives in the
@@ -192,6 +196,9 @@ passes on the real repo.
   reporting; in scope: security bugs **and** any code that could get players
   banned (anything breaking the screen-only rule). Those are treated the same.
 - **LICENSE**: MIT, copyright holder = owner's name (ask at build time).
+
+Files are read as UTF-8 with an optional BOM (`utf-8-sig`).
+*(Lists extended after final review, 2026-11-01.)*
 
 ## Done means
 

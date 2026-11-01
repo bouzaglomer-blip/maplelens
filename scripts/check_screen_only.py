@@ -30,6 +30,11 @@ BANNED_MODULES = {
     "pynput",  # sends keys/clicks
     "keyboard",  # sends keys / global hooks
     "mouse",  # sends clicks / global hooks
+    "pydirectinput",  # sends keys/clicks to DirectX games
+    "ahk",  # AutoHotkey bindings, sends input
+    "interception",  # driver-level input
+    "vgamepad",  # virtual controller input
+    "ReadWriteMemory",  # reads/writes process memory
 }
 
 BANNED_WIN32 = [
@@ -44,13 +49,35 @@ BANNED_WIN32 = [
     "mouse_event",  # sends clicks
     "PostMessage",  # sends input messages to the game window
     "SendMessage",  # sends input messages to the game window
+    "SendMessageTimeout",  # same, with a timeout
+    "SendMessageCallback",  # same, async
+    "SendNotifyMessage",  # same, no wait
+    "PostThreadMessage",  # sends input messages to the game thread
+    "NtReadVirtualMemory",  # reads game memory (native API)
+    "NtWriteVirtualMemory",  # writes game memory (native API)
+    "DebugActiveProcess",  # attaches a debugger to the game
 ]
 
 WIN32_RE = re.compile(r"\b(" + "|".join(BANNED_WIN32) + r")[AW]?\b")
 
 
+def is_dynamic_import(node: ast.AST) -> bool:
+    """__import__("x") or import_module("x") / importlib.import_module("x")."""
+    if not isinstance(node, ast.Call) or not node.args:
+        return False
+    f = node.func
+    name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
+    arg = node.args[0]
+    return (
+        name in ("__import__", "import_module")
+        and isinstance(arg, ast.Constant)
+        and isinstance(arg.value, str)
+    )
+
+
 def find_violations(path: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8", errors="replace")
+    # utf-8-sig: a BOM (common from Windows editors) would otherwise break ast.parse
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
     found = []
     try:
         for node in ast.walk(ast.parse(text)):
@@ -58,6 +85,8 @@ def find_violations(path: Path) -> list[str]:
                 names = [a.name for a in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 names = [node.module]
+            elif is_dynamic_import(node):
+                names = [node.args[0].value]
             else:
                 continue
             for name in names:
