@@ -122,7 +122,9 @@ def test_paused_stretch_adds_no_active_time():
     for _ in range(4):
         m.feed(None)
     feed(m, 50, 1100, 10.5)
-    assert m.open_segment().active_s == 0
+    seg = m.open_segment()
+    assert seg.active_s == 0
+    assert seg.pct == pytest.approx(0.5)  # the first gain after the stretch still counts
 
 
 def test_unreadable_map_keeps_the_segment():
@@ -151,3 +153,34 @@ def test_covered_bar_keeps_baseline():
     feed(m, 130, 1150, 11.5)
     assert m.open_segment().pct == pytest.approx(1.5)
     assert m.rate(131).pct_per_min == pytest.approx(1.5 / (131 / 60))
+
+
+def test_covered_level_up_never_negative():
+    m = ExpMeter()
+    feed(m, 0, 50000, 50.0)
+    feed(m, 30, 51000, 51.0)
+    for t, level in [(60, 22), (90, 23)]:
+        for dt in (0, 0.5):
+            m.feed(Reading(t + dt, None, level, "Rogue", MAP))
+    feed(m, 120, 60000, 30.0, level=23)
+    segs = m.pop_closed() + [m.open_segment()]
+    assert all(s.pct >= 0 and s.exp >= 0 for s in segs)
+    assert segs[0].pct == pytest.approx(1.0)
+    assert m.rate(150).pct_per_min > 0
+
+
+def test_paused_gain_not_credited_to_segment():
+    m = ExpMeter()
+    steady(m, 3)  # segment pct 1.0
+    feed(m, 90, 1150, 11.5, map_name=None)
+    assert m.open_segment().pct == pytest.approx(1.0)
+    assert m.rate(150).pct_per_min == pytest.approx(1.5 / (150 / 60))
+
+
+def test_single_dropped_frame_keeps_accrual():
+    m = ExpMeter()
+    feed(m, 0, 1000, 10.0)
+    feed(m, 30, 1050, 10.5)
+    m.feed(None)
+    feed(m, 60, 1100, 11.0)
+    assert m.open_segment().active_s == pytest.approx(60)

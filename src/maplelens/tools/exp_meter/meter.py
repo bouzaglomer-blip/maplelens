@@ -49,7 +49,7 @@ class ExpMeter:
             _Confirmed() for _ in range(4)
         )
         self._fields = fields
-        self._base: ExpValue | None = None
+        self._base: tuple[ExpValue, int | None] | None = None  # last non-None exp and its level
         self._first_t: float | None = None
         self._window: deque[tuple[float, int, float]] = deque()  # (t, raw, pct) counted gains
         self._recent: deque[float] = deque(maxlen=50)  # pct of the last counted gains
@@ -61,20 +61,21 @@ class ExpMeter:
         t = r.t if r else None
         if r and self._first_t is None:
             self._first_t = t
-        old_level = self._level.value
         vals = (r.exp, r.level, r.job, r.map_name) if r else (None,) * 4
-        exp_ch, level_ch, *_ = (f.update(v) for f, v in zip(self._fields, vals, strict=True))
+        exp_ch, *_ = (f.update(v) for f, v in zip(self._fields, vals, strict=True))
+
+        level = self._level.value
+        ctx = (self._map.value, self._job.value, level)
 
         # 1. exp change, credited to the segment open now (a level-up's wrap goes to the old level)
         # the baseline is the last confirmed non-None exp; an unreadable bar never resets it
         if exp_ch and self._exp.value is not None:
             if self._base is not None:
-                self._on_exp(self._base, old_level, level_ch, t)
-            self._base = self._exp.value
+                self._on_exp(*self._base, None in ctx, t)
+            self._base = (self._exp.value, level)
 
         # 2. close on a confirmed change to a different non-None value, then open
-        seg, level = self._seg, self._level.value
-        ctx = (self._map.value, self._job.value, level)
+        seg = self._seg
         if seg and any(
             c is not None and c != s
             for c, s in zip(ctx, (seg.map_name, seg.job, seg.level), strict=True)
@@ -84,22 +85,23 @@ class ExpMeter:
             self._seg = Segment(t, t, *ctx[:2], level)
             self._last_event_t = t
 
-        # 3. no frame or unreadable context: pause accrual, keep the segment
-        if r is None or None in ctx:
+        # 3. map, job or level confirmed unreadable: pause accrual, keep the segment
+        if None in ctx:
             self._last_event_t = None
 
-    def _on_exp(self, old: ExpValue, old_level, level_ch: bool, t: float) -> None:
+    def _on_exp(self, old: ExpValue, old_level, paused: bool, t: float) -> None:
         new, level = self._exp.value, self._level.value
         gain = None
-        if level_ch:
-            # ponytail: level-up needs the level and the % drop to confirm on the same feed; a level
-            # misread at that moment counts the wrap as a death. Look at the level one feed later if
-            # that shows up.
-            if old_level is not None and level is not None and level > old_level:
+        if old_level is not None and level is not None:
+            if level == old_level:
+                if new.raw >= old.raw and new.pct >= old.pct:  # a drop at the same level is a death
+                    gain = (new.raw - old.raw, new.pct - old.pct)
+            elif level > old_level:
+                # ponytail: level-up needs the level and the % drop to confirm on the same feed;
+                # a level misread at that moment counts the wrap as a death. Look at the level
+                # one feed later if that shows up.
                 base = old.raw / (old.pct / 100) - old.raw if old.pct else 0
                 gain = (round(base) + new.raw, (100 - old.pct) + new.pct)
-        elif level is not None and new.raw >= old.raw:  # new < old at the same level is a death
-            gain = (new.raw - old.raw, new.pct - old.pct)
         if gain and len(self._recent) >= 10:
             med = median(self._recent)
             if med > 0 and gain[1] > self.jump_factor * med:
@@ -110,7 +112,7 @@ class ExpMeter:
             while self._window[0][0] <= t - self.window_s:
                 self._window.popleft()
         seg = self._seg
-        if seg:
+        if seg and not paused:  # gains while paused count in the live rate only
             if self._last_event_t is not None and t - self._last_event_t <= self.idle_cutoff_s:
                 seg.active_s += t - self._last_event_t
             if gain:
