@@ -32,9 +32,16 @@ def _save(frame, out_dir: Path, name: str) -> tuple[Path, float]:
     return out, float(frame.mean())
 
 
+def _remember_title(title: str) -> None:
+    path = data_dir() / "settings.json"
+    settings = load_settings(path)
+    settings["window_title"] = title
+    save_settings(path, settings)
+
+
 def _auto(args, out_dir: Path) -> int:
     end = time.monotonic() + args.minutes * 60
-    n = 0
+    n = black = 0
     try:
         while time.monotonic() < end:
             hwnd = find_window(args.title)
@@ -44,14 +51,18 @@ def _auto(args, out_dir: Path) -> int:
             else:
                 if n == 0:
                     print(f"matched window: {window_title(hwnd)}")
+                    _remember_title(args.title)
                 n += 1
                 out, mean = _save(grab(rect), out_dir, f"{args.label}_{n:03d}_{{size}}.png")
                 print(f"{out}  mean brightness {mean:.1f}")
+                if mean < 5:
+                    black += 1
+                    print("capture returned a black frame - tell the developer")
             time.sleep(args.every)
     except KeyboardInterrupt:
         print("stopped")
-    print(f"saved {n} frames")
-    return 0
+    print(f"saved {n} frames, {black} black")
+    return 1 if black else 0
 
 
 def main() -> int:
@@ -73,10 +84,6 @@ def main() -> int:
     if not args.title:
         print("\n".join(list_windows()))
         return 0
-    settings_path = data_dir() / "settings.json"
-    settings = load_settings(settings_path)
-    settings["window_title"] = args.title
-    save_settings(settings_path, settings)
     out_dir = data_dir() / "grabs"
     out_dir.mkdir(exist_ok=True)
     if args.every is not None:
@@ -90,6 +97,7 @@ def main() -> int:
     if rect is None:
         print("window is minimized or gone", file=sys.stderr)
         return 1
+    _remember_title(args.title)
     out, mean = _save(grab(rect), out_dir, f"{args.label}_{{size}}.png")
     print(f"{out}  mean brightness {mean:.1f}")
     if mean < 5:
