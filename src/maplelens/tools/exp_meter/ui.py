@@ -38,6 +38,7 @@ class HistoryWindow(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.verticalHeader().hide()
         self.setSortingEnabled(True)
+        self.setAttribute(Qt.WA_QuitOnClose, False)  # closing it must not end the app
         self.resize(760, 360)
 
     def refresh(self) -> None:
@@ -62,7 +63,6 @@ class HistoryWindow(QTableWidget):
 
     def showEvent(self, event):
         exclude_from_capture(self)
-        self.refresh()
         super().showEvent(event)
 
 
@@ -78,6 +78,7 @@ class ExpMeterTool:
         self._box.show()
 
     def _show_history(self) -> None:
+        self._history.refresh()
         self._history.show()
         self._history.raise_()
 

@@ -2,6 +2,7 @@
 
 import sys
 import time
+import traceback
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
@@ -28,9 +29,10 @@ def main() -> int:
 
     layer = Layer()
     tool = ExpMeterTool(
-        settings, open_db(data_dir() / "history.db"), lambda: save_settings(path, settings)
+        settings, open_db(data_dir() / "maplelens.db"), lambda: save_settings(path, settings)
     )
     hwnd = None
+    seen: set[str] = set()  # error types/messages already printed
 
     def tick() -> None:
         nonlocal hwnd
@@ -42,10 +44,17 @@ def main() -> int:
             layer.hide()
             tool.update(None, None, now)
             return
-        frame = grab(rect)
         layer.follow(rect)
         layer.show()
-        tool.update(read_all(frame, now), rect, now)
+        try:
+            reading = read_all(grab(rect), now)
+        except Exception as e:  # a bad tick counts as no reading; the box still follows the game
+            key = f"{type(e).__name__}: {e}"
+            if key not in seen:
+                seen.add(key)
+                traceback.print_exc()
+            reading = None
+        tool.update(reading, rect, now)
 
     timer = QTimer()
     timer.timeout.connect(tick)

@@ -21,3 +21,21 @@ def test_tool_flushes_open_segment_each_minute(monkeypatch, tmp_path):
     assert rows[0].active_s >= 120
     tool.shutdown(1182.5)
     app.processEvents()
+
+
+def test_closing_history_window_does_not_quit(monkeypatch, tmp_path):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+
+    from maplelens.tools.exp_meter.ui import HistoryWindow
+
+    app = QApplication.instance() or QApplication([])
+    win = HistoryWindow(open_db(tmp_path / "h.db"))
+    win.show()
+    survived = []
+    QTimer.singleShot(0, win.close)
+    QTimer.singleShot(200, lambda: survived.append(1))
+    QTimer.singleShot(300, app.quit)  # exec() must still be running at 200 ms
+    app.exec()
+    assert survived == [1]
