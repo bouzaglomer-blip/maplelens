@@ -4,7 +4,7 @@ import re
 
 from maplelens.readers import ExpValue
 
-_EXP = re.compile(r"([\d,]+)\[(\d{1,3}\.\d\d)%\]")
+_EXP = re.compile(r"(\d+(?:,\d+)*)\[(\d{1,3}\.\d\d)%\]", re.ASCII)
 
 
 def parse_exp(text: str) -> ExpValue | None:

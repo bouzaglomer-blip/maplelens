@@ -10,7 +10,9 @@ def test_parse_exp():
     assert parse_exp("0[0.00%]") == ExpValue(0, 0.0)
 
 
-@pytest.mark.parametrize("text", ["23,6", "81.4", "1[100.00%]", "1[81.4%]", ""])
+@pytest.mark.parametrize(
+    "text", ["23,6", "81.4", "1[100.00%]", "1[81.4%]", ",[50.00%]", "1,,2[5.00%]", ""]
+)
 def test_parse_exp_rejects(text):
     assert parse_exp(text) is None
 

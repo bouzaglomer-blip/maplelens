@@ -81,10 +81,16 @@ def mask(img: np.ndarray, lo: tuple[int, int, int], hi: tuple[int, int, int]) ->
 
 def _font(font: str) -> dict[str, np.ndarray]:
     if font not in _fonts:
-        _fonts[font] = {
-            CHAR_NAMES.get(p.stem, p.stem): cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) > 127
-            for p in sorted((TEMPLATES / font).glob("*.png"))
-        }
+        paths = sorted((TEMPLATES / font).glob("*.png"))
+        if not paths:
+            raise FileNotFoundError(f"no glyph PNGs in {TEMPLATES / font}")
+        glyphs = {}
+        for p in paths:
+            img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                raise FileNotFoundError(f"cannot read glyph {p}")
+            glyphs[CHAR_NAMES.get(p.stem, p.stem)] = img > 127
+        _fonts[font] = glyphs
     return _fonts[font]
 
 

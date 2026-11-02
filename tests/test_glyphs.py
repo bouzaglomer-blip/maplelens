@@ -94,3 +94,18 @@ def test_unknown_glyph_is_none(font):
     blob = np.ones((ok.shape[0], 10), bool)
     assert glyphs.read_text(blob, "f", space_px=6) is None
     assert glyphs.read_text(np.hstack([ok, blob]), "f", space_px=6) is None
+
+
+def test_gap_below_space_px_is_no_space(font):
+    assert glyphs.read_text(line(font, "1 2", space=5), "f", space_px=6) == "12"
+    assert glyphs.read_text(line(font, "1 2", space=6), "f", space_px=6) == "1 2"
+
+
+def test_glyph_two_px_off_is_none(font):
+    seven = font["7"]
+    assert glyphs.read_text(np.vstack([seven, seven[-2:]]), "f", space_px=6) is None
+
+
+def test_missing_font_raises(templates):
+    with pytest.raises(FileNotFoundError, match="nofont"):
+        glyphs.read_text(np.ones((5, 5), bool), "nofont", space_px=6)
