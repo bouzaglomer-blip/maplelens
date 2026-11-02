@@ -27,15 +27,19 @@ uv run python scripts/check_screen_only.py   # screen-only guard
 
 ## Layout
 
-- `src/maplelens/` — the package (empty in Phase 0)
+- `src/maplelens/` — the package
+  - `capture.py` — find the game window, grab its pixels
+  - `readers/` — screenshot → value (`glyphs`, `exp`, `level`, `job`, `map_name`; `read_all` in `__init__`)
+  - `overlay.py` — the see-through `Layer` and draggable `Box`
+  - `store.py` — settings file and data folder
+  - `app.py` — entry point (`uv run maplelens`)
+  - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`
 - `scripts/check_screen_only.py` — the guard; banned lists live there, with reasons
+- `scripts/grab.py` — save a cropped fixture screenshot of the game
 - `tests/` — pytest; `tests/fixtures/screens/` holds cropped PNG screenshots
 - `docs/superpowers/specs/`, `docs/superpowers/plans/` — designs and plans
 
-Planned, **not yet** created (add when the EXP meter needs them):
-`capture/` (grab the game window), `readers/` (screenshot → value),
-`overlay/` (the see-through window), `tools/<name>/` (one folder per tool:
-exp meter, class helper, prices, path arrow).
+Planned, **not yet** created: `tools/<name>/` for the path arrow, class helper and prices.
 
 ## Conventions
 
