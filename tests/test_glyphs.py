@@ -1,0 +1,96 @@
+import cv2
+import numpy as np
+import pytest
+
+from maplelens.readers import glyphs
+
+CHARS = {**{str(d): str(d) for d in range(10)}, "comma": ","}
+
+
+@pytest.fixture
+def templates(tmp_path, monkeypatch):
+    monkeypatch.setattr(glyphs, "TEMPLATES", tmp_path)
+    glyphs.clear_cache()
+    yield tmp_path
+    glyphs.clear_cache()
+
+
+@pytest.fixture
+def font(templates):
+    """Synthetic font `f`: ink masks drawn with cv2.putText. Returns {char: bool mask}."""
+    (templates / "f").mkdir()
+    out = {}
+    for name, ch in CHARS.items():
+        canvas = np.zeros((60, 60), np.uint8)
+        cv2.putText(canvas, ch, (5, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.0, 255, 2)
+        ys, xs = np.nonzero(canvas > 127)
+        crop = canvas[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+        cv2.imwrite(str(templates / "f" / f"{name}.png"), crop)
+        out[ch] = crop > 127
+    return out
+
+
+def line(font, text, gap=1, space=8):
+    """Lay glyph masks left to right; ' ' is a `space`-wide empty gap."""
+    h = max(m.shape[0] for m in font.values())
+    parts = []
+    for ch in text:
+        if ch == " ":
+            parts.append(np.zeros((h, space - gap), bool))
+            continue
+        m = np.zeros((h, font[ch].shape[1]), bool)
+        m[: font[ch].shape[0]] = font[ch]
+        parts += [m, np.zeros((h, gap), bool)]
+    return np.hstack(parts)
+
+
+def noise(h, w, seed):
+    return np.random.default_rng(seed).integers(0, 256, (h, w, 3), dtype=np.uint8)
+
+
+def test_normalize_scales_to_768():
+    out = glyphs.normalize(np.zeros((1440, 2560, 3), np.uint8))
+    assert out.shape == (768, round(2560 * 768 / 1440), 3)
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    assert glyphs.normalize(frame) is frame
+
+
+def test_find_anchor_recovers_after_move(templates):
+    cv2.imwrite(str(templates / "exp_label.png"), noise(20, 30, 1))
+    anchor = noise(20, 30, 1)
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    frame[0:20, 0:30] = anchor
+    assert glyphs.find_anchor(frame, "exp_label") == (0, 0)
+    moved = np.zeros((768, 1366, 3), np.uint8)
+    moved[300:320, 500:530] = anchor
+    assert glyphs.find_anchor(moved, "exp_label") == (500, 300)
+    assert glyphs.find_anchor(moved, "exp_label") == (500, 300)  # cached spot, same answer
+
+
+def test_find_anchor_missing_is_none(templates):
+    cv2.imwrite(str(templates / "exp_label.png"), noise(20, 30, 1))
+    assert glyphs.find_anchor(noise(768, 1366, 2), "exp_label") is None
+
+
+def test_mask_range():
+    img = np.array([[[10, 20, 30], [10, 20, 31], [9, 20, 30]]], np.uint8)
+    m = glyphs.mask(img, (10, 20, 30), (10, 20, 30))
+    assert m.dtype == bool
+    assert m.tolist() == [[True, False, False]]
+
+
+def test_read_text_reads_digits_and_space(font):
+    assert glyphs.read_text(line(font, "12,3 45"), "f", space_px=6) == "12,3 45"
+
+
+def test_read_text_tolerates_one_px(font):
+    seven = font["7"]
+    m = np.vstack([seven, seven[-1:]])  # one extra ink row: 22 high, template is 21
+    assert glyphs.read_text(m, "f", space_px=6) == "7"
+
+
+def test_unknown_glyph_is_none(font):
+    ok = line(font, "1")
+    blob = np.ones((ok.shape[0], 10), bool)
+    assert glyphs.read_text(blob, "f", space_px=6) is None
+    assert glyphs.read_text(np.hstack([ok, blob]), "f", space_px=6) is None
