@@ -5,7 +5,7 @@ from collections.abc import Callable
 from ctypes import wintypes
 
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtGui import QAction, QColor, QFont, QPainter
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 _WDA_EXCLUDEFROMCAPTURE = 0x11
@@ -77,6 +77,13 @@ class Box(QWidget):
         button.clicked.connect(callback)
         self._layout.addWidget(button)
         self.adjustSize()
+
+    def add_menu_item(self, label: str, callback: Callable[[], None]) -> None:
+        """An item in the box's right-click menu."""
+        action = QAction(label, self)
+        action.triggered.connect(callback)
+        self.addAction(action)
+        self.setContextMenuPolicy(Qt.ActionsContextMenu)
 
     def place(self, game_rect: tuple[int, int, int, int]) -> None:
         if self._drag_from is not None:

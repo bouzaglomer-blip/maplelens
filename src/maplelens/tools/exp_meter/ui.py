@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import QAbstractItemView, QApplication, QTableWidget, QTableWidgetItem
 
 from maplelens.overlay import Box, exclude_from_capture
 from maplelens.readers import Reading
@@ -74,6 +74,8 @@ class ExpMeterTool:
         self._history = HistoryWindow(conn)
         self._box = Box("exp_meter", settings, on_settings_changed)
         self._box.add_button("History", self._show_history)
+        # quit() runs aboutToQuit, where app.py saves through shutdown()
+        self._box.add_menu_item("Quit MapleLens", QApplication.quit)
         self._box.set_text(format_box(None, True))
         self._box.show()
 
