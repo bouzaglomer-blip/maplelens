@@ -187,6 +187,20 @@ the ceiling with a `ponytail:` comment. If it can't be made to work, stop and br
 back to the owner before building on it. Don't fall back to reading the character's
 name tag: that's another player's-info-style read we don't want.
 
+**Spike result and owner decision (2026-11-04).** Scale and height work (portals land
+within ~5 px; 1 world unit = 1 normalized px). Sideways, the game camera lets the
+character drift up to ~128 px from screen centre, and the minimap doesn't show by how
+much, so mid-map the estimate can be off by that much (median 65 px over 76 frames). At
+a map edge, where the camera stops, it's exact. The owner chose to keep this: the arrow
+sits near screen centre, moves to the exact spot at map edges, and always points the
+right way. Drawing it on the minimap instead was offered and declined.
+
+**Big maps.** Henesys, Kerning City, Perion and Lith Harbor are bigger than the minimap
+window, which scrolls to keep the player in the middle, so the dot alone doesn't give a
+position there. The owner asked for a second spike: match the portal (and NPC) markers
+visible in the window against the map data to recover how far the window has scrolled.
+Where that gives no unambiguous answer, those maps get the route list and no arrow.
+
 Arrow direction = from the player's world position to the target's world position,
 straight line. It's drawn on the shared `Layer`, which is already excluded from capture,
 so readers never see it.
