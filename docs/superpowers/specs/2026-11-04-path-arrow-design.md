@@ -194,6 +194,8 @@ much, so mid-map the estimate can be off by that much (median 65 px over 76 fram
 a map edge, where the camera stops, it's exact. The owner chose to keep this: the arrow
 sits near screen centre, moves to the exact spot at map edges, and always points the
 right way. Drawing it on the minimap instead was offered and declined.
+Vertically, the camera isn't stopped at the minimap's top edge (some maps show ~330 units
+above it), so only the bottom edge clamps.
 
 **Big maps.** Henesys, Kerning City, Perion and Lith Harbor are bigger than the minimap
 window, which scrolls to keep the player in the middle, so the dot alone doesn't give a

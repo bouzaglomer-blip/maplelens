@@ -172,7 +172,8 @@ Look (mockup 1): font `Segoe UI`. Labels 9 pt in `#9fb0c8`; values 12 pt bold in
 - Test: `tests/test_path_ui.py`
 
 **Interfaces:**
-- Consumes: `maps.load/find/search`, `route.Trip`, `camera.to_world/to_screen`, `Reading.player`, `overlay.Layer`, `overlay.game_to_layer`, and `Box.allow_typing` through a callback.
+- Consumes: `maps.load/find/search`, `route.Trip`, `camera.player_world/to_screen`, `minimap_pos.read_view`/`MinimapView`, `overlay.Layer`, `overlay.game_to_layer`, and `Box.allow_typing` through a callback.
+- **Amended after Task 3 (2026-11-04):** `Reading` gains `minimap: MinimapView | None = None`, which `read_all` fills from `read_view` (same normalized frame). The tool gets the player's world position only from `camera.player_world(r.minimap, info)`, never from `to_world(r.player, ...)`: on maps bigger than the minimap window `read_player`'s fraction covers only the visible part, and only `player_world` can tell (it returns None there unless the NPC markers fix the scroll). A None world position means no arrow, with `No minimap on this map` when the map is one `player_world` can never place. Add one line to `read_player`'s docstring: valid only on maps that fit the minimap window.
 - Produces: `PathArrowTool(settings: dict, on_settings_changed: Callable[[], None], layer: Layer, allow_typing: Callable[[bool], None], maps: dict[str, MapInfo] | None = None)` (None → `load()`), with `title = "Path"`, `tab: QWidget`, `running: bool` (property, for the dot), `arrow: QWidget` (child of `layer`), and `update(r: Reading | None, game_rect: tuple | None, now: float) -> None`.
 
 Behaviour is the spec's "How it behaves" and "When it can't see" sections, with the copy from Global Constraints. Notes:
@@ -181,7 +182,7 @@ Behaviour is the spec's "How it behaves" and "When it can't see" sections, with 
 - Clicking the search field calls `allow_typing(True)` and focuses it. Start, Escape, picking a match, or the field losing focus calls `allow_typing(False)`.
 - When a route starts, `on_settings_changed` is called if `path_taxi` changed.
 
-- [ ] **Step 1: Write failing tests** (offscreen; hand-made maps A → B → C with minimaps; readings built as `Reading(t, None, None, None, title, player=(fx, fy))`, each sent twice to confirm):
+- [ ] **Step 1: Write failing tests** (offscreen; hand-made maps A → B → C with minimaps; readings built as `Reading(t, None, None, None, title, player=..., minimap=MinimapView(...))` (or with `camera.player_world` monkeypatched), each sent twice to confirm):
   - `test_search_lists_matches`: typing `"b"` into the field lists map B (and only maps whose name or street contains "b").
   - `test_no_route_message`: at A, pick an unreachable map, Start → `No route from here to {name}`, not `running`.
   - `test_start_shows_arrow_and_header`: at A, pick C, Start → `running`, the header is `To C · 1 of 3`, `arrow.isVisible()`.
