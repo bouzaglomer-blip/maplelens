@@ -14,7 +14,7 @@ from maplelens.tools.exp_meter.meter import ExpMeter
 from maplelens.tools.exp_meter.text import format_box, format_duration, format_last
 
 _FLUSH_S = 60
-_COLUMNS = ["Map", "Class", "Lvl", "Avg EXP/min", "Avg %/min", "Active time", "Last there"]
+_COLUMNS = ["Map", "Class", "Lvl", "Avg EXP/h", "Avg %/h", "Active time", "Last there"]
 
 
 class _Item(QTableWidgetItem):
@@ -51,8 +51,8 @@ class HistoryWindow(QTableWidget):
                 (r.map_name, r.map_name),
                 (r.job, r.job),
                 (str(r.level), r.level),
-                (f"{r.exp_per_min:,.0f}", r.exp_per_min),
-                (f"{r.pct_per_min:.2f}%", r.pct_per_min),
+                (f"{r.exp_per_min * 60:,.0f}", r.exp_per_min),
+                (f"{r.pct_per_min * 60:.2f}%", r.pct_per_min),
                 (format_duration(r.active_s / 60), r.active_s),
                 (format_last(r.last, now), r.last),
             ]

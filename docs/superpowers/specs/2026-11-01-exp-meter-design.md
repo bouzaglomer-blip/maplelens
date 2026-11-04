@@ -23,7 +23,7 @@ The screen-only rule in `AGENTS.md` holds for every part of this document.
 
 ## Goals
 
-- Live box over the game: EXP/min, %/min, time to level.
+- Live box over the game: EXP/h, %/h, time to level (owner change 2026-11-04: shown per hour).
 - History table across days: one row per map + class + level.
 - Map, class and level read off the screen; the user types nothing in.
 - **Works at any game resolution** (owner: "I want it to work everywhere").
@@ -80,9 +80,9 @@ The screen-only rule in `AGENTS.md` holds for every part of this document.
 
 - **Live box: small, draggable, anywhere over the game** (owner picked
   option B over a strip on the EXP bar). Shows label "EXP · last 5 min",
-  EXP/min, %/min, "Level up in Xh Ym". Remembers its position.
+  EXP/h, %/h, "Level up in Xh Ym". Remembers its position.
 - **History table: its own normal window**, opened from a button on the box
-  *(my call)*. Columns: Map, Class, Lvl, Avg EXP/min, Avg %/min, Active time,
+  *(my call)*. Columns: Map, Class, Lvl, Avg EXP/h, Avg %/h, Active time,
   Last there. Sortable by clicking a column header. Default sort: last there,
   newest first *(my call)*.
 

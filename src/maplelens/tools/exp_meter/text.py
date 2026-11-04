@@ -19,10 +19,10 @@ def format_box(rate: Rate | None, waiting: bool) -> str:
     if rate is None:
         exp, pct, eta = "—", "—", "—"
     else:
-        exp = f"{rate.exp_per_min:,.0f}"
-        pct = f"{rate.pct_per_min:.2f}"
+        exp = f"{rate.exp_per_min * 60:,.0f}"
+        pct = f"{rate.pct_per_min * 60:.2f}"
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
-    return f"EXP · last 5 min\n{exp} /min\n{pct}% /min\nLevel up in\n{eta}"
+    return f"EXP · last 5 min\n{exp} /h\n{pct}% /h\nLevel up in\n{eta}"
 
 
 def format_last(ts: float, now: float) -> str:

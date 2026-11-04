@@ -7,12 +7,12 @@ from maplelens.tools.exp_meter.text import format_box, format_duration, format_l
 def test_format_box_values():
     assert (
         format_box(Rate(12480, 0.42, 137), False)
-        == "EXP · last 5 min\n12,480 /min\n0.42% /min\nLevel up in\n2h 17m"
+        == "EXP · last 5 min\n748,800 /h\n25.20% /h\nLevel up in\n2h 17m"
     )
 
 
 def test_format_box_no_rate():
-    assert format_box(None, False) == "EXP · last 5 min\n— /min\n—% /min\nLevel up in\n—"
+    assert format_box(None, False) == "EXP · last 5 min\n— /h\n—% /h\nLevel up in\n—"
 
 
 def test_format_box_no_level_eta():
