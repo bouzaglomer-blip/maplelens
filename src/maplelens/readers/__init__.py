@@ -18,11 +18,12 @@ class Reading:
     level: int | None
     job: str | None
     map_name: str | None
+    player: tuple[float, float] | None = None  # see minimap_pos.read_player
 
 
 def read_all(frame: np.ndarray, t: float) -> Reading:
     """Read every field from one game frame. Submodules load here, not at import time."""
-    from maplelens.readers import exp, glyphs, job, level, map_name
+    from maplelens.readers import exp, glyphs, job, level, map_name, minimap_pos
 
     img = glyphs.normalize(frame)
     return Reading(
@@ -31,4 +32,5 @@ def read_all(frame: np.ndarray, t: float) -> Reading:
         level.read_level(img),
         job.read_job(img, frame),
         map_name.read_map_name(img, frame),
+        minimap_pos.read_player(img),
     )
