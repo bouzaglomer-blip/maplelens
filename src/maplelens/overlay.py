@@ -20,6 +20,19 @@ from PySide6.QtWidgets import (
 _WDA_EXCLUDEFROMCAPTURE = 0x11
 _INSET = 40  # px from the game's top-right corner for a box with no saved position
 
+# The box's look (mockup 1), shared by every tab: grey labels, larger bold values.
+FONT = "Segoe UI"
+LABEL_PT, LABEL_COLOR = 9, "#9fb0c8"
+VALUE_PT, VALUE_COLOR = 12, "#ffffff"
+ACCENT = "#ffcc33"
+
+
+def text_label(text: str, pt: int, color: str, *, bold: bool = False) -> QLabel:
+    label = QLabel(text)
+    label.setFont(QFont(FONT, pt, QFont.Bold if bold else QFont.Normal))
+    label.setStyleSheet(f"color: {color};")
+    return label
+
 
 def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
     """Game-client physical pixels to layer-local Qt logical coordinates."""
@@ -86,11 +99,11 @@ class Box(QWidget):
         button.setFlat(True)
         button.setFocusPolicy(Qt.NoFocus)
         button.setCursor(Qt.PointingHandCursor)
-        button.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        button.setFont(QFont(FONT, 10, QFont.Bold))
         button.clicked.connect(lambda: self._select(i))
         dot = QLabel()
         dot.setFixedSize(6, 6)
-        dot.setStyleSheet("background: #ffcc33; border-radius: 3px;")
+        dot.setStyleSheet(f"background: {ACCENT}; border-radius: 3px;")
         dot.hide()
         self._tab_buttons.append(button)
         self._tab_dots.append(dot)
@@ -103,7 +116,7 @@ class Box(QWidget):
     def _select(self, index: int) -> None:
         self._pages.setCurrentIndex(index)
         for j, b in enumerate(self._tab_buttons):
-            color, line = ("#ffffff", "#ffcc33") if j == index else ("#9fb0c8", "transparent")
+            color, line = (VALUE_COLOR, ACCENT) if j == index else (LABEL_COLOR, "transparent")
             b.setStyleSheet(
                 f"QPushButton {{ color: {color}; border: 0; border-bottom: 2px solid {line};"
                 " padding: 2px 0; }"

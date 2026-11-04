@@ -46,6 +46,11 @@ class MinimapView:
     dot: tuple[float, float]  # the "you" dot's centre
     npcs: tuple[tuple[float, float], ...]  # NPC marker centres
 
+    @property
+    def fraction(self) -> tuple[float, float]:
+        """The dot as (fx, fy) fractions of the visible map area."""
+        return self.dot[0] / self.size[0], self.dot[1] / self.size[1]
+
 
 def _map_area(frame: np.ndarray, x: int, y: int) -> tuple[int, int, int, int] | None:
     """(x0, y0, x1, y1) of the map picture, or None if the frame isn't intact."""
@@ -115,6 +120,9 @@ def read_view(frame: np.ndarray) -> MinimapView | None:
 
 
 def read_player(frame: np.ndarray) -> tuple[float, float] | None:
-    """The "you" dot's centre as (fx, fy) fractions of the minimap's map area, or None."""
+    """The "you" dot's centre as (fx, fy) fractions of the minimap's map area, or None.
+
+    Valid only on maps that fit the minimap window.
+    """
     v = read_view(frame)
-    return None if v is None else (v.dot[0] / v.size[0], v.dot[1] / v.size[1])
+    return None if v is None else v.fraction

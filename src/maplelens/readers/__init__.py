@@ -1,8 +1,12 @@
 """Readers: screenshot -> value, plus the shared types and read_all."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from maplelens.readers.minimap_pos import MinimapView
 
 
 @dataclass(frozen=True)
@@ -19,6 +23,7 @@ class Reading:
     job: str | None
     map_name: str | None
     player: tuple[float, float] | None = None  # see minimap_pos.read_player
+    minimap: "MinimapView | None" = None  # see minimap_pos.read_view
 
 
 def read_all(frame: np.ndarray, t: float) -> Reading:
@@ -26,11 +31,13 @@ def read_all(frame: np.ndarray, t: float) -> Reading:
     from maplelens.readers import exp, glyphs, job, level, map_name, minimap_pos
 
     img = glyphs.normalize(frame)
+    view = minimap_pos.read_view(img)
     return Reading(
         t,
         exp.read_exp(img),
         level.read_level(img),
         job.read_job(img, frame),
         map_name.read_map_name(img, frame),
-        minimap_pos.read_player(img),
+        None if view is None else view.fraction,
+        view,
     )

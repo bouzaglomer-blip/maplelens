@@ -64,13 +64,24 @@ def _scroll(view: MinimapView, mm: Minimap, npcs) -> tuple[float, float] | None:
     return float(best[0]), float(best[1])
 
 
+def _fits(view: MinimapView, mm: Minimap) -> bool:
+    """The window shows the whole map picture (not clipped)."""
+    return view.size[0] >= mm.w / SCALE - CLIP_SLACK and view.size[1] >= mm.h / SCALE - CLIP_SLACK
+
+
+def can_place(view: MinimapView, info: MapInfo) -> bool:
+    """False where player_world is always None: no minimap, or clipped with too few NPCs."""
+    mm = info.minimap
+    return mm is not None and (_fits(view, mm) or len(info.npcs) >= MIN_MATCH)
+
+
 def player_world(view: MinimapView, info: MapInfo) -> tuple[float, float] | None:
     """The player's world position, or None when the minimap can't tell it for sure."""
     mm = info.minimap
     if mm is None:
         return None
     (vw, vh), (dx, dy) = view.size, view.dot
-    if vw >= mm.w / SCALE - CLIP_SLACK and vh >= mm.h / SCALE - CLIP_SLACK:
+    if _fits(view, mm):
         return to_world((dx / vw, dy / vh), mm)
     s = _scroll(view, mm, info.npcs)
     if s is None:

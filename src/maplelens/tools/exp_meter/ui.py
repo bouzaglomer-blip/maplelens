@@ -5,10 +5,8 @@ import time
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QLabel,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -16,7 +14,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from maplelens.overlay import exclude_from_capture
+from maplelens.overlay import (
+    LABEL_COLOR,
+    LABEL_PT,
+    VALUE_COLOR,
+    VALUE_PT,
+    exclude_from_capture,
+    text_label,
+)
 from maplelens.readers import Reading
 from maplelens.tools.exp_meter.history import history, save_segment
 from maplelens.tools.exp_meter.meter import ExpMeter
@@ -75,13 +80,6 @@ class HistoryWindow(QTableWidget):
         super().showEvent(event)
 
 
-def _text(text: str, pt: int, color: str, *, bold: bool) -> QLabel:
-    label = QLabel(text)
-    label.setFont(QFont("Segoe UI", pt, QFont.Bold if bold else QFont.Normal))
-    label.setStyleSheet(f"color: {color};")
-    return label
-
-
 class ExpMeterTool:
     def __init__(self, settings: dict, conn: sqlite3.Connection, on_settings_changed: Callable):
         self._conn = conn
@@ -105,9 +103,9 @@ class ExpMeterTool:
             if (w := item.widget()) and w is not self._button_row:
                 w.deleteLater()
         for label, values in lines:
-            self._lines.addWidget(_text(label, 9, "#9fb0c8", bold=False))
+            self._lines.addWidget(text_label(label, LABEL_PT, LABEL_COLOR))
             for v in values:
-                self._lines.addWidget(_text(v, 12, "#ffffff", bold=True))
+                self._lines.addWidget(text_label(v, VALUE_PT, VALUE_COLOR, bold=True))
             self._lines.addSpacing(6)
         self._lines.addWidget(self._button_row)
 

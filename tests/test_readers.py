@@ -390,3 +390,4 @@ def test_read_all_fills_player():
     got = read_all(frame, 1.0)
     assert got.player is not None
     assert got.player == read_player(frame)
+    assert got.minimap is not None and got.minimap == read_view(frame)

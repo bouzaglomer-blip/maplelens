@@ -5,7 +5,7 @@ from pytest import approx
 
 from maplelens.readers.minimap_pos import MinimapView, read_view
 from maplelens.tools.path_arrow import camera
-from maplelens.tools.path_arrow.camera import player_world, to_screen, to_world
+from maplelens.tools.path_arrow.camera import can_place, player_world, to_screen, to_world
 from maplelens.tools.path_arrow.maps import MapInfo, Minimap, load
 
 MM = Minimap(2000, 1000, 1000, 500)
@@ -117,3 +117,12 @@ def test_player_world_perion_fixture():
     got = player_world(view, load()["010004000"])
     want = (view.dot[0] * 16 - mm.cx, (view.dot[1] + 80) * 16 - mm.cy)
     assert got == approx(want, abs=16)
+
+
+def test_can_place():
+    clipped = MinimapView((200, 100), (100.0, 50.0), ())
+    assert can_place(clipped, big())
+    assert not can_place(clipped, big(NPCS[:2]))  # too few NPCs to ever match the scroll
+    fits = MinimapView((125, 62), (62.5, 31.0), ())
+    assert can_place(fits, MapInfo("1", "s", "n", True, MM, (), None))
+    assert not can_place(fits, MapInfo("1", "s", "n", True, None, (), None))
