@@ -352,6 +352,14 @@ def test_read_player_ignores_other_dots():
     assert read_player(img) == want
 
 
+def test_read_player_two_you_dots_is_none():
+    """A second dot-shaped yellow blob (e.g. map art): no guessing which one is you."""
+    img = screen("pos_a_1920x1080_100.png")
+    assert read_player(img) is not None
+    img[80:92, 25:37] = img[138:150, 79:91].copy()  # the dot and its ring, top-left of the map
+    assert read_player(img) is None
+
+
 def test_read_player_window_over_map_edge_is_none():
     """A window over the map's edge and the frame, dot still visible: the map area is
     unknown, so no position rather than a wrong one."""
