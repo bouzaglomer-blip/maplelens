@@ -76,6 +76,7 @@ EXPECTED_POS = {
     "pos_c_2560x1440_100.png": (0.552, 0.661),  # Henesys Townstreet, small map
     "pos_d_1366x768_100.png": (0.518, 0.626),  # Transfer Area, native pixels
     "pos_e_2560x1440_100.png": (0.500, 0.795),  # Lith Harbor, map as wide as the window
+    "pos_f_2560x1440_100.png": (0.305, 0.777),  # Perion, map taller than the window
     "pos_bar_2560x1440_100.png": None,  # minimap minimized to its bar
     "pos_covered_2560x1440_100.png": None,  # inventory window over the map area
     "pos_nominimap_1920x1080_100.png": None,  # game scene, no minimap

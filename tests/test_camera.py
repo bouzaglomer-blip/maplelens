@@ -107,3 +107,13 @@ def test_player_world_lith_harbor_fixture():
     assert len(view.npcs) >= 5
     x, _ = player_world(view, info)
     assert x == approx((view.dot[0] + 146) * 16 - info.minimap.cx, abs=16)
+
+
+def test_player_world_perion_fixture():
+    # pos_f (s2560b_021): window 112 of 193 px tall, stopped at the picture's bottom
+    # (scrolled 80 px down); 203 of 204 px wide, so not scrolled sideways.
+    view = read_view(cv2.imread(str(SCREENS / "pos_f_2560x1440_100.png")))
+    mm = load()["010004000"].minimap
+    got = player_world(view, load()["010004000"])
+    want = (view.dot[0] * 16 - mm.cx, (view.dot[1] + 80) * 16 - mm.cy)
+    assert got == approx(want, abs=16)
