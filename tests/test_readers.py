@@ -9,7 +9,7 @@ from maplelens.readers.exp import EXP_DX, EXP_DY, EXP_H, EXP_INK_HI, EXP_INK_LO,
 from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import read_map_name
-from maplelens.readers.minimap_pos import read_player
+from maplelens.readers.minimap_pos import read_player, read_view
 
 SCREENS = Path(__file__).parent / "fixtures" / "screens"
 
@@ -319,6 +319,20 @@ def test_read_player(name):
     else:
         assert got is not None
         assert abs(got[0] - want[0]) <= 0.02 and abs(got[1] - want[1]) <= 0.02, got
+
+
+@pytest.mark.parametrize(
+    "name, n",
+    [
+        ("pos_a_1920x1080_100.png", 0),  # Transfer Area has no NPCs
+        ("pos_c_2560x1440_100.png", 1),  # Henesys Townstreet
+        ("pos_e_2560x1440_100.png", 5),  # Lith Harbor: 6 shown, 1 hit by the inpainting
+    ],
+)
+def test_read_view_npc_markers(name, n):
+    view = read_view(screen(name))
+    assert len(view.npcs) == n
+    assert read_player(screen(name)) == (view.dot[0] / view.size[0], view.dot[1] / view.size[1])
 
 
 # The minimap's other markers, BGR, sampled from the owner's grabs.

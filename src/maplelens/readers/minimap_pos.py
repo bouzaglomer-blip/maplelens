@@ -1,8 +1,10 @@
-"""Player position reader: the yellow "you" dot on the minimap.
+"""Player position reader: the yellow "you" dot and the NPC markers on the minimap.
 
 The minimap's map area sits in a white frame under the title. The map picture fills the
 frame's height; when it is narrower than the window it is centred on see-through padding.
 """
+
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -29,6 +31,20 @@ DOT_LO, DOT_HI = (25, 180, 200), (110, 255, 255)
 DOT_SIDE = (5, 7)
 DOT_SQUARE = 1  # max width - height difference
 DOT_AREA = (18, 28)
+# NPC markers: green (BGR) ovals, 4x7 px of 20-23 px normalized at 2560 (Kerning City,
+# Henesys, Perion, Lith Harbor). Partly covered ones (3x7) are dropped.
+NPC_LO, NPC_HI = (0, 170, 0), (90, 255, 90)
+NPC_W, NPC_H = 4, (6, 7)
+NPC_AREA = (18, 24)
+
+
+@dataclass(frozen=True)
+class MinimapView:
+    """What the minimap window shows, in px of its visible map area."""
+
+    size: tuple[int, int]
+    dot: tuple[float, float]  # the "you" dot's centre
+    npcs: tuple[tuple[float, float], ...]  # NPC marker centres
 
 
 def _map_area(frame: np.ndarray, x: int, y: int) -> tuple[int, int, int, int] | None:
@@ -59,8 +75,17 @@ def _map_area(frame: np.ndarray, x: int, y: int) -> tuple[int, int, int, int] | 
     return x0, y0, x1, y1
 
 
-def read_player(frame: np.ndarray) -> tuple[float, float] | None:
-    """The "you" dot's centre as (fx, fy) fractions of the minimap's map area, or None.
+def _blobs(img, lo, hi) -> list[tuple[int, int, int, np.ndarray]]:
+    """(w, h, area, centre) of each colour blob; centres are pixel edges, not indices."""
+    m = glyphs.mask(img, lo, hi).astype(np.uint8)
+    n, _, stats, centres = cv2.connectedComponentsWithStats(m, connectivity=8)
+    return [
+        (*stats[i, cv2.CC_STAT_WIDTH : cv2.CC_STAT_AREA + 1], centres[i] + 0.5) for i in range(1, n)
+    ]
+
+
+def read_view(frame: np.ndarray) -> MinimapView | None:
+    """The minimap's map area size, "you" dot and NPC markers, or None.
 
     `frame` is normalized. None when the minimap is closed, minimized, covered, or the
     dot isn't found exactly once.
@@ -70,19 +95,26 @@ def read_player(frame: np.ndarray) -> tuple[float, float] | None:
     if area is None:
         return None
     x0, y0, x1, y1 = area
-    m = glyphs.mask(frame[y0:y1, x0:x1], DOT_LO, DOT_HI).astype(np.uint8)
-    n, _, stats, centres = cv2.connectedComponentsWithStats(m, connectivity=8)
-    dots = []
-    for i in range(1, n):
-        w, h, px = stats[i, cv2.CC_STAT_WIDTH : cv2.CC_STAT_AREA + 1]
-        if (
-            DOT_SIDE[0] <= min(w, h)
-            and max(w, h) <= DOT_SIDE[1]
-            and abs(w - h) <= DOT_SQUARE
-            and DOT_AREA[0] <= px <= DOT_AREA[1]
-        ):
-            dots.append(centres[i])
+    img = frame[y0:y1, x0:x1]
+    dots = [
+        c
+        for w, h, px, c in _blobs(img, DOT_LO, DOT_HI)
+        if DOT_SIDE[0] <= min(w, h)
+        and max(w, h) <= DOT_SIDE[1]
+        and abs(w - h) <= DOT_SQUARE
+        and DOT_AREA[0] <= px <= DOT_AREA[1]
+    ]
     if len(dots) != 1:
         return None
-    cx, cy = dots[0] + 0.5  # pixel centres -> edges
-    return float(cx / (x1 - x0)), float(cy / (y1 - y0))
+    npcs = tuple(
+        (float(c[0]), float(c[1]))
+        for w, h, px, c in _blobs(img, NPC_LO, NPC_HI)
+        if w == NPC_W and NPC_H[0] <= h <= NPC_H[1] and NPC_AREA[0] <= px <= NPC_AREA[1]
+    )
+    return MinimapView((int(x1 - x0), int(y1 - y0)), (float(dots[0][0]), float(dots[0][1])), npcs)
+
+
+def read_player(frame: np.ndarray) -> tuple[float, float] | None:
+    """The "you" dot's centre as (fx, fy) fractions of the minimap's map area, or None."""
+    v = read_view(frame)
+    return None if v is None else (v.dot[0] / v.size[0], v.dot[1] / v.size[1])

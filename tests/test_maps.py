@@ -15,6 +15,7 @@ def test_shipped_data_loads():
             assert p.to in maps
         if m.cab:
             assert all(t in maps for t in m.cab.to)
+    assert len(maps["010003000"].npcs) == 17  # Kerning City
     cab_titles = {m.title for m in maps.values() if m.cab}
     assert {
         "Victoria Road / Henesys",

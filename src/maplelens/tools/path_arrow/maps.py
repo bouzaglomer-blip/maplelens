@@ -38,6 +38,7 @@ class MapInfo:
     minimap: Minimap | None
     portals: tuple[Portal, ...]
     cab: Cab | None
+    npcs: tuple[tuple[int, int], ...] = ()  # world positions; the minimap marks them
 
     @property
     def title(self) -> str:
@@ -56,6 +57,7 @@ def load(path: Path = DATA) -> dict[str, MapInfo]:
             Minimap(**e["minimap"]) if e["minimap"] else None,
             tuple(Portal(**p) for p in e["portals"]),
             Cab(cab["x"], cab["y"], tuple(cab["to"])) if cab else None,
+            tuple((n["x"], n["y"]) for n in e["npcs"]),
         )
     return maps
 
