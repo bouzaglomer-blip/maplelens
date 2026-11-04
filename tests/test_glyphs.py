@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import cv2
 import numpy as np
 import pytest
@@ -109,3 +111,40 @@ def test_glyph_two_px_off_is_none(font):
 def test_missing_font_raises(templates):
     with pytest.raises(FileNotFoundError, match="nofont"):
         glyphs.read_text(np.ones((5, 5), bool), "nofont", space_px=6)
+
+
+def test_read_text_splits_touching_glyphs(font):
+    # At 2560x1440 the normalized EXP digits touch, with no empty column between them.
+    assert glyphs.read_text(line(font, "2,30", gap=0), "f", space_px=6) == "2,30"
+
+
+def test_find_anchor_recovers_after_move_fixture():
+    glyphs.clear_cache()
+    fix = cv2.imread(str(Path(__file__).parent / "fixtures/screens/exp_a_2560x1440_100.png"))
+    h, w = fix.shape[:2]
+    ax, ay = glyphs.find_anchor(fix, "exp_label")
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    frame[:h, :w] = fix
+    assert glyphs.find_anchor(frame, "exp_label") == (ax, ay)
+    moved = np.zeros((768, 1366, 3), np.uint8)
+    moved[300 : 300 + h, 500 : 500 + w] = fix
+    assert glyphs.find_anchor(moved, "exp_label") == (500 + ax, 300 + ay)
+
+
+def test_glyph_variants_share_a_char(templates):
+    (templates / "v").mkdir()
+    a = np.zeros((5, 4), np.uint8)
+    a[:, 0] = a[-1] = 255  # an L
+    b = np.zeros((5, 4), np.uint8)
+    b[0] = b[:, -1] = 255  # its mirror image, upside down
+    cv2.imwrite(str(templates / "v" / "comma.png"), a)
+    cv2.imwrite(str(templates / "v" / "comma_b.png"), b)
+    m = np.hstack([a, np.zeros((5, 3)), b]) > 0
+    assert glyphs.read_text(m, "v", space_px=9) == ",,"
+
+
+def test_read_text_max_diff(font):
+    seven = font["7"].copy()
+    seven[0, :2] = ~seven[0, :2]  # 2 px off
+    assert glyphs.read_text(seven, "f", space_px=6) == "7"
+    assert glyphs.read_text(seven, "f", space_px=6, max_diff=1 / seven.size) is None
