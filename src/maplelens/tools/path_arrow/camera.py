@@ -34,6 +34,9 @@ def _scroll(view: MinimapView, mm: Minimap, npcs) -> tuple[float, float] | None:
     The window keeps the player centred and stops at the picture's edges, so the scroll
     is read from the NPC markers it shows against the map's NPC positions.
     """
+    # ponytail: NPC markers only, so 46 of the 58 maps wider than the window (fewer than
+    # MIN_MATCH NPCs, mostly hunting fields) always get None. Upgrade: also match the
+    # portal spirals against `portals` (they sit at (0, -7) px from the portal).
     pred = [((x + mm.cx) / SCALE + NPC_DX, (y + mm.cy) / SCALE + NPC_DY) for x, y in npcs]
     room = (mm.w / SCALE - view.size[0], mm.h / SCALE - view.size[1])
     found = []
