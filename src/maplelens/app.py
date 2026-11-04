@@ -3,18 +3,30 @@
 import sys
 import time
 import traceback
+from collections.abc import Callable
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from maplelens.capture import client_rect, find_window, grab, set_dpi_aware
-from maplelens.overlay import Layer
+from maplelens.overlay import Box, Layer
 from maplelens.readers import read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.exp_meter.history import open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
 
 _TICK_MS = 500
+
+
+def build_box(settings: dict, save: Callable[[], None], tools: list) -> Box:
+    """The one overlay box: a tab per tool, and Quit in the right-click menu."""
+    box = Box("exp_meter", settings, save)
+    for tool in tools:
+        box.add_tab(tool.title, tool.tab)
+    # quit() runs aboutToQuit, where main() saves through shutdown()
+    box.add_menu_item("Quit MapleLens", QApplication.quit)
+    box.show()
+    return box
 
 
 def main() -> int:
@@ -28,9 +40,12 @@ def main() -> int:
         return 1
 
     layer = Layer()
-    tool = ExpMeterTool(
-        settings, open_db(data_dir() / "maplelens.db"), lambda: save_settings(path, settings)
-    )
+
+    def save() -> None:
+        save_settings(path, settings)
+
+    tool = ExpMeterTool(settings, open_db(data_dir() / "maplelens.db"), save)
+    box = build_box(settings, save, [tool])
     hwnd = None
     seen: set[str] = set()  # error types/messages already printed
 
@@ -55,6 +70,7 @@ def main() -> int:
                 traceback.print_exc()
             reading = None
         tool.update(reading, rect, now)
+        box.place(rect)
 
     timer = QTimer()
     timer.timeout.connect(tick)

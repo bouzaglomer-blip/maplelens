@@ -1,17 +1,26 @@
-"""The EXP meter tool: a draggable box with live numbers and a History window."""
+"""The EXP meter tool: a tab with live numbers and a History window."""
 
 import sqlite3
 import time
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QApplication, QTableWidget, QTableWidgetItem
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QLabel,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-from maplelens.overlay import Box, exclude_from_capture
+from maplelens.overlay import exclude_from_capture
 from maplelens.readers import Reading
 from maplelens.tools.exp_meter.history import history, save_segment
 from maplelens.tools.exp_meter.meter import ExpMeter
-from maplelens.tools.exp_meter.text import format_box, format_duration, format_last
+from maplelens.tools.exp_meter.text import box_lines, format_duration, format_last
 
 _FLUSH_S = 60
 _COLUMNS = ["Map", "Class", "Lvl", "Avg EXP/h", "Avg %/h", "Active time", "Last there"]
@@ -66,18 +75,41 @@ class HistoryWindow(QTableWidget):
         super().showEvent(event)
 
 
+def _text(text: str, pt: int, color: str, *, bold: bool) -> QLabel:
+    label = QLabel(text)
+    label.setFont(QFont("Segoe UI", pt, QFont.Bold if bold else QFont.Normal))
+    label.setStyleSheet(f"color: {color};")
+    return label
+
+
 class ExpMeterTool:
     def __init__(self, settings: dict, conn: sqlite3.Connection, on_settings_changed: Callable):
         self._conn = conn
         self._meter = ExpMeter(settings["idle_cutoff_s"], settings["jump_factor"])
         self._last_flush: float | None = None
         self._history = HistoryWindow(conn)
-        self._box = Box("exp_meter", settings, on_settings_changed)
-        self._box.add_button("History", self._show_history)
-        # quit() runs aboutToQuit, where app.py saves through shutdown()
-        self._box.add_menu_item("Quit MapleLens", QApplication.quit)
-        self._box.set_text(format_box(None, True))
-        self._box.show()
+        self.title = "EXP"
+        self.tab = QWidget()
+        self._lines = QVBoxLayout(self.tab)
+        self._lines.setContentsMargins(0, 4, 0, 0)
+        self._lines.setSpacing(0)
+        button = QPushButton("History")
+        button.setFocusPolicy(Qt.NoFocus)
+        button.clicked.connect(self._show_history)
+        self._button_row = button
+        self._show(box_lines(None, True))
+
+    def _show(self, lines: list[tuple[str, list[str]]]) -> None:
+        while self._lines.count():  # rebuild: the label/value rows are few and cheap
+            item = self._lines.takeAt(0)
+            if (w := item.widget()) and w is not self._button_row:
+                w.deleteLater()
+        for label, values in lines:
+            self._lines.addWidget(_text(label, 9, "#9fb0c8", bold=False))
+            for v in values:
+                self._lines.addWidget(_text(v, 12, "#ffffff", bold=True))
+            self._lines.addSpacing(6)
+        self._lines.addWidget(self._button_row)
 
     def _show_history(self) -> None:
         self._history.refresh()
@@ -96,9 +128,7 @@ class ExpMeterTool:
         if self._last_flush is None:
             self._last_flush = now
         self._save(now, flush_open=now - self._last_flush >= _FLUSH_S)
-        if game_rect:  # no game window: the box stays where it was
-            self._box.place(game_rect)
-        self._box.set_text(format_box(self._meter.rate(now), r is None))
+        self._show(box_lines(self._meter.rate(now), r is None))
 
     def shutdown(self, now: float) -> None:
         self._meter.close(now)
