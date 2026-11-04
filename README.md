@@ -4,8 +4,8 @@ An open-source overlay for **MapleStory Classic** that keeps you in the game.
 Instead of alt-tabbing to price sites, class guides and route finders, MapleLens
 reads what's on your screen and shows what you need on top of the game window.
 
-> **Status: Phase 0.** The repository, tooling and guardrails are in place.
-> There's nothing to run yet. The first tool, the EXP meter, is next.
+> **Status: Phase 1: EXP meter.** The first tool is built: a small box over the game
+> showing EXP/min and time to level, plus a History window per map, class and level.
 
 ## The promise: screen-reading only
 
@@ -27,10 +27,21 @@ is what matters, and pull requests that break it are not accepted.
 
 ## Roadmap
 
-1. **EXP meter:** EXP/hour and time to level at your current spot.
-2. **Class helper:** the guide's advice for your level (gear, training spots, AP/SP).
-3. **Prices:** market lookups without leaving the game.
-4. **Path arrow:** routes drawn as an arrow over the game.
+1. **EXP meter:** EXP/min, time to level, and history per map.
+2. **Path arrow:** routes drawn as an arrow over the game.
+3. **Class helper:** the guide's advice for your level (gear, training spots, AP/SP).
+4. **Prices:** market lookups without leaving the game.
+
+## Run
+
+Start the game windowed or borderless, then save its window title once and run:
+
+```
+uv run python scripts/grab.py --title <game title> --label first
+uv run maplelens
+```
+
+Drag the box where you want it. History opens the per-map table.
 
 ## Development
 
