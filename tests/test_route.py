@@ -1,0 +1,73 @@
+from maplelens.tools.path_arrow.maps import Cab, MapInfo, Portal
+from maplelens.tools.path_arrow.route import Step, Trip, plan
+
+
+def mk(id, portals=(), cab=None):
+    return MapInfo(id, "S", id, False, None, tuple(Portal(x, 0, t) for x, t in portals), cab)
+
+
+def graph():
+    ms = [
+        mk("A", [(0, "B")], Cab(5, 6, ("D",))),
+        mk("B", [(0, "A"), (0, "C")]),
+        mk("C", [(0, "B"), (0, "D")]),
+        mk("D", [(0, "C")]),
+        mk("E"),
+        mk("X", [(0, "B")]),
+    ]
+    return {m.id: m for m in ms}
+
+
+def ids(steps):
+    return [s.map_id for s in steps]
+
+
+def test_plan_fewest_hops():
+    s = plan(graph(), "A", "D", False)
+    assert ids(s) == ["A", "B", "C", "D"] and not any(x.cab for x in s)
+    assert plan(graph(), "A", "D", True) == [Step("A", True), Step("D", False)]
+
+
+def test_plan_unreachable_is_none():
+    assert plan(graph(), "A", "E", False) is None
+    assert plan(graph(), "A", "E", True) is None
+
+
+def test_trip_advance():
+    t = Trip(graph(), "A", "D", False)
+    t.on_map("B")
+    assert t.index == 1 and not t.arrived
+
+
+def test_trip_jump_ahead():
+    t = Trip(graph(), "A", "D", False)
+    t.on_map("D")
+    assert t.arrived
+
+
+def test_trip_back_to_earlier_map_rewinds():
+    t = Trip(graph(), "A", "D", False)
+    steps = t.steps
+    t.on_map("C")
+    t.on_map("B")
+    assert t.index == 1 and t.steps is steps
+
+
+def test_trip_reroutes_off_route_keeping_taxi():
+    t = Trip(graph(), "A", "D", False)
+    t.on_map("X")
+    assert ids(t.steps) == ["X", "B", "C", "D"] and t.index == 0 and not t.taxi
+
+
+def test_trip_start_at_goal_arrives():
+    t = Trip(graph(), "D", "D", False)
+    assert t.arrived and t.target((0, 0)) is None
+
+
+def test_target_nearest_portal():
+    ms = {"B": mk("B", [(0, "C"), (1000, "C")]), "C": mk("C")}
+    assert Trip(ms, "B", "C", False).target((900, 0)) == (1000, 0)
+
+
+def test_target_cab_step():
+    assert Trip(graph(), "A", "D", True).target((0, 0)) == (5, 6)
