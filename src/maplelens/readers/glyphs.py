@@ -7,10 +7,11 @@ import numpy as np
 
 TEMPLATES = Path(__file__).parent / "templates"
 BASE_H = 768
-# Default share of a glyph's pixels that may differ from its template.
-MAX_DIFF = 0.10
 # A cached anchor spot is trusted only on a pixel-exact match.
 EXACT = 0.9999
+# Bottom rows of a normalized frame that hold the status bar (EXP, level, job):
+# anchors there are searched in this band only.
+STATUS_BAND = 60
 # Glyph file stems that are not the character itself. A stem may carry a variant
 # suffix after '_' (e.g. 3_1366.png): one char can have several templates.
 CHAR_NAMES = {
@@ -19,9 +20,6 @@ CHAR_NAMES = {
     "pct": "%",
     "lbr": "[",
     "rbr": "]",
-    "slash": "/",
-    "lt": "<",
-    "gt": ">",
 }
 
 Font = list[tuple[str, np.ndarray]]  # (char, ink mask) per template file
@@ -113,19 +111,15 @@ def _font(font: str) -> Font:
     return _fonts[font]
 
 
-def _match(glyph: np.ndarray, templates: Font, max_diff: float) -> tuple[str, int] | None:
-    """(char, differing pixels) of the closest template, or None if none is close enough."""
-    best = None
+def _match(glyph: np.ndarray, templates: Font) -> str | None:
+    """Char of the template with exactly this ink shape, else None.
+
+    Strict (R17): a glyph 1 px off reads None, never a neighbouring char.
+    """
     for ch, t in templates:
-        if abs(glyph.shape[0] - t.shape[0]) > 1 or abs(glyph.shape[1] - t.shape[1]) > 1:
-            continue
-        g = cv2.resize(
-            glyph.astype(np.uint8), (t.shape[1], t.shape[0]), interpolation=cv2.INTER_NEAREST
-        ).astype(bool)
-        diff = np.count_nonzero(g != t)
-        if diff <= max_diff * t.size and (best is None or diff <= best[1]):
-            best = ch, diff
-    return best
+        if glyph.shape == t.shape and np.array_equal(glyph, t):
+            return ch
+    return None
 
 
 def _rows(m: np.ndarray) -> np.ndarray:
@@ -133,26 +127,23 @@ def _rows(m: np.ndarray) -> np.ndarray:
     return m[rows[0] : rows[-1] + 1]
 
 
-def _split(run: np.ndarray, templates: Font, max_diff: float) -> str | None:
-    """Cut a run of touching glyphs into template matches, fewest differing pixels in total."""
-    widest = max(t.shape[1] for _, t in templates) + 1
+def _split(run: np.ndarray, templates: Font) -> str | None:
+    """Cut a run of touching glyphs into template matches."""
+    widest = max(t.shape[1] for _, t in templates)
     w = run.shape[1]
-    best = {0: (0, "")}  # columns read so far -> (differing pixels, text)
+    best = {0: ""}  # columns read so far -> text
     for i in range(w):
         if i not in best:
             continue
         for j in range(i + 1, min(w, i + widest) + 1):
-            hit = _match(_rows(run[:, i:j]), templates, max_diff)
-            if hit and (j not in best or best[i][0] + hit[1] < best[j][0]):
-                best[j] = best[i][0] + hit[1], best[i][1] + hit[0]
-    return best[w][1] if w in best else None
+            ch = _match(_rows(run[:, i:j]), templates)
+            if ch and j not in best:
+                best[j] = best[i] + ch
+    return best.get(w)
 
 
-def read_text(m: np.ndarray, font: str, space_px: int, max_diff: float = MAX_DIFF) -> str | None:
-    """Read a bool ink mask with the bitmap font `font`; None if any glyph is unknown.
-
-    A glyph matches a template when at most `max_diff` of its pixels differ.
-    """
+def read_text(m: np.ndarray, font: str, space_px: int) -> str | None:
+    """Read a bool ink mask with the bitmap font `font`; None if any glyph is unknown."""
     templates = _font(font)
     cols = np.flatnonzero(m.any(axis=0))
     if cols.size == 0:
@@ -167,9 +158,8 @@ def read_text(m: np.ndarray, font: str, space_px: int, max_diff: float = MAX_DIF
             out += " "
         prev_end = x1
         sub = m[:, x0:x1]
-        hit = _match(_rows(sub), templates, max_diff)
         # Glyphs can touch after the resize to BASE_H; then cut the run by templates.
-        text = hit[0] if hit else _split(sub, templates, max_diff)
+        text = _match(_rows(sub), templates) or _split(sub, templates)
         if text is None:
             return None
         out += text

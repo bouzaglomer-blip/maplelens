@@ -6,7 +6,8 @@ traffic, or send input. It is a speed bump against honest mistakes, not a
 security boundary.
 
 Usage: python scripts/check_screen_only.py [PATH ...]
-With no PATH, scans src/ and scripts/ of this repo. Exits 2 on violations
+With no PATH, scans src/ and scripts/ of this repo, and its uv.lock for banned
+packages (a PATH named uv.lock is checked that way too). Exits 2 on violations
 (2 so a Claude Code hook feeds the report back to the model).
 """
 
@@ -37,6 +38,13 @@ BANNED_MODULES = {
     "ReadWriteMemory",  # reads/writes process memory
 }
 
+# Banned by dotted prefix: a package that is fine except for one namespace.
+BANNED_PREFIXES = [
+    "winrt.windows.ui.input",  # WinRT input, incl. its preview injection API (sends keys/clicks)
+]
+# The same namespace as a locked package (uv.lock spells it winrt-windows-ui-input...).
+BANNED_LOCK_RE = re.compile(r'name\s*=\s*"(winrt[-_.]windows[-_.]ui[-_.]input[^"]*)"', re.I)
+
 BANNED_WIN32 = [
     "ReadProcessMemory",  # reads game memory
     "WriteProcessMemory",  # writes game memory
@@ -61,43 +69,51 @@ BANNED_WIN32 = [
 WIN32_RE = re.compile(r"\b(" + "|".join(BANNED_WIN32) + r")[AW]?\b")
 
 
-def is_dynamic_import(node: ast.AST) -> bool:
-    """__import__("x") or import_module("x") / importlib.import_module("x")."""
-    if not isinstance(node, ast.Call) or not node.args:
-        return False
+def dynamic_import(node: ast.AST) -> str | None:
+    """ "x" of __import__("x") or import_module("x") / importlib.import_module(name="x")."""
+    if not isinstance(node, ast.Call):
+        return None
     f = node.func
     name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
-    arg = node.args[0]
-    return (
-        name in ("__import__", "import_module")
-        and isinstance(arg, ast.Constant)
-        and isinstance(arg.value, str)
-    )
+    args = node.args[:1] + [k.value for k in node.keywords if k.arg == "name"]
+    if name not in ("__import__", "import_module") or not args:
+        return None
+    arg = args[0]
+    return arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
 
 
 def find_violations(path: Path) -> list[str]:
     # utf-8-sig: a BOM (common from Windows editors) would otherwise break ast.parse
     text = path.read_text(encoding="utf-8-sig", errors="replace")
-    found = []
+    found = set()
+    if path.name == "uv.lock":
+        for lineno, line in enumerate(text.splitlines(), 1):
+            for m in BANNED_LOCK_RE.finditer(line):
+                found.add((lineno, f"banned package '{m.group(1)}'"))
+        return [f"{path}:{lineno}: {msg}" for lineno, msg in sorted(found)]
     try:
         for node in ast.walk(ast.parse(text)):
             if isinstance(node, ast.Import):
                 names = [a.name for a in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                names = [node.module]
-            elif is_dynamic_import(node):
-                names = [node.args[0].value]
+                # `from a.b import c` may import the module a.b.c
+                names = [node.module] + [f"{node.module}.{a.name}" for a in node.names]
+            elif dynamic_import(node):
+                names = [dynamic_import(node)]
             else:
                 continue
             for name in names:
                 top = name.split(".")[0]
                 if top in BANNED_MODULES:
-                    found.append((node.lineno, f"banned import '{top}'"))
+                    found.add((node.lineno, f"banned import '{top}'"))
+                for prefix in BANNED_PREFIXES:
+                    if name == prefix or name.startswith(prefix + "."):
+                        found.add((node.lineno, f"banned import '{prefix}'"))
     except SyntaxError:
         pass  # half-written file; the name check below still runs
     for lineno, line in enumerate(text.splitlines(), 1):
         for m in WIN32_RE.finditer(line):
-            found.append((lineno, f"banned Win32 call '{m.group(1)}'"))
+            found.add((lineno, f"banned Win32 call '{m.group(1)}'"))
     return [f"{path}:{lineno}: {msg}" for lineno, msg in sorted(found)]
 
 
@@ -110,7 +126,7 @@ def iter_py_files(paths: list[Path]):
 
 
 def main(argv: list[str]) -> int:
-    paths = [Path(a) for a in argv] or [REPO / "src", REPO / "scripts"]
+    paths = [Path(a) for a in argv] or [REPO / "src", REPO / "scripts", REPO / "uv.lock"]
     violations = [v for f in iter_py_files(paths) for v in find_violations(f)]
     for v in violations:
         print(v, file=sys.stderr)

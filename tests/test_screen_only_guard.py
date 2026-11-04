@@ -97,5 +97,64 @@ def test_flags_game_input_libs_and_message_variants(tmp_path):
     assert "bad.py:4: banned Win32 call 'PostThreadMessage'" in r.stderr
 
 
+def test_flags_banned_namespace_by_dotted_prefix(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "import winrt.windows.ui.input.preview.injection\n"
+        "from winrt.windows.ui.input.preview import injection\n"
+        "from winrt.windows.ui.input.preview.injection import InputInjector\n"
+        '__import__("winrt.windows.ui.input.preview.injection")\n',
+        encoding="utf-8",
+    )
+    r = run_guard(str(f))
+    assert r.returncode == 2
+    for line in (1, 2, 3, 4):
+        assert f"bad.py:{line}: banned import 'winrt.windows.ui.input'" in r.stderr
+
+
+def test_flags_whole_input_namespace_and_keyword_import(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "import winrt.windows.ui.input\n"
+        "from winrt.windows.ui import input\n"
+        'importlib.import_module(name="winrt.windows.ui.input.core")\n',
+        encoding="utf-8",
+    )
+    r = run_guard(str(f))
+    assert r.returncode == 2
+    for line in (1, 2, 3):
+        assert f"bad.py:{line}: banned import 'winrt.windows.ui.input'" in r.stderr
+
+
+def test_namespace_siblings_not_flagged(tmp_path):
+    f = tmp_path / "ok.py"
+    f.write_text(
+        "from winrt.windows.media.ocr import OcrEngine\n"
+        "from winrt.windows.ui import inputx\n"
+        "import winrt.windows.ui.inputpane\n",
+        encoding="utf-8",
+    )
+    assert run_guard(str(f)).returncode == 0
+
+
+def test_flags_banned_package_in_lock(tmp_path):
+    lock = tmp_path / "uv.lock"
+    lock.write_text(
+        '[[package]]\nname = "winrt-windows-media-ocr"\n\n'
+        '[[package]]\nname = "WinRT-Windows-UI-Input-Preview-Injection"\n',
+        encoding="utf-8",
+    )
+    r = run_guard(str(lock))
+    assert r.returncode == 2
+    assert "uv.lock:5: banned package 'WinRT-Windows-UI-Input-Preview-Injection'" in r.stderr
+    assert "media-ocr" not in r.stderr
+
+
+def test_clean_lock_passes(tmp_path):
+    lock = tmp_path / "uv.lock"
+    lock.write_text('[[package]]\nname = "winrt-windows-media-ocr"\n', encoding="utf-8")
+    assert run_guard(str(lock)).returncode == 0
+
+
 def test_repo_is_clean_from_any_cwd(tmp_path):
     assert run_guard(cwd=tmp_path).returncode == 0

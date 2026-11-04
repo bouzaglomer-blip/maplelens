@@ -26,5 +26,9 @@ def read_all(frame: np.ndarray, t: float) -> Reading:
 
     img = glyphs.normalize(frame)
     return Reading(
-        t, exp.read_exp(img), level.read_level(img), job.read_job(img), map_name.read_map_name(img)
+        t,
+        exp.read_exp(img),
+        level.read_level(img),
+        job.read_job(img, frame),
+        map_name.read_map_name(img, frame),
     )

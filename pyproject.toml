@@ -11,6 +11,9 @@ dependencies = [
     "numpy>=2.5.4",
     "opencv-python-headless>=5.0.0.93",
     "pyside6>=6.12.0",
+    "winrt-windows-globalization>=4!10.0.28000.2957",
+    "winrt-windows-graphics-imaging>=4!10.0.28000.2957",
+    "winrt-windows-media-ocr>=4!10.0.28000.2957",
 ]
 
 [project.scripts]

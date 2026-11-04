@@ -85,10 +85,14 @@ def test_read_text_reads_digits_and_space(font):
     assert glyphs.read_text(line(font, "12,3 45"), "f", space_px=6) == "12,3 45"
 
 
-def test_read_text_tolerates_one_px(font):
+def test_glyph_one_px_off_is_none(font):
+    """Matching is exact (R17): one extra ink row, or one flipped pixel, reads None."""
     seven = font["7"]
-    m = np.vstack([seven, seven[-1:]])  # one extra ink row: 22 high, template is 21
-    assert glyphs.read_text(m, "f", space_px=6) == "7"
+    assert glyphs.read_text(seven, "f", space_px=6) == "7"
+    assert glyphs.read_text(np.vstack([seven, seven[-1:]]), "f", space_px=6) is None
+    flipped = seven.copy()
+    flipped[0, 0] = ~flipped[0, 0]
+    assert glyphs.read_text(flipped, "f", space_px=6) is None
 
 
 def test_unknown_glyph_is_none(font):
@@ -141,10 +145,3 @@ def test_glyph_variants_share_a_char(templates):
     cv2.imwrite(str(templates / "v" / "comma_b.png"), b)
     m = np.hstack([a, np.zeros((5, 3)), b]) > 0
     assert glyphs.read_text(m, "v", space_px=9) == ",,"
-
-
-def test_read_text_max_diff(font):
-    seven = font["7"].copy()
-    seven[0, :2] = ~seven[0, :2]  # 2 px off
-    assert glyphs.read_text(seven, "f", space_px=6) == "7"
-    assert glyphs.read_text(seven, "f", space_px=6, max_diff=1 / seven.size) is None
