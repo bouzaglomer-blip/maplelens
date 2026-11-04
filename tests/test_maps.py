@@ -1,6 +1,5 @@
 from maplelens.tools.path_arrow.maps import MapInfo, Minimap, Portal, find, load, search
 
-
 MINIMAP = Minimap(100, 100, 50, 50)
 
 
