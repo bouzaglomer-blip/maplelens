@@ -12,10 +12,9 @@ RECT = (0, 0, 1366, 768)
 OPEN = "Open your minimap to see the arrow"
 
 
-def mk(id, name, portals=(), street="Road", minimap=MM):
-    return MapInfo(
-        id, street, name, False, minimap, tuple(Portal(x, y, t) for x, y, t in portals), None
-    )
+def mk(id, name, portals=(), street="Road", minimap=MM, npcs=()):
+    portals = tuple(Portal(x, y, t) for x, y, t in portals)
+    return MapInfo(id, street, name, False, minimap, portals, None, npcs)
 
 
 MAPS = {
@@ -33,6 +32,9 @@ MAPS = {
         mk("Q", "Pair", [(-500, 0, "P"), (450, 300, "R")], minimap=Minimap(1498, 850, 299, 445)),
         mk("R", "Rose", [(0, 0, "Q")]),
         mk("L", "The Very Long Road Past The Old Mushroom Forest Gate", [(0, 0, "B")]),
+        mk("K", "Keep", [(0, 0, "B")], minimap=Minimap(6400, 1600, 800, 800), npcs=((0, 0),) * 3),
+        mk("T1", "Twin", [(0, 0, "B")], street="Hill"),
+        mk("T2", "Twin", [(0, 0, "B")], street="Dale"),
     ]
 }
 
@@ -322,11 +324,107 @@ def test_tick_feeds_both_tools_and_dots_path_tab(make):
         box._select(i)
         widths.add(box.sizeHint().width())
     assert len(widths) == 1  # same box width on both tabs
-    update_tools(box, exp, path, None, None, 1.0)
+    update_tools(box, exp, path, None, None, 1.0, set())
     assert box._tab_dots[1].isHidden()
     go(path, "A", "C", 1.0)
     assert path.running
-    update_tools(box, exp, path, None, None, 2.0)
+    update_tools(box, exp, path, None, None, 2.0, set())
     assert not box._tab_dots[1].isHidden()
     box.close()
     exp.shutdown(3.0)
+
+
+def test_clipped_map_part_without_markers_says_why(make):
+    tool = make()
+    clipped = MinimapView((200, 100), (100.0, 50.0), ())  # no NPC markers in the window
+    feed(tool, title("K"), view=clipped)
+    tool._search.setText("Cherry")
+    tool._start.click()
+    assert tool._message.text() == "No arrow on this part of the map yet"
+    assert not tool.arrow.isVisible()
+
+
+def test_unclipped_frame_miss_has_no_line(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, title("A"), 1.0, view=MinimapView((135, 62), (67.5, 31.0), ()), times=1)
+    assert not tool.arrow.isVisible()  # player_world None for this frame only
+    assert not tool._message.isVisibleTo(tool.tab)
+
+
+def test_no_route_note_clears_on_map_change(make):
+    tool = make()
+    go(tool, "A", "D")
+    assert tool._message.text() == "No route from here to Date"
+    feed(tool, title("B"), 1.0)
+    assert not tool._message.isVisibleTo(tool.tab)
+
+
+def test_no_reading_starts_the_minimap_clock(make):
+    tool = make()
+    go(tool, "A", "C")
+    tool.update(None, RECT, 10.0)
+    tool.update(None, RECT, 12.0)
+    assert not tool._message.isVisibleTo(tool.tab)
+    tool.update(None, RECT, 13.1)
+    assert tool._message.text() == OPEN
+    assert tool.running
+
+
+def test_stale_map_after_3s_unreadable(make):
+    tool = make()
+    feed(tool, title("A"))
+    tool._search.setText("Cherry")
+    assert tool._start.isEnabled()
+    feed(tool, None, 10.0, view=None, times=1)
+    feed(tool, None, 12.0, view=None, times=1)
+    assert tool._header.text() == "From: Apple (where you are)"  # a short gap: still trusted
+    feed(tool, None, 13.1, view=None, times=1)
+    assert tool._header.text() == "From: (can't read your map yet)"
+    assert not tool._start.isEnabled()
+    feed(tool, title("A"), 14.0)
+    assert tool._start.isEnabled()
+    tool._start.click()
+    feed(tool, None, 20.0, view=None, times=1)
+    feed(tool, None, 23.1, view=None, times=1)
+    assert tool.running  # a running trip is kept
+
+
+def test_duplicate_names_show_their_street(make):
+    tool = make()
+    tool._search.setText("twin")
+    shown = {tool._matches.item(i).text() for i in range(tool._matches.count())}
+    assert shown == {"Twin · Hill", "Twin · Dale"}
+    tool._search.setText("cherry")
+    assert tool._matches.item(0).text() == "Cherry"  # unique: the name alone
+
+
+def test_tool_errors_do_not_stop_the_other_tool(make, capsys):
+    from PySide6.QtWidgets import QLabel
+
+    from maplelens.app import update_tools
+    from maplelens.overlay import Box
+
+    class Broken:
+        def update(self, *args):
+            raise ValueError("boom")
+
+    path = make()
+    box = Box("t", {}, lambda: None)
+    box.add_tab("EXP", QLabel())
+    box.add_tab("Path", path.tab)
+    go(path, "A", "C")
+    seen = set()
+    for t in (1.0, 1.5):
+        r = Reading(t, None, None, None, title("B"), minimap=MID)
+        update_tools(box, Broken(), path, r, RECT, t, seen)
+    assert path._header.text() == "To Cherry · 2 of 3"  # path still ran
+    assert not box._tab_dots[1].isHidden()
+    assert capsys.readouterr().err.count("ValueError: boom") == 1  # printed once
+
+    def broken_path(*args):
+        raise ValueError("bang")
+
+    path.update = broken_path
+    update_tools(box, Broken(), path, None, RECT, 2.0, seen)
+    assert not path.arrow.isVisible()  # hidden, not frozen at its last spot

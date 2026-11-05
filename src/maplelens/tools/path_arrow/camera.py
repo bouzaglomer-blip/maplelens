@@ -64,7 +64,7 @@ def _scroll(view: MinimapView, mm: Minimap, npcs) -> tuple[float, float] | None:
     return float(best[0]), float(best[1])
 
 
-def _fits(view: MinimapView, mm: Minimap) -> bool:
+def fits(view: MinimapView, mm: Minimap) -> bool:
     """The window shows the whole map picture (not clipped)."""
     return view.size[0] >= mm.w / SCALE - CLIP_SLACK and view.size[1] >= mm.h / SCALE - CLIP_SLACK
 
@@ -90,7 +90,7 @@ def by_size(maps: dict[str, MapInfo], title: str, view: MinimapView) -> MapInfo 
 def can_place(view: MinimapView, info: MapInfo) -> bool:
     """False where player_world is always None: no minimap, or clipped with too few NPCs."""
     mm = info.minimap
-    return mm is not None and (_fits(view, mm) or len(info.npcs) >= MIN_MATCH)
+    return mm is not None and (fits(view, mm) or len(info.npcs) >= MIN_MATCH)
 
 
 def player_world(view: MinimapView, info: MapInfo) -> tuple[float, float] | None:
@@ -99,7 +99,7 @@ def player_world(view: MinimapView, info: MapInfo) -> tuple[float, float] | None
     if mm is None:
         return None
     (vw, vh), (dx, dy) = view.size, view.dot
-    if _fits(view, mm):
+    if fits(view, mm):
         # A bigger view is another map's picture (a same-title neighbour): don't guess.
         return to_world((dx / vw, dy / vh), mm) if same_size(view, mm) else None
     s = _scroll(view, mm, info.npcs)
@@ -120,9 +120,11 @@ def to_screen(
     map narrower than the view). Vertically it follows and stops only at the bottom.
     """
     # ponytail: the game camera lets the character drift up to ~128 px either side of
-    # the centre mid-map (lag/dead zone), which the minimap doesn't show, so x is exact
-    # only where the camera is stopped at an edge. Upgrade: find the character on screen
-    # by some read that isn't another player's info, if the owner wants it tighter.
+    # the centre mid-map (lag/dead zone), which the minimap doesn't show. At an edge where
+    # the camera stops it is usually exact, but on some maps (Transfer Area, Line 1) the
+    # camera's side bounds sit inside the minimap's, so x is ~100 px off there too.
+    # Upgrade: find the character on screen by some read that isn't another player's
+    # info, or per-map camera bounds, if the owner wants it tighter.
     half_w = view[0] * WORLD_PER_PX / 2
     if mm.w <= 2 * half_w:
         cx = mm.w / 2 - mm.cx

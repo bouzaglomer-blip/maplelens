@@ -126,18 +126,23 @@ else from the source kept:
   "town": true,
   "minimap": {"w": 1498, "h": 985, "cx": 254, "cy": 310},
   "portals": [{"x": 1116, "y": 365, "to": "000000010"}],
-  "cab": {"x": 833, "y": 125, "to": ["…"]}
+  "cab": {"x": 833, "y": 125, "to": ["…"]},
+  "npcs": [{"x": -46, "y": 280}, {"x": 833, "y": 125}]
 }
 ```
 
 - `minimap` is null for maps with no minimap. `cab` is absent unless the map has a
   Regular Cab.
+- `npcs` holds every NPC's world position; the minimap marks them, and big maps use
+  them to place you (section 4, "Big maps").
 - World → minimap fraction: `fx = (x + cx) / w`, `fy = (y + cy) / h` (verified against the
   source's own path finder code).
 - Cab destinations: the source has cabs in Henesys, Ellinia, Kerning City, Perion and
   Sleepywood, and treats any cab town as reachable from any other. The builder writes that
   into each `cab.to` and confirms the list in-game with the owner (one ride is enough to
   see the cab's menu).
+  The data has six cab towns: those five plus Lith Harbor, whose VIP Cab (NPC 104) the
+  source treats as a cab too.
 - Only portals that lead to another map are kept. Which source portal types those are is
   the builder's call from the data.
 - The source is the map data behind meowdb's MapleStory Classic path finder

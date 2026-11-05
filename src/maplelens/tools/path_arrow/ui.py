@@ -28,7 +28,7 @@ from maplelens.overlay import (
     text_label,
 )
 from maplelens.readers import Reading, glyphs
-from maplelens.tools.path_arrow.camera import by_size, can_place, player_world, to_screen
+from maplelens.tools.path_arrow.camera import by_size, can_place, fits, player_world, to_screen
 from maplelens.tools.path_arrow.maps import MapInfo, find, load, search
 from maplelens.tools.path_arrow.route import Trip
 
@@ -151,6 +151,7 @@ class PathArrowTool:
         self._matches = QListWidget()
         self._matches.setFocusPolicy(Qt.NoFocus)
         self._matches.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # names elide
+        self._matches.setTextElideMode(Qt.ElideMiddle)  # keeps a repeated name's street
         # Its own 256 px width hint would widen the box past TAB_W (the box's page stack
         # sizes from raw hints, ignoring the tab's fixed width).
         self._matches.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
@@ -191,9 +192,13 @@ class PathArrowTool:
 
     def update(self, r: Reading | None, game_rect: tuple | None, now: float) -> None:
         self._r, self._rect, self._now = r, game_rect, now
-        if r is not None:
-            self._track(r.map_name, r.minimap, now)
+        # No reading at all counts as an unreadable map name: the same 3 s clock.
+        self._track(r.map_name if r else None, r.minimap if r else None, now)
         self._render()
+
+    def _unread(self) -> bool:
+        """No map name for UNREAD_S: where you are is no longer known."""
+        return self._unread_since is not None and self._now - self._unread_since >= UNREAD_S
 
     def _track(self, name: str | None, view, now: float) -> None:
         """Act on a map change only once the same title is read twice in a row.
@@ -211,6 +216,7 @@ class PathArrowTool:
             if (name == self._last and name != self._title) or (twice and twice != self._here):
                 previous = self._here.id if self._here else None
                 self._title, self._here = name, twice or find(self.maps, name, previous)
+                self._note = ""  # a new place: an old "No route" no longer holds
                 if self._here and self.trip:
                     self.trip.on_map(self._here.id)
                     self._settle()
@@ -237,8 +243,10 @@ class PathArrowTool:
     def _on_text(self, text: str) -> None:
         self._note = ""
         self._matches.clear()
-        for m in search(self.maps, text):
-            item = QListWidgetItem(m.name)
+        hits = search(self.maps, text)
+        names = [m.name for m in hits]
+        for m in hits:
+            item = QListWidgetItem(f"{m.name} · {m.street}" if names.count(m.name) > 1 else m.name)
             item.setData(Qt.UserRole, m.id)
             item.setToolTip(m.title)
             self._matches.addItem(item)
@@ -253,7 +261,7 @@ class PathArrowTool:
     def _on_start(self) -> None:
         item = self._matches.currentItem()
         self._set_typing(False)
-        if self._here is None or item is None:
+        if self._here is None or self._unread() or item is None:
             return
         taxi = self._taxi.isChecked()
         if self._settings.get("path_taxi") != taxi:
@@ -278,18 +286,28 @@ class PathArrowTool:
             n = f"{self.trip.index + 1} of {len(self.trip.steps)}"
             head = self._fit("To {} · " + n, goal)
             self._route_list.setText(self._route_html())
-        elif self._here:
+        elif self._here and not self._unread():
             head = self._fit("From: {} (where you are)", self._here.name)
         else:
             head = "From: (can't read your map yet)"
         self._header.setText(head)
         self._choose.setVisible(self.trip is None and self._arrived is None)
         self._running.setVisible(self.trip is not None)
-        why = self._why()
+        world = self._world()
+        why = self._why(world)
         self._message.setText(why)
         self._message.setVisible(bool(why))
-        self._start.setEnabled(self._here is not None and self._matches.currentItem() is not None)
-        self._place_arrow()
+        known = self._here is not None and not self._unread()
+        self._start.setEnabled(known and self._matches.currentItem() is not None)
+        self._place_arrow(world)
+
+    def _world(self) -> tuple[float, float] | None:
+        """The player's world position, from a reading of the confirmed map only."""
+        r, here = self._r, self._here
+        # Never aim with another map's minimap, so the title must be the confirmed one.
+        if self.trip and here and r and r.minimap and r.map_name == self._title:
+            return player_world(r.minimap, here)
+        return None
 
     def _fit(self, template: str, name: str) -> str:
         """The header line, `name` elided so the line fits the tab."""
@@ -319,14 +337,14 @@ class PathArrowTool:
             rows.append(row)
         return "<br>".join(rows)
 
-    def _why(self) -> str:
+    def _why(self, world: tuple[float, float] | None) -> str:
         """One line on why there's no arrow, or ""."""
         r, here = self._r, self._here
-        if self._title is not None and here is None:
+        if self._title is not None and here is None and not self._unread():
             return "This map isn't in MapleLens's map list yet"
         if self.trip is None:
             return "" if self._arrived else self._note
-        if self._unread_since is not None and self._now - self._unread_since >= UNREAD_S:
+        if self._unread():
             return OPEN
         if here is None or r is None:
             return ""
@@ -336,15 +354,14 @@ class PathArrowTool:
             return OPEN
         if r.minimap is not None and not can_place(r.minimap, here):
             return "No arrow on this map yet"
-        return ""  # player_world may still miss a frame: the arrow just hides
+        if world is None and r.minimap and r.map_name == self._title:
+            if not fits(r.minimap, here.minimap):  # too few NPC markers in the window
+                return "No arrow on this part of the map yet"
+        return ""  # a map that fits may still miss a frame: the arrow just hides
 
-    def _place_arrow(self) -> None:
-        r, here, rect = self._r, self._here, self._rect
-        world = target = None
-        # Only on a reading of the confirmed map: never aim with another map's minimap.
-        if self.trip and here and r and rect and r.minimap and r.map_name == self._title:
-            world = player_world(r.minimap, here)
-            target = None if world is None else self.trip.target(world)
+    def _place_arrow(self, world: tuple[float, float] | None) -> None:
+        here, rect = self._here, self._rect
+        target = None if world is None or rect is None else self.trip.target(world)
         if target is None:
             self.arrow.hide()
             return

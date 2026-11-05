@@ -30,10 +30,28 @@ def build_box(settings: dict, save: Callable[[], None], tools: list) -> Box:
     return box
 
 
-def update_tools(box: Box, exp, path, reading, rect, now: float) -> None:
-    """Feed both tools the same reading; the Path tab shows a dot while a trip runs."""
-    exp.update(reading, rect, now)
-    path.update(reading, rect, now)
+def report_once(e: Exception, seen: set[str]) -> None:
+    """Print a traceback the first time each distinct error turns up."""
+    key = f"{type(e).__name__}: {e}"
+    if key not in seen:
+        seen.add(key)
+        traceback.print_exc()
+
+
+def update_tools(box: Box, exp, path, reading, rect, now: float, seen: set[str]) -> None:
+    """Feed both tools the same reading; the Path tab shows a dot while a trip runs.
+
+    Each tool runs on its own: one raising doesn't stop the other.
+    """
+    try:
+        exp.update(reading, rect, now)
+    except Exception as e:
+        report_once(e, seen)
+    try:
+        path.update(reading, rect, now)
+    except Exception as e:
+        report_once(e, seen)
+        path.arrow.hide()  # never leave it pointing from a stale spot
     box.set_tab_dot(1, path.running)  # the Path tab's index in build_box's tools list
 
 
@@ -66,19 +84,16 @@ def main() -> int:
         if rect is None:
             hwnd = None  # gone or minimized: look again next tick
             layer.hide()
-            update_tools(box, tool, path_tool, None, None, now)
+            update_tools(box, tool, path_tool, None, None, now, seen)
             return
         layer.follow(rect)
         layer.show()
         try:
             reading = read_all(grab(rect), now)
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
-            key = f"{type(e).__name__}: {e}"
-            if key not in seen:
-                seen.add(key)
-                traceback.print_exc()
+            report_once(e, seen)
             reading = None
-        update_tools(box, tool, path_tool, reading, rect, now)
+        update_tools(box, tool, path_tool, reading, rect, now, seen)
         box.place(rect)
 
     timer = QTimer()
