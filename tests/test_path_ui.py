@@ -28,6 +28,11 @@ MAPS = {
         mk("X", "Xylo", [(0, 0, "C")], street="Bay"),
         mk("N", "Nomap", [(0, 0, "B")], minimap=None),
         mk("G", "Grand", [(0, 0, "B")], minimap=Minimap(6400, 1600, 800, 800)),  # no NPCs
+        # Same-title neighbours, as Maple Road / Mushroom Town (88x47 vs 94x53 px).
+        mk("P", "Pair", [(500, 0, "Q")], minimap=Minimap(1408, 760, 479, 295)),
+        mk("Q", "Pair", [(-500, 0, "P"), (450, 300, "R")], minimap=Minimap(1498, 850, 299, 445)),
+        mk("R", "Rose", [(0, 0, "Q")]),
+        mk("L", "The Very Long Road Past The Old Mushroom Forest Gate", [(0, 0, "B")]),
     ]
 }
 
@@ -250,3 +255,55 @@ def test_typing_toggles_focus(make):
     go(tool, "A", "C")
     assert calls == [True, False, True, False]
     tool.tab.close()
+
+
+def test_same_title_neighbours_told_apart_by_minimap_size(make):
+    p_view = MinimapView((88, 47), (44.0, 23.5), ())
+    q_view = MinimapView((94, 53), (47.0, 26.5), ())
+    tool = make()
+    feed(tool, title("P"), view=p_view)
+    tool._search.setText("Rose")
+    tool._start.click()
+    assert [s.map_id for s in tool.trip.steps] == ["P", "Q", "R"]
+    assert tool.arrow.isVisible()
+    feed(tool, title("Q"), 1.0, view=q_view, times=1)  # same title, Q's minimap
+    assert not tool.arrow.isVisible()  # never aimed with P's minimap formula
+    feed(tool, title("Q"), 1.5, view=q_view, times=1)
+    assert tool._header.text() == "To Rose · 2 of 3"
+    assert tool.arrow.isVisible() and tool.arrow.angle == approx(
+        90
+    )  # straight down: Q puts you at (450, -20)
+
+
+def test_matches_show_three_rows(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    tool._search.setText("r")  # every "Road" map
+    m = tool._matches
+    assert m.count() > ui.MATCH_ROWS
+    assert m.maximumHeight() == m.sizeHintForRow(0) * ui.MATCH_ROWS + 2 * m.frameWidth()
+
+
+def test_long_names_elide_to_the_box_width(make):
+    from maplelens.overlay import Box
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    box = Box("t", {}, lambda: None)
+    box.add_tab("Path", tool.tab)
+    box.show()  # a shown box's pages size from their raw hints
+    feed(tool, title("L"))
+    assert tool._header.text().startswith("From: The Very") and "…" in tool._header.text()
+    assert tool._header.text().endswith("(where you are)")
+    tool._search.setText("r")  # the full, scrolling list
+    width = ui.TAB_W + 24  # the box's 12 px side margins
+    assert box.sizeHint().width() == width
+    tool._search.setText("Cherry")
+    tool._start.click()
+    assert "…" in tool._route_list.text()
+    assert box.sizeHint().width() == width
+    tool._stop.click()
+    feed(tool, title("A"), 1.0)  # short names: the box keeps its width
+    assert box.sizeHint().width() == width
+    box.close()

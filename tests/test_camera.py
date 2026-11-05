@@ -5,7 +5,13 @@ from pytest import approx
 
 from maplelens.readers.minimap_pos import MinimapView, read_view
 from maplelens.tools.path_arrow import camera
-from maplelens.tools.path_arrow.camera import can_place, player_world, to_screen, to_world
+from maplelens.tools.path_arrow.camera import (
+    by_size,
+    can_place,
+    player_world,
+    to_screen,
+    to_world,
+)
 from maplelens.tools.path_arrow.maps import MapInfo, Minimap, load
 
 MM = Minimap(2000, 1000, 1000, 500)
@@ -126,3 +132,22 @@ def test_can_place():
     fits = MinimapView((125, 62), (62.5, 31.0), ())
     assert can_place(fits, MapInfo("1", "s", "n", True, MM, (), None))
     assert not can_place(fits, MapInfo("1", "s", "n", True, None, (), None))
+
+
+def test_player_world_bigger_view_is_none():
+    # 10 px wider than MM's 125x62 picture: another map's minimap, not this one.
+    view = MinimapView((135, 62), (67.5, 31.0), ())
+    assert player_world(view, MapInfo("1", "s", "n", True, MM, (), None)) is None
+
+
+def test_by_size_tells_same_title_maps_apart():
+    maps = {
+        "a": MapInfo("a", "s", "n", True, Minimap(1408, 760, 0, 0), (), None),  # 88x47.5
+        "b": MapInfo("b", "s", "n", True, Minimap(1498, 850, 0, 0), (), None),  # 93.6x53.1
+        "c": MapInfo("c", "s", "other", True, Minimap(1408, 760, 0, 0), (), None),
+    }
+    assert by_size(maps, "s / n", MinimapView((88, 47), (1.0, 1.0), ())).id == "a"
+    assert by_size(maps, "s / n", MinimapView((94, 53), (1.0, 1.0), ())).id == "b"
+    assert by_size(maps, "s / n", MinimapView((60, 40), (1.0, 1.0), ())) is None
+    twins = dict(maps, d=MapInfo("d", "s", "n", True, Minimap(1408, 760, 0, 0), (), None))
+    assert by_size(twins, "s / n", MinimapView((88, 47), (1.0, 1.0), ())) is None

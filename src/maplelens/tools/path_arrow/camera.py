@@ -69,6 +69,24 @@ def _fits(view: MinimapView, mm: Minimap) -> bool:
     return view.size[0] >= mm.w / SCALE - CLIP_SLACK and view.size[1] >= mm.h / SCALE - CLIP_SLACK
 
 
+def same_size(view: MinimapView, mm: Minimap | None) -> bool:
+    """The view is this map's whole picture: its size within CLIP_SLACK px on both axes."""
+    if mm is None:
+        return False
+    return all(
+        abs(v - m / SCALE) <= CLIP_SLACK for v, m in zip(view.size, (mm.w, mm.h), strict=True)
+    )
+
+
+def by_size(maps: dict[str, MapInfo], title: str, view: MinimapView) -> MapInfo | None:
+    """The one map titled `title` whose whole picture is the view's size, else None.
+
+    Tells same-title neighbours apart (Maple Road / Mushroom Town: 88x47 vs 94x53 px).
+    """
+    hits = [m for m in maps.values() if m.title == title and same_size(view, m.minimap)]
+    return hits[0] if len(hits) == 1 else None
+
+
 def can_place(view: MinimapView, info: MapInfo) -> bool:
     """False where player_world is always None: no minimap, or clipped with too few NPCs."""
     mm = info.minimap
@@ -82,7 +100,8 @@ def player_world(view: MinimapView, info: MapInfo) -> tuple[float, float] | None
         return None
     (vw, vh), (dx, dy) = view.size, view.dot
     if _fits(view, mm):
-        return to_world((dx / vw, dy / vh), mm)
+        # A bigger view is another map's picture (a same-title neighbour): don't guess.
+        return to_world((dx / vw, dy / vh), mm) if same_size(view, mm) else None
     s = _scroll(view, mm, info.npcs)
     if s is None:
         return None

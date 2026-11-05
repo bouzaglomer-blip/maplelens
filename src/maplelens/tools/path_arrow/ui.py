@@ -5,13 +5,14 @@ from collections.abc import Callable
 from html import escape
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QCheckBox,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -26,7 +27,7 @@ from maplelens.overlay import (
     text_label,
 )
 from maplelens.readers import Reading, glyphs
-from maplelens.tools.path_arrow.camera import can_place, player_world, to_screen
+from maplelens.tools.path_arrow.camera import by_size, can_place, player_world, to_screen
 from maplelens.tools.path_arrow.maps import MapInfo, find, load, search
 from maplelens.tools.path_arrow.route import Trip
 
@@ -37,6 +38,8 @@ ARROW_SIZE = 36  # logical px, the arrow's square
 ARRIVED_S = 5.0  # "Arrived at …" stays this long
 UNREAD_S = 3.0  # map name unreadable this long before asking for the minimap
 OPEN = "Open your minimap to see the arrow"
+TAB_W = 186  # the box is mockup 2's 210 px wide, less its 12 px side margins
+MATCH_ROWS = 3  # visible matches; the list scrolls for the rest
 # Mockup 3's route list and mockup 2's field.
 _DONE, _AHEAD, _NUM, _HERE_BG, _FIELD, _DARK = (
     "#6f7d93",
@@ -127,6 +130,7 @@ class PathArrowTool:
         self._here: MapInfo | None = None  # the confirmed map, None if not in the data
         self._title: str | None = None  # the confirmed map's read title
         self._last: str | None = None  # the previous reading's title
+        self._last_sized: MapInfo | None = None  # and the map its minimap size picked
         self._unread_since: float | None = None
         self._arrived: tuple[str, float] | None = None  # (name, when)
         self._note = ""  # why nothing started
@@ -138,6 +142,7 @@ class PathArrowTool:
 
         self.tab = QWidget()
         self.tab.setStyleSheet(_STYLE)
+        self.tab.setFixedWidth(TAB_W)  # long names elide instead of widening the box
         self._header = text_label("", LABEL_PT, LABEL_COLOR)
         self._message = text_label("", LABEL_PT, ACCENT)
         self._message.setWordWrap(True)
@@ -145,6 +150,10 @@ class PathArrowTool:
         self._search.textChanged.connect(self._on_text)
         self._matches = QListWidget()
         self._matches.setFocusPolicy(Qt.NoFocus)
+        self._matches.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # names elide
+        # Its own 256 px width hint would widen the box past TAB_W (the box's page stack
+        # sizes from raw hints, ignoring the tab's fixed width).
+        self._matches.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self._matches.currentItemChanged.connect(lambda *_: self._render())
         self._matches.itemClicked.connect(lambda _: self._set_typing(False))
         self._matches.hide()
@@ -183,23 +192,29 @@ class PathArrowTool:
     def update(self, r: Reading | None, game_rect: tuple | None, now: float) -> None:
         self._r, self._rect, self._now = r, game_rect, now
         if r is not None:
-            self._track(r.map_name, now)
+            self._track(r.map_name, r.minimap, now)
         self._render()
 
-    def _track(self, name: str | None, now: float) -> None:
-        """Act on a map change only once the same title is read twice in a row."""
+    def _track(self, name: str | None, view, now: float) -> None:
+        """Act on a map change only once the same title is read twice in a row.
+
+        Same-title maps are told apart by the minimap's size first, so walking between
+        two of them (Maple Road / Mushroom Town) still counts as a change.
+        """
+        sized = by_size(self.maps, name, view) if name and view else None
         if name is None:
             if self._unread_since is None:
                 self._unread_since = now
         else:
             self._unread_since = None
-            if name == self._last and name != self._title:
+            twice = sized if sized == self._last_sized else None  # same size match twice
+            if (name == self._last and name != self._title) or (twice and twice != self._here):
                 previous = self._here.id if self._here else None
-                self._title, self._here = name, find(self.maps, name, previous)
+                self._title, self._here = name, twice or find(self.maps, name, previous)
                 if self._here and self.trip:
                     self.trip.on_map(self._here.id)
                     self._settle()
-        self._last = name
+        self._last, self._last_sized = name, sized
 
     def _settle(self) -> None:
         """End the trip once it has arrived, or when no route is left."""
@@ -230,7 +245,7 @@ class PathArrowTool:
         n = self._matches.count()
         self._matches.setVisible(n > 0)
         if n:
-            rows = self._matches.sizeHintForRow(0) * n
+            rows = self._matches.sizeHintForRow(0) * min(n, MATCH_ROWS)
             self._matches.setFixedHeight(rows + 2 * self._matches.frameWidth())
             self._matches.setCurrentRow(0)
         self._render()
@@ -257,13 +272,14 @@ class PathArrowTool:
         if self._arrived and self._now - self._arrived[1] >= ARRIVED_S:
             self._arrived = None
         if self._arrived:
-            head = f"Arrived at {self._arrived[0]}"
+            head = self._fit("Arrived at {}", self._arrived[0])
         elif self.trip:
             goal = self.maps[self.trip.goal].name
-            head = f"To {goal} · {self.trip.index + 1} of {len(self.trip.steps)}"
+            n = f"{self.trip.index + 1} of {len(self.trip.steps)}"
+            head = self._fit("To {} · " + n, goal)
             self._route_list.setText(self._route_html())
         elif self._here:
-            head = f"From: {self._here.name} (where you are)"
+            head = self._fit("From: {} (where you are)", self._here.name)
         else:
             head = "From: (can't read your map yet)"
         self._header.setText(head)
@@ -275,10 +291,20 @@ class PathArrowTool:
         self._start.setEnabled(self._here is not None and self._matches.currentItem() is not None)
         self._place_arrow()
 
+    def _fit(self, template: str, name: str) -> str:
+        """The header line, `name` elided so the line fits the tab."""
+        fm = self._header.fontMetrics()
+        room = TAB_W - fm.horizontalAdvance(template.format(""))
+        return template.format(fm.elidedText(name, Qt.ElideRight, max(room, 0)))
+
     def _route_html(self) -> str:
+        bold = QFont(self._route_list.font())
+        bold.setBold(True)  # the widest a row gets
+        fm = QFontMetrics(bold)
         rows = []
         for i, s in enumerate(self.trip.steps):
-            name = escape(self.maps[s.map_id].name)
+            room = TAB_W - fm.horizontalAdvance("00  " + (" taxi" if s.cab else ""))
+            name = escape(fm.elidedText(self.maps[s.map_id].name, Qt.ElideRight, room))
             if i < self.trip.index:
                 row = f'<span style="color:{_DONE}"><s>{i + 1}&nbsp;&nbsp;{name}</s></span>'
             elif i == self.trip.index:
