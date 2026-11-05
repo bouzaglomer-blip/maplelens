@@ -18,6 +18,7 @@ The overlay will eventually ship four tools, in this order:
 3. **Prices** — market lookups without leaving the game.
 4. **Path arrow** — route shown as an arrow over the game. Last: needs player
    position from the minimap, the riskiest reader.
+   (Note: the owner moved the path arrow to second.)
 
 **This document covers only Phase 0:** the repository, its open-source
 basics, and the agent harness (Claude Code + other coding agents) that every

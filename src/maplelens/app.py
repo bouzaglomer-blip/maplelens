@@ -14,6 +14,7 @@ from maplelens.readers import read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.exp_meter.history import open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
+from maplelens.tools.path_arrow.ui import PathArrowTool
 
 _TICK_MS = 500
 
@@ -27,6 +28,13 @@ def build_box(settings: dict, save: Callable[[], None], tools: list) -> Box:
     box.add_menu_item("Quit MapleLens", QApplication.quit)
     box.show()
     return box
+
+
+def update_tools(box: Box, exp, path, reading, rect, now: float) -> None:
+    """Feed both tools the same reading; the Path tab shows a dot while a trip runs."""
+    exp.update(reading, rect, now)
+    path.update(reading, rect, now)
+    box.set_tab_dot(1, path.running)  # the Path tab's index in build_box's tools list
 
 
 def main() -> int:
@@ -45,7 +53,8 @@ def main() -> int:
         save_settings(path, settings)
 
     tool = ExpMeterTool(settings, open_db(data_dir() / "maplelens.db"), save)
-    box = build_box(settings, save, [tool])
+    path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))
+    box = build_box(settings, save, [tool, path_tool])
     hwnd = None
     seen: set[str] = set()  # error types/messages already printed
 
@@ -57,7 +66,7 @@ def main() -> int:
         if rect is None:
             hwnd = None  # gone or minimized: look again next tick
             layer.hide()
-            tool.update(None, None, now)
+            update_tools(box, tool, path_tool, None, None, now)
             return
         layer.follow(rect)
         layer.show()
@@ -69,7 +78,7 @@ def main() -> int:
                 seen.add(key)
                 traceback.print_exc()
             reading = None
-        tool.update(reading, rect, now)
+        update_tools(box, tool, path_tool, reading, rect, now)
         box.place(rect)
 
     timer = QTimer()

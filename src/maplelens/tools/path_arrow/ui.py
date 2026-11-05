@@ -21,6 +21,7 @@ from maplelens.overlay import (
     ACCENT,
     LABEL_COLOR,
     LABEL_PT,
+    TAB_W,
     VALUE_COLOR,
     Layer,
     game_to_layer,
@@ -38,7 +39,6 @@ ARROW_SIZE = 36  # logical px, the arrow's square
 ARRIVED_S = 5.0  # "Arrived at …" stays this long
 UNREAD_S = 3.0  # map name unreadable this long before asking for the minimap
 OPEN = "Open your minimap to see the arrow"
-TAB_W = 186  # the box is mockup 2's 210 px wide, less its 12 px side margins
 MATCH_ROWS = 3  # visible matches; the list scrolls for the rest
 # Mockup 3's route list and mockup 2's field.
 _DONE, _AHEAD, _NUM, _HERE_BG, _FIELD, _DARK = (

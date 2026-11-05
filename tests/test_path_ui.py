@@ -307,3 +307,26 @@ def test_long_names_elide_to_the_box_width(make):
     feed(tool, title("A"), 1.0)  # short names: the box keeps its width
     assert box.sizeHint().width() == width
     box.close()
+
+
+def test_tick_feeds_both_tools_and_dots_path_tab(make):
+    from maplelens.app import build_box, update_tools
+    from maplelens.tools.exp_meter.history import open_db
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+
+    path = make()
+    exp = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(":memory:"), lambda: None)
+    box = build_box({"boxes": {}}, lambda: None, [exp, path])
+    widths = set()
+    for i in (0, 1):
+        box._select(i)
+        widths.add(box.sizeHint().width())
+    assert len(widths) == 1  # same box width on both tabs
+    update_tools(box, exp, path, None, None, 1.0)
+    assert box._tab_dots[1].isHidden()
+    go(path, "A", "C", 1.0)
+    assert path.running
+    update_tools(box, exp, path, None, None, 2.0)
+    assert not box._tab_dots[1].isHidden()
+    box.close()
+    exp.shutdown(3.0)

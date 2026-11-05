@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from maplelens.overlay import (
     LABEL_COLOR,
     LABEL_PT,
+    TAB_W,
     VALUE_COLOR,
     VALUE_PT,
     exclude_from_capture,
@@ -88,6 +89,7 @@ class ExpMeterTool:
         self._history = HistoryWindow(conn)
         self.title = "EXP"
         self.tab = QWidget()
+        self.tab.setFixedWidth(TAB_W)  # same box width as the other tabs
         self._lines = QVBoxLayout(self.tab)
         self._lines.setContentsMargins(0, 4, 0, 0)
         self._lines.setSpacing(0)

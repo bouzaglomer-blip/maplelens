@@ -25,6 +25,7 @@ FONT = "Segoe UI"
 LABEL_PT, LABEL_COLOR = 9, "#9fb0c8"
 VALUE_PT, VALUE_COLOR = 12, "#ffffff"
 ACCENT = "#ffcc33"
+TAB_W = 186  # every tab's width: the box is 210 px wide, less its 12 px side margins
 
 
 def text_label(text: str, pt: int, color: str, *, bold: bool = False) -> QLabel:

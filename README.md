@@ -4,8 +4,11 @@ An open-source overlay for **MapleStory Classic** that keeps you in the game.
 Instead of alt-tabbing to price sites, class guides and route finders, MapleLens
 reads what's on your screen and shows what you need on top of the game window.
 
-> **Status: Phase 1: EXP meter.** The first tool is built: a small box over the game
-> showing EXP/min and time to level, plus a History window per map, class and level.
+> **Status: Phase 2: path arrow.** The EXP meter (EXP/min, time to level, History window)
+> is built, and so is the path arrow: pick a destination on the Path tab and an arrow over
+> your character points the way, map by map.
+>
+> Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
 
 ## The promise: screen-reading only
 
