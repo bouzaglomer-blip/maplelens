@@ -63,7 +63,7 @@ T0 fork + auth
 test the release workflows without touching the owner's repo.
 
 **Acceptance criteria:**
-- [ ] A fork `<daniel>/maplelens` exists; `origin` = the fork, `upstream` = `or-keren/maplelens`.
+- [x] A fork `<daniel>/maplelens` exists; `origin` = the fork, `upstream` = `or-keren/maplelens`.
 - [x] `git fetch upstream` works (SSH key added to GitHub, or HTTPS through `gh auth login`).
       *(HTTPS: `upstream` = `https://github.com/or-keren/maplelens.git`, Git Credential Manager.)*
 - [x] Branch `feat/windows-installer` based on `upstream/main`, carrying the spec and this plan.
