@@ -228,3 +228,213 @@ def test_installer_knows_the_update_flag():
     assert f"'{app.UPDATE_FLAG}'" in iss
     # an update run relaunches MapleLens; skipifsilent keeps the hand-run entry from doing so
     assert re.search(r'^Filename: "\{app\}\\MapleLens\.exe";.*Check: IsUpdateRun', iss, re.M)
+
+
+# --- the update check ---------------------------------------------------------------
+
+
+def _latest(v):
+    """A releases/latest reply for version `v`."""
+    return {
+        "tag_name": f"v{v}",
+        "assets": [
+            {
+                "name": f"MapleLens-Setup-{v}.exe",
+                "browser_download_url": f"https://example.invalid/MapleLens-Setup-{v}.exe",
+                "digest": "sha256:" + "0" * 64,
+            }
+        ],
+    }
+
+
+NEWER = _latest("0.2.0")  # the running version is 0.1.0 throughout
+
+
+@pytest.fixture
+def qt_box(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from maplelens.overlay import Box
+
+    QApplication.instance() or QApplication([])
+    box = Box("t", {}, lambda: None)
+    box.add_menu_item("Quit MapleLens", lambda: None)
+    return box
+
+
+class _Fetch:
+    """A fake fetch: returns .reply (or raises .error); counts its calls."""
+
+    def __init__(self, reply=None, error=None):
+        self.reply, self.error, self.calls = reply, error, 0
+
+    def __call__(self):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return self.reply
+
+
+def _check(box, fetch, settings=None, save=lambda: None):
+    settings = {"update_dismissed": None} if settings is None else settings
+    return app.UpdateCheck(box, settings, save, fetch, "0.1.0", set(), now=0.0)
+
+
+def _run(check, now):
+    """A tick at `now`, a wait for any check it started, then the tick that collects it."""
+    check.poll(now)
+    if check._thread is not None:
+        check._thread.join(5)
+    check.poll(now)
+
+
+def _menu(box):
+    return [a.text() for a in box.actions()]
+
+
+def test_first_check_waits_a_few_seconds(qt_box):
+    fetch = _Fetch(NEWER)
+    check = _check(qt_box, fetch)
+    _run(check, app.UpdateCheck.FIRST_S - 1)
+    assert fetch.calls == 0
+    _run(check, app.UpdateCheck.FIRST_S)
+    assert fetch.calls == 1
+
+
+def test_a_newer_release_shows_the_line_and_the_menu_item(qt_box):
+    check = _check(qt_box, _Fetch(NEWER))
+    _run(check, 10.0)
+    assert qt_box._notice.isVisibleTo(qt_box)
+    assert qt_box._notice_text.text() == app.update_notice("0.2.0")
+    assert _menu(qt_box) == ["Update to 0.2.0…", "Quit MapleLens"]
+
+
+def test_the_same_version_shows_nothing(qt_box):
+    check = _check(qt_box, _Fetch(_latest("0.1.0")))
+    _run(check, 10.0)
+    assert not qt_box._notice.isVisibleTo(qt_box)
+    assert _menu(qt_box) == ["Quit MapleLens"]
+
+
+def test_dismissing_saves_the_version(qt_box):
+    settings, saves = {"update_dismissed": None}, []
+    check = _check(qt_box, _Fetch(NEWER), settings, lambda: saves.append(1))
+    _run(check, 10.0)
+    qt_box._notice_close.click()
+    assert settings["update_dismissed"] == "0.2.0"
+    assert saves == [1]
+
+
+def test_a_dismissed_version_keeps_the_menu_item_but_no_line(qt_box):
+    check = _check(qt_box, _Fetch(NEWER), {"update_dismissed": "0.2.0"})
+    _run(check, 10.0)
+    assert not qt_box._notice.isVisibleTo(qt_box)
+    assert _menu(qt_box) == ["Update to 0.2.0…", "Quit MapleLens"]
+
+
+def test_a_later_version_brings_the_line_back_and_relabels_the_item(qt_box):
+    fetch = _Fetch(NEWER)
+    check = _check(qt_box, fetch, {"update_dismissed": "0.2.0"})
+    _run(check, 10.0)
+    fetch.reply = _latest("0.3.0")
+    _run(check, 10.0 + app.UpdateCheck.EVERY_S)
+    assert fetch.calls == 2
+    assert qt_box._notice.isVisibleTo(qt_box)
+    assert qt_box._notice_text.text() == app.update_notice("0.3.0")
+    assert _menu(qt_box) == ["Update to 0.3.0…", "Quit MapleLens"]
+
+
+def test_checks_again_only_after_a_day(qt_box):
+    fetch = _Fetch(NEWER)
+    check = _check(qt_box, fetch)
+    _run(check, 10.0)
+    _run(check, 10.0 + app.UpdateCheck.EVERY_S - 1)
+    assert fetch.calls == 1
+    _run(check, 10.0 + app.UpdateCheck.EVERY_S)
+    assert fetch.calls == 2
+
+
+def test_a_failing_check_is_logged_once_and_shows_nothing(qt_box, log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+    fetch = _Fetch(error=OSError("offline"))
+    check = _check(qt_box, fetch)
+    _run(check, 10.0)
+    _run(check, 10.0 + app.UpdateCheck.EVERY_S)
+    assert fetch.calls == 2  # the next scheduled check tries again
+    assert not qt_box._notice.isVisibleTo(qt_box)
+    assert _menu(qt_box) == ["Quit MapleLens"]
+    text = log.read_text(encoding="utf-8")
+    assert text.count("OSError: offline") == 1
+    assert "Traceback" in text
+
+
+def test_a_hanging_check_never_blocks_a_tick(qt_box, log, monkeypatch):
+    import threading
+
+    monkeypatch.setattr(sys, "stderr", None)
+    let_go, calls = threading.Event(), []
+
+    def hangs():
+        calls.append(1)
+        let_go.wait(5)
+        raise TimeoutError("timed out")
+
+    check = _check(qt_box, hangs)
+    for day in range(5):  # ticks go on while the request hangs, and start no second one
+        check.poll(10.0 + day * app.UpdateCheck.EVERY_S)
+    assert calls == [1]
+    assert not qt_box._notice.isVisibleTo(qt_box)
+    let_go.set()
+    check._thread.join(5)
+    check.poll(10.0 + 4 * app.UpdateCheck.EVERY_S)
+    assert log.read_text(encoding="utf-8").count("TimeoutError: timed out") == 1
+    assert not qt_box._notice.isVisibleTo(qt_box)
+
+
+def test_from_source_there_is_no_update_check(qt_box, monkeypatch):
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    fetch = _Fetch(NEWER)
+    assert app.update_check(qt_box, {"update_check": True}, lambda: None, set(), 0.0, fetch) is None
+    assert fetch.calls == 0
+
+
+def test_toggle_off_there_is_no_update_check(qt_box, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    fetch = _Fetch(NEWER)
+    settings = {"update_check": False}
+    assert app.update_check(qt_box, settings, lambda: None, set(), 0.0, fetch) is None
+    assert fetch.calls == 0
+
+
+def test_the_installed_windows_app_gets_an_update_check(qt_box, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    settings = {"update_check": True, "update_dismissed": None}
+    check = app.update_check(qt_box, settings, lambda: None, set(), 0.0, _Fetch(NEWER))
+    assert isinstance(check, app.UpdateCheck)
+
+
+def test_settings_default_to_checking():
+    from maplelens.store import DEFAULTS
+
+    assert DEFAULTS["update_check"] is True
+    assert DEFAULTS["update_dismissed"] is None
+
+
+def test_fetch_asks_github_with_only_the_version(monkeypatch):
+    import io
+    import json
+
+    seen = {}
+
+    def urlopen(req, timeout):
+        seen["url"], seen["headers"], seen["timeout"] = req.full_url, dict(req.headers), timeout
+        return io.BytesIO(json.dumps(NEWER).encode())
+
+    monkeypatch.setattr(app.urllib.request, "urlopen", urlopen)
+    assert app.fetch_latest("someone/maplelens") == NEWER
+    assert seen["url"] == "https://api.github.com/repos/someone/maplelens/releases/latest"
+    assert seen["headers"]["User-agent"] == f"MapleLens/{app.version('maplelens')}"
+    assert seen["timeout"] <= 15

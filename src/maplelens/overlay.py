@@ -98,12 +98,30 @@ class Box(QWidget):
         self._status.setFont(QFont(FONT, 10))
         self._status.setStyleSheet(f"color: {VALUE_COLOR};")
         self._status.hide()
+        self._notice = QWidget()  # a line of its own, so it shows with the tabs or the status
+        self._notice_text = text_label("", LABEL_PT, ACCENT)
+        self._notice_close = QPushButton("\u00d7")  # a multiplication sign, the close mark
+        self._notice_close.setFlat(True)
+        self._notice_close.setFocusPolicy(Qt.NoFocus)
+        self._notice_close.setCursor(Qt.PointingHandCursor)
+        self._notice_close.setFont(QFont(FONT, LABEL_PT))
+        self._notice_close.setStyleSheet(f"color: {LABEL_COLOR}; border: 0; padding: 0;")
+        self._notice_close.clicked.connect(self._dismiss_notice)
+        self._on_dismiss: Callable[[], None] | None = None
+        row = QHBoxLayout(self._notice)
+        row.setContentsMargins(0, 4, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(self._notice_text)
+        row.addStretch()
+        row.addWidget(self._notice_close)
+        self._notice.hide()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 10)
         layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
         layout.addWidget(self._strip_row)
         layout.addWidget(self._pages)
         layout.addWidget(self._status)
+        layout.addWidget(self._notice)
 
     def add_tab(self, title: str, widget: QWidget) -> int:
         """Add a tab; the first one added is shown. Returns its index."""
@@ -145,6 +163,21 @@ class Box(QWidget):
         self._strip_row.setVisible(text is None)
         self._pages.setVisible(text is None)
 
+    def set_notice(self, text: str | None, on_dismiss: Callable[[], None] | None = None) -> None:
+        """Show `text` on a line under the pages; None hides it.
+
+        The line's close mark hides it and calls `on_dismiss`.
+        """
+        self._notice_text.setText(text or "")
+        self._on_dismiss = on_dismiss
+        self._notice.setVisible(text is not None)
+
+    def _dismiss_notice(self) -> None:
+        on_dismiss, self._on_dismiss = self._on_dismiss, None
+        self._notice.hide()
+        if on_dismiss:
+            on_dismiss()
+
     def set_tab_dot(self, index: int, on: bool) -> None:
         self._tab_dots[index].setVisible(on)
 
@@ -157,12 +190,19 @@ class Box(QWidget):
 
             overlay_mac.release_keyboard()
 
-    def add_menu_item(self, label: str, callback: Callable[[], None]) -> None:
-        """An item in the box's right-click menu."""
+    def add_menu_item(
+        self, label: str, callback: Callable[[], None], *, first: bool = False
+    ) -> QAction:
+        """An item in the box's right-click menu, at the end or, with `first`, the top.
+
+        Returns it, so its label can change later.
+        """
         action = QAction(label, self)
         action.triggered.connect(callback)
-        self.addAction(action)
+        actions = self.actions()
+        self.insertAction(actions[0] if first and actions else None, action)
         self.setContextMenuPolicy(Qt.ActionsContextMenu)
+        return action
 
     def add_submenu(
         self, label: str, choices: Callable[[], list[str]], on_pick: Callable[[str], None]

@@ -139,3 +139,50 @@ def test_submenu_lists_choices_when_opened(monkeypatch):
     [c] = menu.actions()
     c.trigger()
     assert picked == ["C"]
+
+
+def test_notice_shows_under_the_tabs_and_x_dismisses_it(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    page = QLabel("page")
+    box.add_tab("A", page)
+    dismissed = []
+    box.set_notice("Update to 0.2.0: right-click", lambda: dismissed.append(1))
+    assert box._notice.isVisibleTo(box)
+    assert box._notice_text.text() == "Update to 0.2.0: right-click"
+    assert page.isVisibleTo(box) and box._tab_buttons[0].isVisibleTo(box)
+    box._notice_close.click()
+    assert not box._notice.isVisibleTo(box)
+    assert dismissed == [1]
+
+
+def test_notice_none_hides_it(monkeypatch):
+    box = _box(monkeypatch)
+    box.set_notice("x", lambda: None)
+    box.set_notice(None)
+    assert not box._notice.isVisibleTo(box)
+
+
+def test_notice_stays_while_the_status_line_shows(monkeypatch):
+    box = _box(monkeypatch)
+    box.set_notice("x", lambda: None)
+    box.set_status("Looking for the game")
+    assert box._notice.isVisibleTo(box)
+
+
+def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch):
+    from maplelens.app import update_notice
+
+    box = _box(monkeypatch)
+    box.set_notice(update_notice("10.10.10"), lambda: None)
+    assert box._notice.sizeHint().width() <= overlay.TAB_W
+
+
+def test_menu_item_can_go_first_and_be_relabelled(monkeypatch):
+    box = _box(monkeypatch)
+    box.add_menu_item("Quit", lambda: None)
+    item = box.add_menu_item("Update to 0.2.0…", lambda: None, first=True)
+    assert [a.text() for a in box.actions()] == ["Update to 0.2.0…", "Quit"]
+    item.setText("Update to 0.3.0…")
+    assert box.actions()[0].text() == "Update to 0.3.0…"

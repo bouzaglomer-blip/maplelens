@@ -142,7 +142,7 @@ checks.
 
 ## Phase 2: the feature
 
-### Task U3: check at launch and daily; notice line and menu item
+### Task U3: check at launch and daily; notice line and menu item (done)
 
 **Description:**
 - **Box:** `Box.set_notice(text, on_dismiss)` shows a line under the pages, separate from
@@ -157,14 +157,27 @@ checks.
   - Failures go to `report_once` only.
 
 **Acceptance criteria:**
-- [ ] Offscreen Qt: the notice shows with the tabs still visible, × hides it and calls
+- [x] Offscreen Qt: the notice shows with the tabs still visible, × hides it and calls
       back, and the line fits 186 px at the longest version text (`10.10.10`). Shorten
       the copy if it doesn't fit.
-- [ ] With a fake fetch returning a newer release, the next tick shows the line and the
+- [x] With a fake fetch returning a newer release, the next tick shows the line and the
       menu item. Dismissed for that version: no line, but the menu item stays. A newer
       version after that shows the line again.
-- [ ] A fake fetch that raises or hangs: no line, one log entry, ticks keep their timing.
-- [ ] From source, or `should_check` False: the fetch function is never called.
+- [x] A fake fetch that raises or hangs: no line, one log entry, ticks keep their timing.
+- [x] From source, or `should_check` False: the fetch function is never called.
+
+**Build notes (2026-11-07):**
+- The spec's copy, "MapleLens X.Y.Z is out, right-click to update", measures 275 px in
+  the box font, too wide. The line now reads **"Update to X.Y.Z: right-click"** (9 pt,
+  accent colour), which matches the menu item. The row with its × measures 171 px at
+  `10.10.10` and 153 px at `0.2.0`. U6 brings the spec's wording in line.
+- "Update to X.Y.Z…" goes at the top of the menu. Clicking it does nothing until U4.
+- `report_once` now formats the exception it is given, so an error raised on the check's
+  thread is logged with its own traceback.
+- The real `fetch_latest` was tried once against GitHub: `astral-sh/uv` replies and parses
+  to "no update" (its tag has no `v`). `or-keren/maplelens` has no release yet, so it
+  gives 404, which is logged as a failed check. The manual run with a newer
+  `MapleLens-Setup` release moves to U7, since no repo has one yet.
 
 **Verification:** `uv run pytest tests/test_overlay.py tests/test_app.py tests/test_update.py`,
 then the four checks. Manual: from source with the gate forced on and
@@ -229,6 +242,7 @@ checks.
   that updating is one click.
 - AGENTS.md Layout gets `update.py` and `tests/fixtures/github/`.
 - CONTRIBUTING gets "testing an update" with `MAPLELENS_UPDATE_REPO` and the fork.
+- Update-check spec: the notice copy becomes "Update to X.Y.Z: right-click" (U3 notes).
 - Update-check spec: "v0.1.0 ships without this" becomes "ships in v0.1.0 with #10",
   the open question "which version ships it" is closed, and Testing step 5 says the
   tampered download is a test (Architecture decisions).

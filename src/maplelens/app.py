@@ -1,10 +1,13 @@
 """MapleLens entry point: watch the game window and run the tools."""
 
+import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import traceback
+import urllib.request
 from collections.abc import Callable
 from importlib.metadata import version
 from pathlib import Path
@@ -12,7 +15,7 @@ from pathlib import Path
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
-from maplelens import capture
+from maplelens import capture, update
 from maplelens.overlay import Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
@@ -96,7 +99,7 @@ def report_once(e: Exception, seen: set[str]) -> None:
     if key in seen:
         return
     seen.add(key)
-    text = traceback.format_exc()
+    text = "".join(traceback.format_exception(e))  # also for one raised on another thread
     if sys.stderr is not None:
         sys.stderr.write(text)
     if _log_path is not None:
@@ -174,6 +177,108 @@ def install_update(setup: Path) -> None:
     QApplication.quit()
 
 
+def update_notice(new: str) -> str:
+    """The box's line for an update; it fits TAB_W up to version 10.10.10."""
+    return f"Update to {new}: right-click"
+
+
+def fetch_latest(repo: str = update.REPO) -> dict:
+    """GitHub's latest release of `repo`, as JSON. Sends only MapleLens's version."""
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/releases/latest",
+        headers={
+            "User-Agent": f"MapleLens/{version('maplelens')}",
+            "Accept": "application/vnd.github+json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=10) as reply:
+        return json.load(reply)
+
+
+class UpdateCheck:
+    """Asks for the latest release a few seconds after start, then once a day.
+
+    The request runs on a thread of its own and only fills a slot; poll(), called from
+    the tick on the Qt thread, starts requests and shows what they found. A slow or
+    hanging request never delays a tick, and the next one waits for it to end.
+    """
+
+    FIRST_S = 5
+    EVERY_S = 24 * 3600
+
+    def __init__(  # noqa: PLR0913, PLR0917 - the box, settings and the parts tests swap
+        self,
+        box: Box,
+        settings: dict,
+        save: Callable[[], None],
+        fetch: Callable[[], dict],
+        running: str,
+        seen: set[str],
+        now: float,
+    ):
+        self._box, self._settings, self._save = box, settings, save
+        self._fetch, self._running, self._seen = fetch, running, seen
+        self._due = now + self.FIRST_S
+        self._thread: threading.Thread | None = None
+        self._result: tuple[dict | None, Exception | None] = (None, None)
+        self._item = None  # the "Update to X.Y.Z…" menu item, once an update is known
+        self.release: update.Release | None = None
+
+    def poll(self, now: float) -> None:
+        if self._thread is not None and not self._thread.is_alive():
+            self._thread = None
+            reply, error = self._result
+            if error is not None:
+                report_once(error, self._seen)
+            else:
+                self._found(update.parse_latest(reply))
+        if self._thread is None and now >= self._due:
+            self._due = now + self.EVERY_S
+            self._thread = threading.Thread(target=self._ask, daemon=True)
+            self._thread.start()
+
+    def _ask(self) -> None:  # on the check's own thread: no Qt here
+        try:
+            self._result = (self._fetch(), None)
+        except Exception as e:
+            self._result = (None, e)
+
+    def _found(self, release: update.Release | None) -> None:
+        if release is None or not update.is_newer(release, self._running):
+            return
+        self.release = release
+        label = f"Update to {release.version}…"
+        if self._item is None:
+            self._item = self._box.add_menu_item(label, self._update, first=True)
+        else:
+            self._item.setText(label)
+        if self._settings.get("update_dismissed") != release.version:
+            self._box.set_notice(
+                update_notice(release.version), lambda: self._dismiss(release.version)
+            )
+
+    def _dismiss(self, new: str) -> None:
+        self._settings["update_dismissed"] = new
+        self._save()
+
+    def _update(self) -> None:
+        """The menu item's click: the download and handoff come with the one-click update."""
+
+
+def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests swap
+    box: Box,
+    settings: dict,
+    save: Callable[[], None],
+    seen: set[str],
+    now: float,
+    fetch: Callable[[], dict] = fetch_latest,
+) -> UpdateCheck | None:
+    """An UpdateCheck for the installed Windows app with the toggle on, else None."""
+    if not update.should_check(getattr(sys, "frozen", False), sys.platform, settings):
+        return None
+    return UpdateCheck(box, settings, save, fetch, version("maplelens"), seen, now)
+
+
 def _prepare_process() -> None:
     """Process-wide setup that must happen before Qt starts."""
     mark_running()
@@ -182,7 +287,7 @@ def _prepare_process() -> None:
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
 
 
-def main() -> int:
+def main() -> int:  # noqa: PLR0915 - the entry point wires every part together
     if "--self-check" in sys.argv[1:]:
         return self_check()
     _prepare_process()
@@ -216,10 +321,13 @@ def main() -> int:
         hwnd = None  # the next tick finds the chosen window
 
     box = build_box(settings, save, [tool, path_tool], pick)
+    updates = update_check(box, settings, save, seen, time.time())
 
     def tick() -> None:
         nonlocal hwnd
         now = time.time()
+        if updates:  # before the game lookup: updates show with no game open too
+            updates.poll(now)
         hwnd = hwnd or find_game(settings, save)
         box.set_status(None if hwnd else LOOKING)  # a minimized game isn't "looking"
         rect = capture.client_rect(hwnd) if hwnd else None
