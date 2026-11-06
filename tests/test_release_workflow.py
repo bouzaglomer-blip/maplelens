@@ -1,6 +1,7 @@
 """release.yml must check and build before it publishes, and publish a version only once.
+prepare-release.yml must check before it pushes, and refuse a version already in flight.
 
-The fork runs are the real test; these keep the file from drifting away from ci.yml.
+The fork runs are the real test; these keep the files from drifting away from ci.yml.
 """
 
 import re
@@ -52,3 +53,37 @@ def test_stops_when_the_tag_exists():
     assert "git ls-remote" in text
     assert "already released" in text
     assert text.index("already released") < text.index("gh release create")
+
+
+def _prepare() -> str:
+    return (WORKFLOWS / "prepare-release.yml").read_text(encoding="utf-8")
+
+
+def test_prepare_is_started_by_hand_with_a_bump_choice():
+    text = _prepare()
+    assert re.search(r"^on:\n  workflow_dispatch:\n", text, re.M)
+    assert re.search(r"options: \[patch, minor, major\]", text)
+    assert 'uv version --bump "$BUMP"' in text
+    assert "BUMP: ${{ inputs.bump }}" in text  # through env, never pasted into the script
+
+
+def test_prepare_refuses_a_version_already_in_flight_before_pushing():
+    text = _prepare()
+    push = text.index("git push")
+    for check in ["refs/tags/v", "refs/heads/release/v", "gh pr list"]:
+        assert -1 < text.find(check) < push, check
+
+
+def test_prepare_runs_every_ci_check_before_pushing():
+    text = _prepare()
+    push = text.index("git push")
+    for check in _run_lines(WORKFLOWS / "ci.yml"):
+        assert -1 < text.find(check) < push, check
+
+
+def test_prepare_commits_only_the_version_and_opens_the_pr():
+    text = _prepare()
+    assert 'git commit pyproject.toml uv.lock -m "release: v$VERSION"' in text
+    assert text.index("git push") < text.index("gh pr create")
+    assert "contents: write" in text
+    assert "pull-requests: write" in text

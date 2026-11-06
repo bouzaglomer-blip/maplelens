@@ -362,6 +362,12 @@ write, pull-requests: write`.
 - [ ] Merging it makes `release.yml` publish `v0.2.0` with no other step (spec criterion 5).
 - [ ] Running prepare again while that PR is open fails with a clear message.
 
+*(2026-11-06: written, with tests in `tests/test_release_workflow.py`. It refuses while
+**any** `release/v*` PR is open, not only one for the same version, so a `patch` run
+can't open a second release PR beside a pending `minor`. `uv version --bump minor` on
+0.1.0 changed one line in each file. The fork runs are still to do; the fork has "Allow
+GitHub Actions to create and approve pull requests" off.)*
+
 **Verification:** the fork runs; then delete the fork's test tags/releases so the fork
 mirrors upstream again.
 
