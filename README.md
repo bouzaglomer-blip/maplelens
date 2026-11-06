@@ -30,6 +30,28 @@ is what matters, and pull requests that break it are not accepted.
 - The game running **windowed or borderless** (windowed only on the Mac). True fullscreen hides overlay windows.
 - On the Mac, the first run asks for Screen Recording for the app you start MapleLens from (Terminal, say).
 
+## Download (Windows)
+
+1. Open the [latest release](https://github.com/or-keren/maplelens/releases/latest) and
+   download `MapleLens-Setup-X.Y.Z.exe` under **Assets**. If your browser says the file
+   isn't commonly downloaded, choose to keep it.
+2. Run it. The installer isn't signed yet, so Windows may show "Windows protected your
+   PC". Click **More info**, then **Run anyway**. It installs for your user only and
+   doesn't ask for admin rights.
+3. Start MapleStory Classic **windowed or borderless**.
+4. Start MapleLens from the Start menu (or leave "Launch MapleLens" ticked on the last
+   setup page). It finds the game window by itself. If the box says "Looking for
+   MapleStory…", right-click the box, choose **Pick game window…** and pick the game.
+5. Drag the box where you want it. History opens the per-map table.
+
+**Updating:** download the newer setup and run it. It installs over the old version and
+keeps your settings and EXP history. If MapleLens is running, Setup offers to close it.
+
+**Uninstalling:** Settings → Apps → MapleLens. Your settings and history stay in
+`%APPDATA%\MapleLens`; delete that folder to remove them too. If something goes wrong,
+attach `%APPDATA%\MapleLens\maplelens.log` (MapleLens writes its errors there) to a bug
+report.
+
 ## Roadmap
 
 1. **EXP meter:** EXP/min, time to level, and history per map.
@@ -37,28 +59,24 @@ is what matters, and pull requests that break it are not accepted.
 3. **Class helper:** the guide's advice for your level (gear, training spots, AP/SP).
 4. **Prices:** market lookups without leaving the game.
 
-## Run
+## Run from source (macOS, developers)
 
-Start the game windowed or borderless, then save its window title once and run:
-
-```
-uv run python scripts/grab.py --title <game title> --label first
-uv run maplelens
-```
-
-On the Mac the game's window title is `MapleStory`, so use `--title MapleStory`.
-
-Drag the box where you want it. History opens the per-map table.
-
-## Development
+You need [uv](https://docs.astral.sh/uv/). Start the game windowed or borderless, then:
 
 ```
 git clone https://github.com/or-keren/maplelens.git
 cd maplelens
 uv sync
+uv run maplelens
 ```
 
-Then `uv run pytest`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
+MapleLens looks for the window titled `MapleStory`. If yours is called something else,
+right-click the box and use **Pick game window…**. The choice is saved.
+
+## Development
+
+Run the tests with `uv run pytest`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+checks, the workflow and how releases are made.
 
 ## Disclaimer
 

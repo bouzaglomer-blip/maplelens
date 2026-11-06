@@ -394,9 +394,13 @@ the build command. CONTRIBUTING.md: how to cut a release (run Prepare release, m
 PR). Harness design: one line noting packaging is done.
 
 **Acceptance criteria:**
-- [ ] A player can follow the README from download to first launch without reading
+- [x] A player can follow the README from download to first launch without reading
       anything else.
-- [ ] AGENTS.md Layout matches the files that exist.
+      *(Read-through, 2026-11-06. "From source" no longer needs `grab.py`, since first-run
+      finds the game.)*
+- [x] AGENTS.md Layout matches the files that exist.
+      *(`tests/test_docs.py` checks every path a Layout bullet names, and that the build and
+      release files are listed. AGENTS.md also says never to bump `version` in a feature PR.)*
 
 **Verification:** read-through; `uv run ruff check`, guard (README isn't scanned, but
 `scripts/` is).
