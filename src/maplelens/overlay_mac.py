@@ -29,7 +29,7 @@ def make_accessory() -> None:
 
 
 def release_keyboard() -> None:
-    """Our window gives up the keyboard, so keys go back to the game."""
-    window = NSApplication.sharedApplication().keyWindow()  # only ever one of ours
-    if window is not None:
-        window.resignKeyWindow()
+    """Step back if typing made MapleLens the active app; macOS hands the keyboard back."""
+    app = NSApplication.sharedApplication()
+    if app.isActive():
+        app.deactivate()  # activation returns to the previous app; nothing touches the game

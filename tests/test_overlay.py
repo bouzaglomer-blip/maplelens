@@ -86,3 +86,25 @@ def test_allow_typing_off_releases_keyboard_on_mac(monkeypatch):
     assert calls == []
     box.allow_typing(False)
     assert calls == [1]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="overlay_mac needs AppKit")
+@pytest.mark.parametrize("active", [True, False])
+def test_release_keyboard_deactivates_only_when_active(monkeypatch, active):
+    from maplelens import overlay_mac
+
+    calls = []
+
+    class FakeApp:
+        def isActive(self):
+            return active
+
+        def deactivate(self):
+            calls.append(1)
+
+    class FakeNSApplication:
+        sharedApplication = staticmethod(FakeApp)
+
+    monkeypatch.setattr(overlay_mac, "NSApplication", FakeNSApplication)
+    overlay_mac.release_keyboard()
+    assert calls == ([1] if active else [])

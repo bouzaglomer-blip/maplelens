@@ -1,5 +1,6 @@
 """MapleLens entry point: watch the game window and run the tools."""
 
+import os
 import sys
 import time
 import traceback
@@ -56,11 +57,15 @@ def update_tools(box: Box, exp, path, reading, rect, now: float, seen: set[str])
 
 
 def main() -> int:
+    if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
+        os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
+        os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
     app = QApplication(sys.argv)
     if sys.platform == "darwin":
         from maplelens import overlay_mac
 
         overlay_mac.make_accessory()
+        app.processEvents()  # finish launching first: a window shown before that activates us
     capture.set_dpi_aware()
     if not capture.ensure_access():
         return 1

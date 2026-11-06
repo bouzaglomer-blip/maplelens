@@ -1,6 +1,7 @@
 """The EXP meter tool: a tab with live numbers and a History window."""
 
 import sqlite3
+import sys
 import time
 from collections.abc import Callable
 
@@ -54,6 +55,9 @@ class HistoryWindow(QTableWidget):
         self.verticalHeader().hide()
         self.setSortingEnabled(True)
         self.setAttribute(Qt.WA_QuitOnClose, False)  # closing it must not end the app
+        if sys.platform == "darwin":  # native_setup makes it a panel that leaves the game active
+            self.setWindowFlag(Qt.Tool)
+            self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.resize(760, 360)
 
     def refresh(self) -> None:
