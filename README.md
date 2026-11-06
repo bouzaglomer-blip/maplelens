@@ -26,7 +26,7 @@ is what matters, and pull requests that break it are not accepted.
 ## Requirements
 
 - Windows 10/11, or macOS with MapleStory Classic from Nexon's Mac launcher
-- The game running **windowed or borderless**. True fullscreen hides overlay windows.
+- The game running **windowed or borderless** (windowed only on the Mac). True fullscreen hides overlay windows.
 - On the Mac, the first run asks for Screen Recording for the app you start MapleLens from (Terminal, say).
 
 ## Roadmap

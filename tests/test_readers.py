@@ -305,6 +305,12 @@ def test_snap_exact_is_kept():
     assert snap_title(text, known_titles()) == text
 
 
+def test_snap_needs_a_lead_over_runner_up():
+    # near-tie between <Area 1>/<Area 3> style siblings must stay unsnapped (SNAP_LEAD)
+    text = "Kerning City Subway / Line 1 cArea 13"
+    assert snap_title(text, known_titles()) == text
+
+
 @pytest.mark.parametrize("snap, want", [(True, V + "Sunset Sky"), (False, V + "Sumset Sky")])
 def test_map_name_snaps_only_on_mac(monkeypatch, snap, want):
     monkeypatch.setattr(map_name.ocr, "read_lines", lambda m: ["Victoria Road", "Sumset Sky"])

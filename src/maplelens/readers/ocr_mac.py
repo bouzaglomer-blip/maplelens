@@ -24,6 +24,7 @@ def recognize(img: np.ndarray) -> list[str]:
     vision = engine()
     png = cv2.imencode(".png", img)[1].tobytes()
     req = vision.VNRecognizeTextRequest.alloc().init()
+    req.setRevision_(vision.VNRecognizeTextRequestRevision3)  # keep the model fixed across macOS
     req.setRecognitionLevel_(vision.VNRequestTextRecognitionLevelAccurate)
     req.setUsesLanguageCorrection_(False)  # game words are not dictionary words
     req.setRecognitionLanguages_(["en-US"])

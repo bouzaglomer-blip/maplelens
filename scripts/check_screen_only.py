@@ -94,6 +94,14 @@ BANNED_CALLS = [
     "AXUIElementPostKeyboardEvent",  # macOS Accessibility: sends keys
     "NSAppleScript",  # runs AppleScript, drives other apps
     "activateWithOptions",  # activates another app
+    "activateFromApplication",  # activates another app (macOS 14+)
+    "activateFromApplication_options",  # same, pyobjc spelling with its trailing underscore
+    "CGPostKeyboardEvent",  # macOS: legacy key posting
+    "CGPostMouseEvent",  # macOS: legacy click posting
+    "CGPostScrollWheelEvent",  # macOS: legacy scroll posting
+    "CGEventTapPostEvent",  # macOS: posts events into a tap
+    "CGDisplayMoveCursorToPoint",  # macOS: moves the mouse
+    "osascript",  # runs AppleScript (e.g. via a subprocess), drives other apps
 ]
 
 CALLS_RE = re.compile(r"\b(" + "|".join(BANNED_CALLS) + r")[AW]?_?\b")

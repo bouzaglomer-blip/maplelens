@@ -168,7 +168,15 @@ def test_flags_mac_name(tmp_path):
         "task_for_pid(t, p, r)\n"
         "AXUIElementPerformAction(el, a)\n"
         "CGWarpMouseCursorPosition(p)\n"
-        "app.activateWithOptions_(0)\n",
+        "app.activateWithOptions_(0)\n"
+        "CGPostKeyboardEvent(p, 0, 0, True)\n"
+        "CGPostMouseEvent(p, 1, 1, True)\n"
+        "CGPostScrollWheelEvent(1, 5)\n"
+        "CGEventTapPostEvent(proxy, e)\n"
+        "CGDisplayMoveCursorToPoint(d, p)\n"
+        "app.activateFromApplication_options_(a, 0)\n"
+        "app.activateFromApplication(a)\n"
+        'subprocess.run(["osascript", "-e", "x"])\n',
         encoding="utf-8",
     )
     r = run_guard(str(f))
@@ -180,6 +188,14 @@ def test_flags_mac_name(tmp_path):
         "AXUIElementPerformAction",
         "CGWarpMouseCursorPosition",
         "activateWithOptions",
+        "CGPostKeyboardEvent",
+        "CGPostMouseEvent",
+        "CGPostScrollWheelEvent",
+        "CGEventTapPostEvent",
+        "CGDisplayMoveCursorToPoint",
+        "activateFromApplication_options",
+        "activateFromApplication",
+        "osascript",
     ]
     for n, name in enumerate(names, 1):
         assert f"bad.py:{n}: banned system call '{name}'" in r.stderr
