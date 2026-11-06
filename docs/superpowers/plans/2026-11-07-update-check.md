@@ -101,9 +101,30 @@ U1 and U2 are independent. Daniel works alone, so they run in order, U2 right af
       saved session.
 - [ ] A hand-run N+1 setup over a running N still asks "MapleLens is running. Close it…?"
       as today.
-- [ ] Starting Setup from a folder with non-ASCII characters works.
-- [ ] A unit test checks the command line `install_update` builds, and that it quits
+- [x] Starting Setup from a folder with non-ASCII characters works.
+- [x] A unit test checks the command line `install_update` builds, and that it quits
       through `QApplication.quit`, not `sys.exit`.
+
+**Run notes (2026-11-07, Daniel's PC):**
+- Built 0.1.1 from `24faadb`, with the version bumped only for the build. Installed the
+  earlier 0.1.0 setup silently.
+- The running N was a stand-in, not the installed exe, because N has no update menu item
+  until U4. The stand-in ran from source, held `MapleLensRunning`, called the real
+  `install_update` on `…\scratchpad\עדכון\MapleLens-Setup-0.1.1.exe`, and took 3 s in
+  `aboutToQuit` (a slow save). It added only `/LOG=` to the command line.
+- Timeline:
+  - 00:24:36.5 Setup starts.
+  - 00:24:38.2 Setup's log opens; it waits in `InitializeSetup`.
+  - 00:24:40.9 the stand-in's save finishes, and the process exits about 0.1 s later.
+  - 00:24:41.25 Setup goes on and installs.
+  - 00:24:49.6 install done; the `[Run]` entry starts the new `MapleLens.exe`.
+- Results:
+  - The log shows no message boxes, and Restart Manager found nothing in use.
+  - The uninstall entry read 0.1.1, and MapleLens.exe 0.1.1 was running.
+  - `settings.json` and `maplelens.db` were byte-identical before and after.
+  - Cleaned up afterwards: uninstalled, data folder intact.
+- Still to do: the hand-run prompt (criterion 2), the Sandbox run, and criterion 1 with
+  the installed exe as N, which needs U4's menu item. It is re-checked in U7.
 
 **Verification:** build N and N+1 locally (version set temporarily, not committed), then
 try both paths on Daniel's PC and once in Windows Sandbox. `uv run pytest`, then the four
