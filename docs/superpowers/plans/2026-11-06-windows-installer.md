@@ -157,9 +157,13 @@ re-run the check, then rebuild.
 `packaging/windows/maplelens.spec`, `tests/test_app.py` (new). **Scope:** S.
 
 ### Checkpoint A: the frozen app is real
-- [ ] T1–T3 done; four repo checks pass; Windows and macOS CI green on the branch.
-- [ ] Frozen exe works with the game on Daniel's PC; size noted.
-- [ ] Decide with Daniel: continue, or rethink (e.g. Nuitka) if T2 fought too hard.
+- [x] T1–T3 done; four repo checks pass; Windows and macOS CI green on the branch.
+      *(2026-11-06: Windows CI green on the fork's draft PR, dbeilin/maplelens#1. The fork's
+      macOS jobs never get a runner (account-side; upstream's start in seconds), so macOS
+      CI is deferred to the upstream PR, by Daniel's call.)*
+- [x] Frozen exe works with the game on Daniel's PC; size noted. *(207 MB folder.)*
+- [x] Decide with Daniel: continue, or rethink (e.g. Nuitka) if T2 fought too hard.
+      *(Continue with PyInstaller: winrt's own hook did the hard part.)*
 
 ---
 
