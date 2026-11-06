@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-DATA = Path(__file__).with_name("maps.json")
+DATA = Path(__file__).parents[2] / "data" / "maps.json"
 
 
 @dataclass(frozen=True)
