@@ -53,3 +53,21 @@ def test_ensure_access_prints_once_when_denied(monkeypatch, capsys):
     assert calls == [1]
     out = capsys.readouterr().out
     assert "Screen Recording" in out and "System Settings" in out
+
+
+def test_crop_bgr_cuts_title_and_flips():
+    import numpy as np
+
+    rgb = np.zeros((10, 8, 3), np.uint8)
+    rgb[9, 0] = (1, 2, 3)
+    out = capture_mac.crop_bgr(rgb, (0, 0, 6, 7))
+    assert out.shape == (7, 6, 3) and out[6, 0].tolist() == [3, 2, 1]
+
+
+def test_crop_bgr_shrunk_window_raises():
+    import numpy as np
+
+    with pytest.raises(RuntimeError):
+        capture_mac.crop_bgr(np.zeros((10, 8, 3), np.uint8), (0, 0, 8, 11))
+    with pytest.raises(RuntimeError):
+        capture_mac.crop_bgr(np.zeros((10, 8, 3), np.uint8), (0, 0, 9, 10))

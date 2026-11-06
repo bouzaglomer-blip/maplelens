@@ -6,8 +6,6 @@ import numpy as np
 import Quartz
 from AppKit import NSMakeRect, NSScreen, NSWindow, NSWindowStyleMaskTitled
 
-from maplelens.capture import pick_window
-
 
 def set_dpi_aware() -> None:
     pass  # nothing to do on macOS
@@ -42,6 +40,8 @@ def list_windows() -> list[str]:
 
 
 def find_window(title: str) -> int | None:
+    from maplelens.capture import pick_window  # late: capture imports this module
+
     return pick_window(_windows(), title)
 
 
@@ -103,6 +103,14 @@ def client_rect(wid: int) -> tuple[int, int, int, int] | None:
     )
 
 
+def crop_bgr(rgb: np.ndarray, rect: tuple[int, int, int, int]) -> np.ndarray:
+    """RGB frame -> BGR client area: the bottom rect[3] rows, left rect[2] columns."""
+    h, w = rgb.shape[:2]
+    if rect[3] > h or rect[2] > w:
+        raise RuntimeError("window shrank since its size was read")
+    return np.ascontiguousarray(rgb[h - rect[3] :, : rect[2], ::-1])
+
+
 def grab(wid: int, rect: tuple[int, int, int, int]) -> np.ndarray:
     img = Quartz.CGWindowListCreateImage(
         Quartz.CGRectNull,
@@ -118,8 +126,7 @@ def grab(wid: int, rect: tuple[int, int, int, int]) -> np.ndarray:
     Quartz.CGContextDrawImage(ctx, Quartz.CGRectMake(0, 0, w, h), img)
     buf = Quartz.CGBitmapContextGetData(ctx).as_buffer(w * h * 4)
     rgb = np.frombuffer(buf, np.uint8).reshape(h, w, 4)[:, :, :3]
-    # cut the title bar (top rows) and anything right of the client area
-    return np.ascontiguousarray(rgb[h - rect[3] :, : rect[2], ::-1])
+    return crop_bgr(rgb, rect)
 
 
 def ensure_access() -> bool:

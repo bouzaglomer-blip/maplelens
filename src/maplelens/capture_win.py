@@ -6,8 +6,6 @@ from ctypes import wintypes
 import mss
 import numpy as np
 
-from maplelens.capture import pick_window
-
 user32 = ctypes.windll.user32
 _ENUM_PROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
@@ -47,6 +45,8 @@ def list_windows() -> list[str]:
 
 
 def find_window(title: str) -> int | None:
+    from maplelens.capture import pick_window  # late: capture imports this module
+
     return pick_window(_windows(), title)
 
 
