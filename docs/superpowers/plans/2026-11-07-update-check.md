@@ -55,7 +55,7 @@ U1 and U2 are independent. Daniel works alone, so they run in order, U2 right af
 
 ## Phase 1: the risky parts
 
-### Task U1: `update.py`, the pure core
+### Task U1: `update.py`, the pure core (done)
 
 **Description:**
 - `parse_latest(reply: dict) -> Release | None`: tag `vX.Y.Z` (three integers) plus the
@@ -69,10 +69,10 @@ U1 and U2 are independent. Daniel works alone, so they run in order, U2 right af
   `update_check`).
 
 **Acceptance criteria:**
-- [ ] Fixtures in `tests/fixtures/github/` give the right result: newer, same, no asset,
+- [x] Fixtures in `tests/fixtures/github/` give the right result: newer, same, no asset,
       wrong asset name, `v1.2` / `1.2.3` / `v1.2.3-beta` tags, missing digest.
-- [ ] `0.9.0 < 0.10.0`, equal is not newer, junk is not newer, and nothing raises on junk.
-- [ ] `digest_ok`: match True; one changed byte, a missing digest, or `md5:…` False.
+- [x] `0.9.0 < 0.10.0`, equal is not newer, junk is not newer, and nothing raises on junk.
+- [x] `digest_ok`: match True; one changed byte, a missing digest, or `md5:…` False.
 
 **Verification:** `uv run pytest tests/test_update.py`, then the four checks.
 
