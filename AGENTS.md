@@ -31,7 +31,7 @@ uv run python scripts/check_screen_only.py   # screen-only guard
   - `capture.py` (shared: `pick_window`) + `capture_win.py` / `capture_mac.py` — find the game window, grab its pixels
   - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`); `read_all` in `__init__`); numbers via glyph templates, words (map, class) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`
   - `overlay.py` — the see-through `Layer` and draggable `Box`; `overlay_mac.py` — the macOS panels
-  - `data/maps.json` — the map data
+  - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures
   - `store.py` — settings file and data folder
   - `app.py` — entry point (`uv run maplelens`)
   - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`

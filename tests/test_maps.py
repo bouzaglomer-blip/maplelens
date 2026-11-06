@@ -1,4 +1,13 @@
-from maplelens.tools.path_arrow.maps import MapInfo, Minimap, Portal, find, load, search
+from maplelens.tools.path_arrow.maps import (
+    PICTURES,
+    MapInfo,
+    Minimap,
+    Portal,
+    find,
+    load,
+    picture,
+    search,
+)
 
 MINIMAP = Minimap(100, 100, 50, 50)
 
@@ -56,3 +65,24 @@ def test_search():
     small = {m.id: m for m in (a, b, c)}
     assert [m.id for m in search(small, "ANT")] == ["3", "2", "1"]
     assert len(search(small, "ant", limit=2)) == 2
+
+
+def test_shipped_pictures_match_minimap_size():
+    maps = load()
+    files = list(PICTURES.glob("*.png"))
+    assert len(files) >= 250
+    for f in files:
+        mm = maps[f.stem].minimap
+        h, w = picture(f.stem).shape[:2]
+        assert abs(w - mm.w / 16) <= 1.5 and abs(h - mm.h / 16) <= 1.5, f.stem
+
+
+def test_picture_missing_is_none():
+    assert picture("999999999") is None
+
+
+def test_forest_north_of_ellinia_hidden_portals():
+    m = load()["010002070"]
+    assert sum(p.hidden for p in m.portals) == 19
+    assert {p.to for p in m.portals if not p.hidden} == {"010002060", "010004090"}
+    assert picture("010002070").shape[:2] == (428, 130)

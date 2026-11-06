@@ -9,6 +9,7 @@ reads what's on your screen and shows what you need on top of the game window.
 > your character points the way, map by map.
 >
 > Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
+> Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
 
 ## The promise: screen-reading only
 
