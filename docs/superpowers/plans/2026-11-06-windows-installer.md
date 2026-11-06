@@ -199,9 +199,15 @@ Decide where the box sits when there's no game rect (e.g. its last saved spot or
 screen's top-left) and keep it simple.
 
 **Acceptance criteria:**
-- [ ] With no `settings.json` and no game running, `uv run maplelens` stays open and shows
+- [x] With no `settings.json` and no game running, `uv run maplelens` stays open and shows
       the line; starting the game makes it disappear and the tools work.
-- [ ] Box status shown/hidden through one `Box` method, with an offscreen Qt test.
+- [x] Box status shown/hidden through one `Box` method, with an offscreen Qt test.
+      *(2026-11-06: `Box.set_status`. Checked live with a temp `APPDATA` and the default
+      title swapped for one that matches nothing: the box showed only the line, near the
+      screen centre where Qt puts a new window. With the title switched back to
+      `MapleStory`, the line went, the tabs came back, the box moved onto the game and
+      the title was saved. Not checked: an actual cold start with the game closed. A
+      minimized game hides the box as before; it doesn't show "Looking for".)*
 
 **Verification:** `uv run pytest tests/test_overlay.py`; manual run with
 `%APPDATA%\MapleLens\settings.json` renamed (rename it back afterwards).

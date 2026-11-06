@@ -23,6 +23,7 @@ _TICK_MS = 500
 # The game client's window title. With no title saved, only a window with exactly this
 # title counts, so a browser tab like "MapleStory wiki - Chrome" never does.
 DEFAULT_TITLE = "MapleStory"
+LOOKING = f"Looking for {DEFAULT_TITLE}… right-click to pick the game window"
 
 
 def build_box(settings: dict, save: Callable[[], None], tools: list) -> Box:
@@ -130,6 +131,7 @@ def main() -> int:
         nonlocal hwnd
         now = time.time()
         hwnd = hwnd or find_game(settings, save)
+        box.set_status(None if hwnd else LOOKING)  # a minimized game isn't "looking"
         rect = capture.client_rect(hwnd) if hwnd else None
         if rect is None:
             hwnd = None  # gone or minimized: look again next tick

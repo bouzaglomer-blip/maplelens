@@ -108,3 +108,19 @@ def test_release_keyboard_deactivates_only_when_active(monkeypatch, active):
     monkeypatch.setattr(overlay_mac, "NSApplication", FakeNSApplication)
     overlay_mac.release_keyboard()
     assert calls == ([1] if active else [])
+
+
+def test_status_line_replaces_the_tabs(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    page = QLabel("page")
+    box.add_tab("A", page)
+    box.set_status("Looking for the game")
+    assert box._status.isVisibleTo(box) and box._status.text() == "Looking for the game"
+    assert not page.isVisibleTo(box) and not box._tab_buttons[0].isVisibleTo(box)
+    box.set_tab_dot(0, True)  # a tool may turn its dot on meanwhile
+    box.set_status(None)
+    assert not box._status.isVisibleTo(box)
+    assert page.isVisibleTo(box) and box._tab_buttons[0].isVisibleTo(box)
+    assert box._tab_dots[0].isVisibleTo(box)

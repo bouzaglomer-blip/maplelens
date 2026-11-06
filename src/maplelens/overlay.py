@@ -87,15 +87,22 @@ class Box(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self._tab_buttons: list[QPushButton] = []
         self._tab_dots: list[QLabel] = []
-        self._strip = QHBoxLayout()
+        self._strip_row = QWidget()  # holds the strip, so it hides as one
+        self._strip = QHBoxLayout(self._strip_row)
+        self._strip.setContentsMargins(0, 0, 0, 0)
         self._strip.setSpacing(14)
         self._strip.addStretch()
         self._pages = QStackedWidget()
+        self._status = QLabel()
+        self._status.setFont(QFont(FONT, 10))
+        self._status.setStyleSheet(f"color: {VALUE_COLOR};")
+        self._status.hide()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 10)
         layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
-        layout.addLayout(self._strip)
+        layout.addWidget(self._strip_row)
         layout.addWidget(self._pages)
+        layout.addWidget(self._status)
 
     def add_tab(self, title: str, widget: QWidget) -> int:
         """Add a tab; the first one added is shown. Returns its index."""
@@ -129,6 +136,13 @@ class Box(QWidget):
         for j in range(self._pages.count()):  # only the current page sizes the box
             policy = QSizePolicy.Preferred if j == index else QSizePolicy.Ignored
             self._pages.widget(j).setSizePolicy(policy, policy)
+
+    def set_status(self, text: str | None) -> None:
+        """Show one line of `text` in place of the tabs; None brings the tabs back."""
+        self._status.setText(text or "")
+        self._status.setVisible(text is not None)
+        self._strip_row.setVisible(text is None)
+        self._pages.setVisible(text is None)
 
     def set_tab_dot(self, index: int, on: bool) -> None:
         self._tab_dots[index].setVisible(on)
