@@ -143,10 +143,12 @@ template or minimap PNGs than `src/` (`maps.picture` quietly returns `None` for 
 file, so the self-check alone can't catch a dropped picture).
 
 **Acceptance criteria:**
-- [ ] From source, `uv run maplelens --self-check` exits 0.
-- [ ] A unit test with `TEMPLATES` pointing at an empty folder gets 1.
-- [ ] Deleting one template, or one minimap picture, from `dist\MapleLens\…` makes the
-      build script fail.
+- [x] From source, `uv run maplelens --self-check` exits 0.
+- [x] A unit test with `TEMPLATES` pointing at an empty folder gets 1.
+- [x] Deleting one template, or one minimap picture, from `dist\MapleLens\…` makes the
+      build script fail. *(Tried on the built app: a missing template or minimap fails the
+      file count; a missing `maps.json`, OCR table or version metadata fails the exe. Run
+      the exe through `subprocess`: Git Bash doesn't wait for a windowed exe and shows 0.)*
 
 **Verification:** `uv run pytest tests/test_app.py`; build, delete a template by hand,
 re-run the check, then rebuild.
