@@ -432,3 +432,16 @@ def test_tool_errors_do_not_stop_the_other_tool(make, capsys):
     path.update = broken_path
     update_tools(box, Broken(), path, None, RECT, 2.0, seen)
     assert not path.arrow.isVisible()  # hidden, not frozen at its last spot
+
+
+def test_clicking_a_match_picks_it(make):
+    tool = make()
+    feed(tool, title("C"))
+    tool._search.setText("Twin")
+    m = tool._matches
+    second = m.item(1)
+    m.itemClicked.emit(second)
+    assert tool._search.text() == second.text()  # the field shows the pick
+    assert m.isHidden()  # and the list closes on it
+    assert m.currentItem() is second  # what Start goes to
+    assert tool._start.isEnabled()
