@@ -1,7 +1,7 @@
 """Screen-only guard: fail if code could touch the game client.
 
 MapleLens may only capture pixels and draw its own window. This script flags
-imports and Win32 calls that read/write process memory, capture network
+imports and system calls (Windows and macOS) that read/write process memory, capture network
 traffic, or send input. It is a speed bump against honest mistakes, not a
 security boundary.
 
@@ -36,6 +36,12 @@ BANNED_MODULES = {
     "interception",  # driver-level input
     "vgamepad",  # virtual controller input
     "ReadWriteMemory",  # reads/writes process memory
+    "ApplicationServices",  # macOS Accessibility (HIServices): drives other apps
+    "HIServices",  # macOS Accessibility: drives other apps
+    "ScriptingBridge",  # macOS: scripts other apps
+    "applescript",  # AppleScript: drives other apps
+    "appscript",  # AppleScript: drives other apps
+    "osascript",  # AppleScript: drives other apps
 }
 
 # Banned by dotted prefix: a package that is fine except for one namespace.
@@ -45,7 +51,7 @@ BANNED_PREFIXES = [
 # The same namespace as a locked package (uv.lock spells it winrt-windows-ui-input...).
 BANNED_LOCK_RE = re.compile(r'name\s*=\s*"(winrt[-_.]windows[-_.]ui[-_.]input[^"]*)"', re.I)
 
-BANNED_WIN32 = [
+BANNED_CALLS = [
     "ReadProcessMemory",  # reads game memory
     "WriteProcessMemory",  # writes game memory
     "OpenProcess",  # gets a handle to the game process
@@ -64,9 +70,33 @@ BANNED_WIN32 = [
     "NtReadVirtualMemory",  # reads game memory (native API)
     "NtWriteVirtualMemory",  # writes game memory (native API)
     "DebugActiveProcess",  # attaches a debugger to the game
+    "CGEventPost",  # macOS: sends keys/clicks
+    "CGEventPostToPid",  # macOS: sends keys/clicks to one process
+    "CGEventPostToPSN",  # macOS: sends keys/clicks to one process
+    "CGEventCreateKeyboardEvent",  # macOS: builds a fake key event
+    "CGEventCreateMouseEvent",  # macOS: builds a fake click
+    "CGEventCreateScrollWheelEvent",  # macOS: builds a fake scroll
+    "CGEventCreateScrollWheelEvent2",  # macOS: builds a fake scroll
+    "CGEventTapCreate",  # macOS: global input hook
+    "CGEventTapCreateForPid",  # macOS: input hook on one process
+    "CGEventTapCreateForPSN",  # macOS: input hook on one process
+    "CGWarpMouseCursorPosition",  # macOS: moves the mouse
+    "CGAssociateMouseAndMouseCursorPosition",  # macOS: detaches the mouse from the cursor
+    "task_for_pid",  # macOS: gets a handle to the game process
+    "mach_vm_read",  # macOS: reads game memory
+    "mach_vm_read_overwrite",  # macOS: reads game memory
+    "mach_vm_write",  # macOS: writes game memory
+    "vm_read",  # macOS: reads game memory
+    "vm_write",  # macOS: writes game memory
+    "ptrace",  # attaches a debugger to the game
+    "AXUIElementPerformAction",  # macOS Accessibility: clicks in another app
+    "AXUIElementSetAttributeValue",  # macOS Accessibility: changes another app
+    "AXUIElementPostKeyboardEvent",  # macOS Accessibility: sends keys
+    "NSAppleScript",  # runs AppleScript, drives other apps
+    "activateWithOptions",  # activates another app
 ]
 
-WIN32_RE = re.compile(r"\b(" + "|".join(BANNED_WIN32) + r")[AW]?\b")
+CALLS_RE = re.compile(r"\b(" + "|".join(BANNED_CALLS) + r")[AW]?_?\b")
 
 
 def dynamic_import(node: ast.AST) -> str | None:
@@ -112,8 +142,8 @@ def find_violations(path: Path) -> list[str]:
     except SyntaxError:
         pass  # half-written file; the name check below still runs
     for lineno, line in enumerate(text.splitlines(), 1):
-        for m in WIN32_RE.finditer(line):
-            found.add((lineno, f"banned Win32 call '{m.group(1)}'"))
+        for m in CALLS_RE.finditer(line):
+            found.add((lineno, f"banned system call '{m.group(1)}'"))
     return [f"{path}:{lineno}: {msg}" for lineno, msg in sorted(found)]
 
 
