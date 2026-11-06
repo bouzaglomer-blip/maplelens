@@ -6,10 +6,33 @@ from ctypes import wintypes
 
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QAction, QColor, QFont, QPainter
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QPushButton,
+    QSizePolicy,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 _WDA_EXCLUDEFROMCAPTURE = 0x11
 _INSET = 40  # px from the game's top-right corner for a box with no saved position
+
+# The box's look (mockup 1), shared by every tab: grey labels, larger bold values.
+FONT = "Segoe UI"
+LABEL_PT, LABEL_COLOR = 9, "#9fb0c8"
+VALUE_PT, VALUE_COLOR = 12, "#ffffff"
+ACCENT = "#ffcc33"
+TAB_W = 186  # every tab's width: the box is 210 px wide, less its 12 px side margins
+
+
+def text_label(text: str, pt: int, color: str, *, bold: bool = False) -> QLabel:
+    label = QLabel(text)
+    label.setFont(QFont(FONT, pt, QFont.Bold if bold else QFont.Normal))
+    label.setStyleSheet(f"color: {color};")
+    return label
 
 
 def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
@@ -48,7 +71,7 @@ class Layer(QWidget):
 
 
 class Box(QWidget):
-    """A small dark text box with optional buttons; drag it, its spot is saved per game window."""
+    """A small dark box with a tab strip; drag it, its spot is saved per game window."""
 
     def __init__(self, name: str, settings: dict, on_moved: Callable[[], None]):
         super().__init__(None, _OVERLAY)
@@ -58,25 +81,58 @@ class Box(QWidget):
         self._drag_from: QPoint | None = None
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
-        font = QFont("Consolas", 10)
-        font.setStyleHint(QFont.Monospace)
-        self._label = QLabel()
-        self._label.setFont(font)
-        self._label.setStyleSheet("color: #e8e8e8;")
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(12, 8, 12, 8)
-        self._layout.addWidget(self._label)
+        self._tab_buttons: list[QPushButton] = []
+        self._tab_dots: list[QLabel] = []
+        self._strip = QHBoxLayout()
+        self._strip.setSpacing(14)
+        self._strip.addStretch()
+        self._pages = QStackedWidget()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 10)
+        layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
+        layout.addLayout(self._strip)
+        layout.addWidget(self._pages)
 
-    def set_text(self, text: str) -> None:
-        self._label.setText(text)
-        self.adjustSize()
-
-    def add_button(self, label: str, callback: Callable[[], None]) -> None:
-        button = QPushButton(label)
+    def add_tab(self, title: str, widget: QWidget) -> int:
+        """Add a tab; the first one added is shown. Returns its index."""
+        i = self._pages.addWidget(widget)
+        button = QPushButton(title)
+        button.setFlat(True)
         button.setFocusPolicy(Qt.NoFocus)
-        button.clicked.connect(callback)
-        self._layout.addWidget(button)
-        self.adjustSize()
+        button.setCursor(Qt.PointingHandCursor)
+        button.setFont(QFont(FONT, 10, QFont.Bold))
+        button.clicked.connect(lambda: self._select(i))
+        dot = QLabel()
+        dot.setFixedSize(6, 6)
+        dot.setStyleSheet(f"background: {ACCENT}; border-radius: 3px;")
+        dot.hide()
+        self._tab_buttons.append(button)
+        self._tab_dots.append(dot)
+        at = self._strip.count() - 1  # before the trailing stretch
+        self._strip.insertWidget(at, button)
+        self._strip.insertWidget(at + 1, dot, 0, Qt.AlignVCenter)
+        self._select(self._pages.currentIndex())
+        return i
+
+    def _select(self, index: int) -> None:
+        self._pages.setCurrentIndex(index)
+        for j, b in enumerate(self._tab_buttons):
+            color, line = (VALUE_COLOR, ACCENT) if j == index else (LABEL_COLOR, "transparent")
+            b.setStyleSheet(
+                f"QPushButton {{ color: {color}; border: 0; border-bottom: 2px solid {line};"
+                " padding: 2px 0; }"
+            )
+        for j in range(self._pages.count()):  # only the current page sizes the box
+            policy = QSizePolicy.Preferred if j == index else QSizePolicy.Ignored
+            self._pages.widget(j).setSizePolicy(policy, policy)
+
+    def set_tab_dot(self, index: int, on: bool) -> None:
+        self._tab_dots[index].setVisible(on)
+
+    def allow_typing(self, on: bool) -> None:
+        """Let the box take keyboard focus (only while a text field needs it)."""
+        self.setWindowFlag(Qt.WindowDoesNotAcceptFocus, not on)
+        self.show()  # changing a window flag hides a shown window
 
     def add_menu_item(self, label: str, callback: Callable[[], None]) -> None:
         """An item in the box's right-click menu."""

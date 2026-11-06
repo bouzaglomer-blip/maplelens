@@ -1,0 +1,430 @@
+import pytest
+from pytest import approx
+
+from maplelens.readers import Reading
+from maplelens.readers.minimap_pos import MinimapView
+from maplelens.store import DEFAULTS
+from maplelens.tools.path_arrow.maps import MapInfo, Minimap, Portal
+
+MM = Minimap(2000, 1000, 1000, 500)  # fits a 125x62 px minimap window
+MID = MinimapView((125, 62), (62.5, 31.0), ())  # the dot mid-map: world (0, 0)
+RECT = (0, 0, 1366, 768)
+OPEN = "Open your minimap to see the arrow"
+
+
+def mk(id, name, portals=(), street="Road", minimap=MM, npcs=()):
+    portals = tuple(Portal(x, y, t) for x, y, t in portals)
+    return MapInfo(id, street, name, False, minimap, portals, None, npcs)
+
+
+MAPS = {
+    m.id: m
+    for m in [
+        mk("A", "Apple", [(300, -300, "B")]),
+        mk("B", "Berry", [(0, 0, "A"), (0, 0, "C")]),
+        mk("C", "Cherry", [(0, 0, "B")]),
+        mk("D", "Date"),  # nothing leads here
+        mk("X", "Xylo", [(0, 0, "C")], street="Bay"),
+        mk("N", "Nomap", [(0, 0, "B")], minimap=None),
+        mk("G", "Grand", [(0, 0, "B")], minimap=Minimap(6400, 1600, 800, 800)),  # no NPCs
+        # Same-title neighbours, as Maple Road / Mushroom Town (88x47 vs 94x53 px).
+        mk("P", "Pair", [(500, 0, "Q")], minimap=Minimap(1408, 760, 479, 295)),
+        mk("Q", "Pair", [(-500, 0, "P"), (450, 300, "R")], minimap=Minimap(1498, 850, 299, 445)),
+        mk("R", "Rose", [(0, 0, "Q")]),
+        mk("L", "The Very Long Road Past The Old Mushroom Forest Gate", [(0, 0, "B")]),
+        mk("K", "Keep", [(0, 0, "B")], minimap=Minimap(6400, 1600, 800, 800), npcs=((0, 0),) * 3),
+        mk("T1", "Twin", [(0, 0, "B")], street="Hill"),
+        mk("T2", "Twin", [(0, 0, "B")], street="Dale"),
+    ]
+}
+
+
+def title(id):
+    return MAPS[id].title
+
+
+@pytest.fixture
+def make(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from maplelens.overlay import Layer
+    from maplelens.tools.path_arrow.ui import PathArrowTool
+
+    QApplication.instance() or QApplication([])
+
+    def build(settings=None, on_changed=lambda: None, typing=lambda on: None):
+        layer = Layer()
+        layer.show()
+        settings = dict(DEFAULTS, boxes={}) if settings is None else settings
+        return PathArrowTool(settings, on_changed, layer, typing, MAPS)
+
+    return build
+
+
+def feed(tool, map_name, t=0.0, view=MID, rect=RECT, times=2):
+    for i in range(times):
+        tool.update(
+            Reading(t + i * 0.5, None, None, None, map_name, minimap=view), rect, t + i * 0.5
+        )
+
+
+def go(tool, at, dest, t=0.0):
+    feed(tool, title(at), t)
+    tool._search.setText(MAPS[dest].name)
+    tool._start.click()
+
+
+def centre(w):
+    return w.x() + w.width() / 2, w.y() + w.height() / 2
+
+
+def test_search_lists_matches(make):
+    tool = make()
+    tool._search.setText("b")
+    shown = [tool._matches.item(i).text() for i in range(tool._matches.count())]
+    assert shown == ["Berry", "Xylo"]  # Xylo's street is "Bay"
+
+
+def test_no_route_message(make):
+    tool = make()
+    go(tool, "A", "D")
+    assert tool._message.text() == "No route from here to Date"
+    assert not tool.running
+
+
+def test_start_shows_arrow_and_header(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    go(tool, "A", "C")
+    assert tool.running
+    assert tool._header.text() == "To Cherry · 1 of 3"
+    assert tool.arrow.isVisible()
+    assert centre(tool.arrow) == approx((683, 545 - ui.ARROW_DY), abs=1)
+    assert tool.arrow.angle == approx(-45)  # up and right, to the portal at (300, -300)
+
+
+def test_one_frame_misread_does_not_reroute(make):
+    tool = make()
+    go(tool, "A", "C")
+    steps = tool.trip.steps
+    feed(tool, title("X"), 1.0, times=1)
+    assert not tool.arrow.isVisible()  # not aimed with an unconfirmed map's minimap
+    feed(tool, title("A"), 2.0, times=1)
+    feed(tool, None, 3.0, times=1)
+    feed(tool, title("A"), 4.0, times=1)
+    assert tool.trip.steps is steps and tool.trip.index == 0
+
+
+def test_wrong_map_reroutes(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, title("X"), 1.0)
+    assert [s.map_id for s in tool.trip.steps] == ["X", "C"]
+    assert tool._header.text() == "To Cherry · 1 of 2"
+
+
+def test_route_list_marks_done_and_here(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, title("B"), 1.0)
+    assert tool._header.text() == "To Cherry · 2 of 3"
+    text = tool._route_list.text()
+    assert "<s>" in text.split("Apple")[0]  # done: struck through
+    assert "▸" in text.split("Berry")[0].split("Apple")[1]  # yours
+    assert "<s>" not in text.split("Apple")[1]
+
+
+def test_arrival_then_search(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, title("B"), 1.0)
+    feed(tool, title("C"), 2.0)
+    assert tool._header.text() == "Arrived at Cherry"
+    assert not tool.arrow.isVisible()
+    assert not tool.running
+    assert not tool._choose.isVisibleTo(tool.tab)
+    feed(tool, title("C"), 2.5 + 5.1, times=1)
+    assert tool._choose.isVisibleTo(tool.tab)
+    assert tool._header.text() == "From: Cherry (where you are)"
+    assert not tool.running
+
+
+def test_minimap_message_after_3s(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, None, 10.0, view=None, times=1)
+    feed(tool, None, 12.0, view=None, times=1)
+    assert not tool._message.isVisibleTo(tool.tab)
+    feed(tool, None, 13.1, view=None, times=1)
+    assert tool._message.text() == OPEN and tool._message.isVisibleTo(tool.tab)
+    assert not tool.arrow.isVisible()
+    assert tool.running
+    feed(tool, title("A"), 14.0)  # it comes back on its own
+    assert not tool._message.isVisibleTo(tool.tab) and tool.arrow.isVisible()
+
+
+def test_dot_missing_message_immediately(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, title("A"), 1.0, view=None, times=1)
+    assert tool._message.text() == OPEN
+    assert not tool.arrow.isVisible()
+
+
+def test_unknown_map_message(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, "Road / Nowhere", 1.0)
+    assert tool._message.text() == "This map isn't in MapleLens's map list yet"
+    assert not tool.arrow.isVisible()
+    assert tool.running
+
+
+def test_no_minimap_message(make):
+    tool = make()
+    go(tool, "N", "C", 0.0)
+    assert tool.running and tool._route_list.isVisibleTo(tool.tab)
+    assert tool._message.text() == "No minimap on this map"
+    assert not tool.arrow.isVisible()
+
+
+def test_no_arrow_on_big_map_without_npcs(make):
+    tool = make()
+    clipped = MinimapView((200, 100), (100.0, 50.0), ())  # picture 400x100 px
+    feed(tool, title("G"), view=clipped)
+    tool._search.setText("Cherry")
+    tool._start.click()
+    assert tool.running
+    assert tool._message.text() == "No arrow on this map yet"
+    assert not tool.arrow.isVisible()
+
+
+def test_start_disabled_when_map_unknown(make):
+    tool = make()
+    tool._search.setText("Cherry")
+    assert not tool._start.isEnabled()
+    assert tool._header.text() == "From: (can't read your map yet)"
+    feed(tool, "Road / Nowhere")
+    assert not tool._start.isEnabled()
+    feed(tool, title("A"), 1.0)
+    assert tool._start.isEnabled()
+    assert tool._header.text() == "From: Apple (where you are)"
+
+
+def test_taxi_choice_saved(make):
+    calls = []
+    settings = dict(DEFAULTS, boxes={})
+    tool = make(settings, lambda: calls.append(1))
+    assert tool._taxi.isChecked() and tool._taxi.text() == "Use taxi"
+    tool._taxi.setChecked(False)
+    go(tool, "A", "C")
+    assert settings["path_taxi"] is False and calls == [1]
+    tool._stop.click()
+    go(tool, "A", "C", 1.0)
+    assert calls == [1]  # unchanged: not saved again
+
+
+def test_arrow_follows_game_rect_size(make):
+    tool = make()
+    go(tool, "A", "C")
+    small = centre(tool.arrow)
+    feed(tool, title("A"), 1.0, rect=(0, 0, 2732, 1536))
+    assert centre(tool.arrow) == approx((2 * small[0], 2 * small[1]), abs=1)
+
+
+def test_stop_ends_route(make):
+    tool = make()
+    go(tool, "A", "C")
+    tool._stop.click()
+    assert not tool.running and not tool.arrow.isVisible()
+    assert tool._choose.isVisibleTo(tool.tab)
+
+
+def test_typing_toggles_focus(make):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    calls = []
+    tool = make(typing=calls.append)
+    tool.tab.show()
+    QTest.mouseClick(tool._search, Qt.LeftButton)
+    assert calls == [True]
+    QTest.keyClick(tool._search, Qt.Key_Escape)
+    assert calls == [True, False]
+    QTest.mouseClick(tool._search, Qt.LeftButton)
+    go(tool, "A", "C")
+    assert calls == [True, False, True, False]
+    tool.tab.close()
+
+
+def test_same_title_neighbours_told_apart_by_minimap_size(make):
+    p_view = MinimapView((88, 47), (44.0, 23.5), ())
+    q_view = MinimapView((94, 53), (47.0, 26.5), ())
+    tool = make()
+    feed(tool, title("P"), view=p_view)
+    tool._search.setText("Rose")
+    tool._start.click()
+    assert [s.map_id for s in tool.trip.steps] == ["P", "Q", "R"]
+    assert tool.arrow.isVisible()
+    feed(tool, title("Q"), 1.0, view=q_view, times=1)  # same title, Q's minimap
+    assert not tool.arrow.isVisible()  # never aimed with P's minimap formula
+    feed(tool, title("Q"), 1.5, view=q_view, times=1)
+    assert tool._header.text() == "To Rose · 2 of 3"
+    assert tool.arrow.isVisible() and tool.arrow.angle == approx(
+        90
+    )  # straight down: Q puts you at (450, -20)
+
+
+def test_matches_show_three_rows(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    tool._search.setText("r")  # every "Road" map
+    m = tool._matches
+    assert m.count() > ui.MATCH_ROWS
+    assert m.maximumHeight() == m.sizeHintForRow(0) * ui.MATCH_ROWS + 2 * m.frameWidth()
+
+
+def test_long_names_elide_to_the_box_width(make):
+    from maplelens.overlay import Box
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    box = Box("t", {}, lambda: None)
+    box.add_tab("Path", tool.tab)
+    box.show()  # a shown box's pages size from their raw hints
+    feed(tool, title("L"))
+    assert tool._header.text().startswith("From: The Very") and "…" in tool._header.text()
+    assert tool._header.text().endswith("(where you are)")
+    tool._search.setText("r")  # the full, scrolling list
+    width = ui.TAB_W + 24  # the box's 12 px side margins
+    assert box.sizeHint().width() == width
+    tool._search.setText("Cherry")
+    tool._start.click()
+    assert "…" in tool._route_list.text()
+    assert box.sizeHint().width() == width
+    tool._stop.click()
+    feed(tool, title("A"), 1.0)  # short names: the box keeps its width
+    assert box.sizeHint().width() == width
+    box.close()
+
+
+def test_tick_feeds_both_tools_and_dots_path_tab(make):
+    from maplelens.app import build_box, update_tools
+    from maplelens.tools.exp_meter.history import open_db
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+
+    path = make()
+    exp = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(":memory:"), lambda: None)
+    box = build_box({"boxes": {}}, lambda: None, [exp, path])
+    widths = set()
+    for i in (0, 1):
+        box._select(i)
+        widths.add(box.sizeHint().width())
+    assert len(widths) == 1  # same box width on both tabs
+    update_tools(box, exp, path, None, None, 1.0, set())
+    assert box._tab_dots[1].isHidden()
+    go(path, "A", "C", 1.0)
+    assert path.running
+    update_tools(box, exp, path, None, None, 2.0, set())
+    assert not box._tab_dots[1].isHidden()
+    box.close()
+    exp.shutdown(3.0)
+
+
+def test_clipped_map_part_without_markers_says_why(make):
+    tool = make()
+    clipped = MinimapView((200, 100), (100.0, 50.0), ())  # no NPC markers in the window
+    feed(tool, title("K"), view=clipped)
+    tool._search.setText("Cherry")
+    tool._start.click()
+    assert tool._message.text() == "No arrow on this part of the map yet"
+    assert not tool.arrow.isVisible()
+
+
+def test_unclipped_frame_miss_has_no_line(make):
+    tool = make()
+    go(tool, "A", "C")
+    feed(tool, title("A"), 1.0, view=MinimapView((135, 62), (67.5, 31.0), ()), times=1)
+    assert not tool.arrow.isVisible()  # player_world None for this frame only
+    assert not tool._message.isVisibleTo(tool.tab)
+
+
+def test_no_route_note_clears_on_map_change(make):
+    tool = make()
+    go(tool, "A", "D")
+    assert tool._message.text() == "No route from here to Date"
+    feed(tool, title("B"), 1.0)
+    assert not tool._message.isVisibleTo(tool.tab)
+
+
+def test_no_reading_starts_the_minimap_clock(make):
+    tool = make()
+    go(tool, "A", "C")
+    tool.update(None, RECT, 10.0)
+    tool.update(None, RECT, 12.0)
+    assert not tool._message.isVisibleTo(tool.tab)
+    tool.update(None, RECT, 13.1)
+    assert tool._message.text() == OPEN
+    assert tool.running
+
+
+def test_stale_map_after_3s_unreadable(make):
+    tool = make()
+    feed(tool, title("A"))
+    tool._search.setText("Cherry")
+    assert tool._start.isEnabled()
+    feed(tool, None, 10.0, view=None, times=1)
+    feed(tool, None, 12.0, view=None, times=1)
+    assert tool._header.text() == "From: Apple (where you are)"  # a short gap: still trusted
+    feed(tool, None, 13.1, view=None, times=1)
+    assert tool._header.text() == "From: (can't read your map yet)"
+    assert not tool._start.isEnabled()
+    feed(tool, title("A"), 14.0)
+    assert tool._start.isEnabled()
+    tool._start.click()
+    feed(tool, None, 20.0, view=None, times=1)
+    feed(tool, None, 23.1, view=None, times=1)
+    assert tool.running  # a running trip is kept
+
+
+def test_duplicate_names_show_their_street(make):
+    tool = make()
+    tool._search.setText("twin")
+    shown = {tool._matches.item(i).text() for i in range(tool._matches.count())}
+    assert shown == {"Twin · Hill", "Twin · Dale"}
+    tool._search.setText("cherry")
+    assert tool._matches.item(0).text() == "Cherry"  # unique: the name alone
+
+
+def test_tool_errors_do_not_stop_the_other_tool(make, capsys):
+    from PySide6.QtWidgets import QLabel
+
+    from maplelens.app import update_tools
+    from maplelens.overlay import Box
+
+    class Broken:
+        def update(self, *args):
+            raise ValueError("boom")
+
+    path = make()
+    box = Box("t", {}, lambda: None)
+    box.add_tab("EXP", QLabel())
+    box.add_tab("Path", path.tab)
+    go(path, "A", "C")
+    seen = set()
+    for t in (1.0, 1.5):
+        r = Reading(t, None, None, None, title("B"), minimap=MID)
+        update_tools(box, Broken(), path, r, RECT, t, seen)
+    assert path._header.text() == "To Cherry · 2 of 3"  # path still ran
+    assert not box._tab_dots[1].isHidden()
+    assert capsys.readouterr().err.count("ValueError: boom") == 1  # printed once
+
+    def broken_path(*args):
+        raise ValueError("bang")
+
+    path.update = broken_path
+    update_tools(box, Broken(), path, None, RECT, 2.0, seen)
+    assert not path.arrow.isVisible()  # hidden, not frozen at its last spot

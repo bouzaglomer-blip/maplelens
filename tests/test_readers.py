@@ -9,6 +9,7 @@ from maplelens.readers.exp import EXP_DX, EXP_DY, EXP_H, EXP_INK_HI, EXP_INK_LO,
 from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import read_map_name
+from maplelens.readers.minimap_pos import read_player, read_view
 
 SCREENS = Path(__file__).parent / "fixtures" / "screens"
 
@@ -64,6 +65,21 @@ EXPECTED = {
     "minimap_nominimap_2560x1440_100.png": None,  # game scene pasted over the minimap
     "minimap_a_1366x768_100.png": "Kerning City Subway / Transfer Area",
     "minimap_a_1920x1080_100.png": "Kerning City Subway / Transfer Area",
+}
+
+# Player position fixtures: the whole minimap panel, map area included; other players'
+# markers painted out. Values: the dot's centre as fractions of the map area, measured
+# by hand (map area = the opaque map picture, centred on see-through padding).
+EXPECTED_POS = {
+    "pos_a_1920x1080_100.png": (0.482, 0.626),  # Transfer Area, map narrower than window
+    "pos_b_2560x1440_100.png": (0.392, 0.229),  # Construction Site North, long title
+    "pos_c_2560x1440_100.png": (0.552, 0.661),  # Henesys Townstreet, small map
+    "pos_d_1366x768_100.png": (0.518, 0.626),  # Transfer Area, native pixels
+    "pos_e_2560x1440_100.png": (0.500, 0.795),  # Lith Harbor, map as wide as the window
+    "pos_f_2560x1440_100.png": (0.305, 0.777),  # Perion, map taller than the window
+    "pos_bar_2560x1440_100.png": None,  # minimap minimized to its bar
+    "pos_covered_2560x1440_100.png": None,  # inventory window over the map area
+    "pos_nominimap_1920x1080_100.png": None,  # game scene, no minimap
 }
 
 
@@ -138,7 +154,7 @@ def test_level_reads_every_digit(d):
 
 
 def test_expected_matches_fixture_files():
-    assert set(EXPECTED) == {p.name for p in SCREENS.glob("*.png")}
+    assert set(EXPECTED) | set(EXPECTED_POS) == {p.name for p in SCREENS.glob("*.png")}
 
 
 def test_exp_one_px_noise_is_never_another_value():
@@ -294,3 +310,84 @@ def test_read_all_normalizes_once(monkeypatch):
     # The word readers (OCR) also get the native frame: they crop their text from it.
     small, native = (768, 1365, 3), (1440, 2560, 3)
     assert seen == [[small], [small], [small, native], [small, native]]
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("pos_*.png")))
+def test_read_player(name):
+    got, want = read_player(screen(name)), EXPECTED_POS[name]
+    if want is None:
+        assert got is None
+    else:
+        assert got is not None
+        assert abs(got[0] - want[0]) <= 0.02 and abs(got[1] - want[1]) <= 0.02, got
+
+
+@pytest.mark.parametrize(
+    "name, n",
+    [
+        ("pos_a_1920x1080_100.png", 0),  # Transfer Area has no NPCs
+        ("pos_c_2560x1440_100.png", 1),  # Henesys Townstreet
+        ("pos_e_2560x1440_100.png", 5),  # Lith Harbor: 6 shown, 1 hit by the inpainting
+    ],
+)
+def test_read_view_npc_markers(name, n):
+    view = read_view(screen(name))
+    assert len(view.npcs) == n
+    assert read_player(screen(name)) == (view.dot[0] / view.size[0], view.dot[1] / view.size[1])
+
+
+# The minimap's other markers, BGR, sampled from the owner's grabs.
+OTHER_DOTS = [
+    (0, 0, 255),  # other player (red)
+    (0, 142, 254),  # party member (orange)
+    (3, 222, 241),  # the party marker's "+" (yellow-orange)
+    (70, 104, 255),  # faded player dot (salmon)
+    (255, 221, 17),  # cyan player dot
+    (0, 228, 0),  # NPC (green)
+    (165, 192, 8),  # portal spiral (blue)
+    (226, 0, 226),  # magenta NPC
+    (221, 255, 0),  # cyan triangle
+]
+
+
+def test_read_player_ignores_other_dots():
+    """The dot, recoloured to each other marker and pasted elsewhere, changes nothing."""
+    img = screen("pos_a_1920x1080_100.png")
+    want = read_player(img)
+    assert want is not None
+    # The "you" dot with its ring (dot pixels x 82..87, y 141..146 in this fixture).
+    patch = img[138:150, 79:91].copy()
+    fill = glyphs.mask(patch, (25, 180, 200), (110, 255, 255))
+    spots = [(25, 80), (60, 80), (120, 80), (140, 100), (30, 120), (100, 120), (30, 160)]
+    spots += [(120, 160), (60, 170)]
+    for colour, (x, y) in zip(OTHER_DOTS, spots, strict=True):
+        dot = patch.copy()
+        dot[fill] = colour
+        img[y : y + 12, x : x + 12] = dot
+    assert read_player(img) == want
+
+
+def test_read_player_two_you_dots_is_none():
+    """A second dot-shaped yellow blob (e.g. map art): no guessing which one is you."""
+    img = screen("pos_a_1920x1080_100.png")
+    assert read_player(img) is not None
+    img[80:92, 25:37] = img[138:150, 79:91].copy()  # the dot and its ring, top-left of the map
+    assert read_player(img) is None
+
+
+def test_read_player_window_over_map_edge_is_none():
+    """A window over the map's edge and the frame, dot still visible: the map area is
+    unknown, so no position rather than a wrong one."""
+    img = screen("pos_a_1920x1080_100.png")
+    img[150:199, 0:60] = (200, 200, 200)
+    assert read_player(img) is None
+
+
+def test_read_all_fills_player():
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    fixture = screen("pos_a_1920x1080_100.png")
+    frame[: fixture.shape[0], : fixture.shape[1]] = fixture
+    got = read_all(frame, 1.0)
+    assert got.player is not None
+    assert got.player == read_player(frame)
+    assert got.minimap is not None and got.minimap == read_view(frame)

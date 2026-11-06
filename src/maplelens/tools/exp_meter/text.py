@@ -13,16 +13,17 @@ def format_duration(minutes: float) -> str:
     return f"{h}h {m}m" if h else f"{m}m"
 
 
-def format_box(rate: Rate | None, waiting: bool) -> str:
+def box_lines(rate: Rate | None, waiting: bool) -> list[tuple[str, list[str]]]:
+    """The EXP tab's content as (grey label, value lines) pairs."""
     if waiting:
-        return "waiting for game"
+        return [("waiting for game", [])]
     if rate is None:
-        exp, pct, eta = "—", "—", "—"
+        exp, pct, eta = "— /h", "—% /h", "—"
     else:
-        exp = f"{rate.exp_per_min * 60:,.0f}"
-        pct = f"{rate.pct_per_min * 60:.2f}"
+        exp = f"{rate.exp_per_min * 60:,.0f} /h"
+        pct = f"{rate.pct_per_min * 60:.2f}% /h"
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
-    return f"EXP · last 5 min\n{exp} /h\n{pct}% /h\nLevel up in\n{eta}"
+    return [("EXP · last 5 min", [exp, pct]), ("Level up in", [eta])]
 
 
 def format_last(ts: float, now: float) -> str:

@@ -5,7 +5,13 @@ import json
 import os
 from pathlib import Path
 
-DEFAULTS = {"window_title": None, "idle_cutoff_s": 90, "jump_factor": 5, "boxes": {}}
+DEFAULTS = {
+    "window_title": None,
+    "idle_cutoff_s": 90,
+    "jump_factor": 5,
+    "boxes": {},
+    "path_taxi": True,
+}
 
 
 def data_dir() -> Path:
