@@ -1,6 +1,7 @@
 """MapleLens entry point: watch the game window and run the tools."""
 
 import os
+import subprocess
 import sys
 import time
 import traceback
@@ -30,6 +31,9 @@ LOOKING = f"Looking for {DEFAULT_TITLE}… right-click to pick the game window"
 # Held while MapleLens runs. The Windows installer and uninstaller look for it (AppMutex in
 # packaging/windows/maplelens.iss) and ask the player to close MapleLens first.
 APP_MUTEX = "MapleLensRunning"
+# Tells Setup the app started it to update itself: Setup waits for MapleLens to exit instead
+# of asking to close it, then starts the new version (IsUpdateRun in maplelens.iss).
+UPDATE_FLAG = "/MAPLELENSUPDATE"
 
 
 def build_box(
@@ -147,6 +151,27 @@ def mark_running() -> int | None:
     kernel32 = ctypes.windll.kernel32
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     return kernel32.CreateMutexW(None, False, APP_MUTEX)
+
+
+def update_cmd(setup: Path) -> list[str]:
+    """Setup's command line for an update: Inno's no-prompt flags plus UPDATE_FLAG."""
+    return [str(setup), "/SILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NOCANCEL", UPDATE_FLAG]
+
+
+def install_update(setup: Path) -> None:
+    """Hand over to `setup`: start it on its own, then quit the way Quit does.
+
+    Quitting through Qt runs aboutToQuit, which saves the session in progress; Setup
+    waits for MapleLens to exit before it replaces anything. If Setup can't start, the
+    OSError propagates and MapleLens keeps running.
+    """
+    subprocess.Popen(
+        update_cmd(setup),
+        cwd=setup.parent,  # not {app}, the folder Setup replaces
+        creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+    )
+    QApplication.quit()
 
 
 def _prepare_process() -> None:

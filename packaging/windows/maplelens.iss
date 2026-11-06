@@ -56,6 +56,8 @@ Name: "{autodesktop}\MapleLens"; Filename: "{app}\MapleLens.exe"; Tasks: desktop
 
 [Run]
 Filename: "{app}\MapleLens.exe"; Description: "{cm:LaunchProgram,MapleLens}"; Flags: nowait postinstall skipifsilent
+; An update run is silent, so the entry above skips it: start the new version here.
+Filename: "{app}\MapleLens.exe"; WorkingDir: "{app}"; Flags: nowait; Check: IsUpdateRun
 
 ; Settings, EXP history and the log live in %APPDATA%\MapleLens, outside {app}, so the
 ; uninstaller leaves them alone.
@@ -66,13 +68,25 @@ begin
   Result := CheckForMutexes('{#AppMutexName}');
 end;
 
-// Wait up to 3 s for MapleLens to exit.
-function WaitForExit(): Boolean;
+// True when MapleLens started this Setup to update itself (UPDATE_FLAG in
+// src/maplelens/app.py). It passes /SILENT and the other no-prompt flags with it.
+function IsUpdateRun(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/MAPLELENSUPDATE') = 0 then
+      Result := True;
+end;
+
+// Wait up to Ms milliseconds for MapleLens to exit.
+function WaitForExit(Ms: Integer): Boolean;
 var
   Waited: Integer;
 begin
   Waited := 0;
-  while MapleLensRunning() and (Waited < 3000) do
+  while MapleLensRunning() and (Waited < Ms) do
   begin
     Sleep(250);
     Waited := Waited + 250;
@@ -98,7 +112,7 @@ begin
   end;
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM MapleLens.exe', '', SW_HIDE,
     ewWaitUntilTerminated, Code);
-  Result := WaitForExit();
+  Result := WaitForExit(3000);
   if not Result then
     SuppressibleMsgBox('MapleLens is still running. Quit it from its right-click menu, ' +
       'then try again.', mbError, MB_OK, IDOK);
@@ -106,6 +120,11 @@ end;
 
 function InitializeSetup(): Boolean;
 begin
+  // An update run: MapleLens started Setup and is quitting, saving its session on the
+  // way out. Let it finish, so the close path below has nothing left to end. If it
+  // hangs past 10 s, that path ends it (the no-prompt flags answer its question).
+  if IsUpdateRun() then
+    WaitForExit(10000);
   Result := CloseMapleLens('continue');
 end;
 

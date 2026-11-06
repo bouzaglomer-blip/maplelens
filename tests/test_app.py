@@ -1,3 +1,4 @@
+import re
 import sys
 
 import pytest
@@ -159,3 +160,71 @@ def test_installer_checks_the_apps_mutex():
     assert f'#define AppMutexName "{app.APP_MUTEX}"' in iss
     # AppMutex only tells the player to close MapleLens; the [Code] section closes it
     assert "\nAppMutex=" not in iss
+
+
+ISS = app.Path(__file__).parent.parent / "packaging" / "windows" / "maplelens.iss"
+
+
+def test_update_cmd_runs_setup_silently_in_update_mode():
+    setup = app.Path("C:/Users/דניאל/AppData/Roaming/MapleLens/updates/MapleLens-Setup-0.2.0.exe")
+    assert app.update_cmd(setup) == [
+        str(setup),
+        "/SILENT",
+        "/SP-",
+        "/SUPPRESSMSGBOXES",
+        "/NOCANCEL",
+        app.UPDATE_FLAG,
+    ]
+
+
+@pytest.fixture
+def handoff(monkeypatch):
+    """Fake process start and Qt quit; .calls records them in order."""
+
+    class Handoff:
+        calls: list = []  # noqa: RUF012
+        fail: Exception | None = None
+
+    Handoff.calls = []
+
+    def popen(cmd, **kw):
+        if Handoff.fail:
+            raise Handoff.fail
+        Handoff.calls.append(("start", cmd, kw))
+
+    class FakeQApplication:
+        @staticmethod
+        def quit():
+            Handoff.calls.append(("quit",))
+
+    def no_exit(*a):
+        raise AssertionError("install_update must quit through QApplication.quit")
+
+    monkeypatch.setattr(app.subprocess, "Popen", popen)
+    monkeypatch.setattr(app, "QApplication", FakeQApplication)
+    monkeypatch.setattr(app.sys, "exit", no_exit)
+    return Handoff
+
+
+def test_install_update_starts_setup_then_quits_through_qt(handoff, tmp_path):
+    setup = tmp_path / "MapleLens-Setup-0.2.0.exe"
+    app.install_update(setup)
+    (start, cmd, kw), quit_ = handoff.calls
+    assert start == "start"
+    assert cmd == app.update_cmd(setup)
+    assert kw["cwd"] == setup.parent  # never inside the folder Setup replaces
+    assert quit_ == ("quit",)
+
+
+def test_install_update_keeps_running_when_setup_wont_start(handoff, tmp_path):
+    handoff.fail = OSError("blocked")
+    with pytest.raises(OSError):
+        app.install_update(tmp_path / "MapleLens-Setup-0.2.0.exe")
+    assert handoff.calls == []  # no quit: the old version keeps running
+
+
+def test_installer_knows_the_update_flag():
+    iss = ISS.read_text(encoding="utf-8")
+    assert f"'{app.UPDATE_FLAG}'" in iss
+    # an update run relaunches MapleLens; skipifsilent keeps the hand-run entry from doing so
+    assert re.search(r'^Filename: "\{app\}\\MapleLens\.exe";.*Check: IsUpdateRun', iss, re.M)
