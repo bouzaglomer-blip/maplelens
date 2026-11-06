@@ -357,16 +357,28 @@ create` with a body that says merging publishes the release. `permissions: conte
 write, pull-requests: write`.
 
 **Acceptance criteria:**
-- [ ] On the fork, `minor` from 0.1.0 opens PR `release: v0.2.0` whose diff is only the
+- [x] On the fork, `minor` from 0.1.0 opens PR `release: v0.2.0` whose diff is only the
       version lines in `pyproject.toml` and `uv.lock`.
-- [ ] Merging it makes `release.yml` publish `v0.2.0` with no other step (spec criterion 5).
-- [ ] Running prepare again while that PR is open fails with a clear message.
+      *(2026-11-06. The first try, [run 42288201228](https://github.com/dbeilin/maplelens/actions/runs/42288201228),
+      also changed `uv.lock`'s `revision = 3` to `5`: the runner's uv 0.13.7 re-locked
+      with a newer lock format than Daniel's 0.12.1. The bump now uses `--frozen` and edits
+      the lock's version line, checked by `uv sync --locked`.
+      [Run 42288853699](https://github.com/dbeilin/maplelens/actions/runs/42288853699)
+      then opened [PR 3](https://github.com/dbeilin/maplelens/pull/3) with exactly the two
+      version lines.)*
+- [x] Merging it makes `release.yml` publish `v0.2.0` with no other step (spec criterion 5).
+      *([Run 42289092404](https://github.com/dbeilin/maplelens/actions/runs/42289092404)
+      published [v0.2.0](https://github.com/dbeilin/maplelens/releases/tag/v0.2.0) from the
+      merge commit, with `MapleLens-Setup-0.2.0.exe` and notes listing PR 3.)*
+- [x] Running prepare again while that PR is open fails with a clear message.
+      *([Run 42288501886](https://github.com/dbeilin/maplelens/actions/runs/42288501886),
+      `patch` while PR 2 was open: "A release PR is already open, merge or close it
+      first: …/pull/2", nothing pushed.)*
 
 *(2026-11-06: written, with tests in `tests/test_release_workflow.py`. It refuses while
 **any** `release/v*` PR is open, not only one for the same version, so a `patch` run
-can't open a second release PR beside a pending `minor`. `uv version --bump minor` on
-0.1.0 changed one line in each file. The fork runs are still to do; the fork has "Allow
-GitHub Actions to create and approve pull requests" off.)*
+can't open a second release PR beside a pending `minor`. The fork has "Allow GitHub
+Actions to create and approve pull requests" on for these runs.)*
 
 **Verification:** the fork runs; then delete the fork's test tags/releases so the fork
 mirrors upstream again.
