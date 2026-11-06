@@ -65,6 +65,11 @@ EXPECTED = {
     "minimap_nominimap_2560x1440_100.png": None,  # game scene pasted over the minimap
     "minimap_a_1366x768_100.png": "Kerning City Subway / Transfer Area",
     "minimap_a_1920x1080_100.png": "Kerning City Subway / Transfer Area",
+    # macOS: the Retina capture, 2732x1536 in the game, normalized to 768 rows.
+    "exp_mac_2732x1536_100.png": ExpValue(23749, 43.26),
+    "level_mac_2732x1536_100.png": 26,
+    "job_mac_2732x1536_100.png": "Rogue",
+    "minimap_mac_2732x1536_100.png": "Dungeon / Sleepywood",
 }
 
 # Player position fixtures: the whole minimap panel, map area included; other players'
