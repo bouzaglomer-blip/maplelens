@@ -46,7 +46,7 @@ def _scroll(view: MinimapView, info: MapInfo) -> tuple[float, float] | None:
         return (x + mm.cx) / SCALE + d[0], (y + mm.cy) / SCALE + d[1]
 
     pred = [(*at(x, y, (NPC_DX, NPC_DY)), 0) for x, y in info.npcs]
-    pred += [(*at(p.x, p.y, (PORTAL_DX, PORTAL_DY)), 1) for p in info.portals]
+    pred += [(*at(p.x, p.y, (PORTAL_DX, PORTAL_DY)), 1) for p in info.portals if not p.hidden]
     seen = [(x, y, 0) for x, y in view.npcs] + [(x, y, 1) for x, y in view.portals]
     room = (mm.w / SCALE - view.size[0], mm.h / SCALE - view.size[1])
     found = []
@@ -104,7 +104,8 @@ def by_size(maps: dict[str, MapInfo], title: str, view: MinimapView) -> MapInfo 
 def can_place(view: MinimapView, info: MapInfo) -> bool:
     """False where player_world is always None: no minimap, or clipped with too few markers."""
     mm = info.minimap
-    return mm is not None and (fits(view, mm) or len(info.npcs) + len(info.portals) >= MIN_MATCH)
+    spirals = sum(not p.hidden for p in info.portals)
+    return mm is not None and (fits(view, mm) or len(info.npcs) + spirals >= MIN_MATCH)
 
 
 def player_world(view: MinimapView, info: MapInfo) -> tuple[float, float] | None:

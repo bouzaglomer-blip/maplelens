@@ -4,7 +4,7 @@ import math
 from collections import deque
 from dataclasses import dataclass
 
-from maplelens.tools.path_arrow.maps import MapInfo
+from maplelens.tools.path_arrow.maps import MapInfo, Portal
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,24 @@ class Trip:
         here = self.maps[self.steps[self.index].map_id]
         if self.steps[self.index].cab:
             return (here.cab.x, here.cab.y)
-        nxt = self.steps[self.index + 1].map_id
-        hits = [p for p in here.portals if p.to == nxt]
-        best = min(hits, key=lambda p: math.dist(player, (p.x, p.y)))
+        best = self._nearest(player)
         return (best.x, best.y)
+
+    def _next_portals(self) -> list[Portal]:
+        """This map's portals to the next map; empty on a cab step, arrived or no route."""
+        if self.steps is None or self.arrived or self.steps[self.index].cab:
+            return []
+        here, nxt = self.steps[self.index].map_id, self.steps[self.index + 1].map_id
+        return [p for p in self.maps[here].portals if p.to == nxt]
+
+    def _nearest(self, player: tuple[float, float]) -> Portal:
+        return min(self._next_portals(), key=lambda p: math.dist(player, (p.x, p.y)))
+
+    def hidden_next(self, player: tuple[float, float] | None) -> bool:
+        """The portal to take is hidden; with no position, every portal to the next map is."""
+        hits = self._next_portals()
+        if not hits:
+            return False
+        if player is None:
+            return all(p.hidden for p in hits)
+        return self._nearest(player).hidden

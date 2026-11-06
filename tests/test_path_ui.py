@@ -15,7 +15,7 @@ OPEN = "Open your minimap to see the arrow"
 
 
 def mk(id, name, portals=(), street="Road", minimap=MM, npcs=()):
-    portals = tuple(Portal(x, y, t) for x, y, t in portals)
+    portals = tuple(Portal(*p) for p in portals)
     return MapInfo(id, street, name, False, minimap, portals, None, npcs)
 
 
@@ -37,6 +37,7 @@ MAPS = {
         mk("K", "Keep", [(0, 0, "B")], minimap=Minimap(6400, 1600, 800, 800), npcs=((0, 0),) * 3),
         mk("T1", "Twin", [(0, 0, "B")], street="Hill"),
         mk("T2", "Twin", [(0, 0, "B")], street="Dale"),
+        mk("H", "Hollow", [(300, -300, "B", True)]),  # a hidden portal
     ]
 }
 
@@ -445,3 +446,13 @@ def test_clicking_a_match_picks_it(make):
     assert m.isHidden()  # and the list closes on it
     assert m.currentItem() is second  # what Start goes to
     assert tool._start.isEnabled()
+
+
+def test_hidden_portal_hint(make):
+    from maplelens.tools.path_arrow.ui import HIDDEN
+
+    tool = make()
+    go(tool, "H", "B")
+    feed(tool, title("H"), 1.0)
+    assert tool._message.text() == HIDDEN and tool._message.isVisibleTo(tool.tab)
+    assert tool.arrow.isVisible()

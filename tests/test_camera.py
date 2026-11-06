@@ -12,7 +12,7 @@ from maplelens.tools.path_arrow.camera import (
     to_screen,
     to_world,
 )
-from maplelens.tools.path_arrow.maps import MapInfo, Minimap, load
+from maplelens.tools.path_arrow.maps import MapInfo, Minimap, Portal, load
 
 MM = Minimap(2000, 1000, 1000, 500)
 VIEW = (1366, 768)
@@ -169,3 +169,22 @@ def test_by_size_tells_same_title_maps_apart():
     assert by_size(maps, "s / n", MinimapView((60, 40), (1.0, 1.0), ())) is None
     twins = dict(maps, d=MapInfo("d", "s", "n", True, Minimap(1408, 760, 0, 0), (), None))
     assert by_size(twins, "s / n", MinimapView((88, 47), (1.0, 1.0), ())) is None
+
+
+def test_hidden_portals_predict_no_spiral():
+    # Two portals in view at scroll 37: as spirals they place the player; hidden, they
+    # draw nothing, so spirals seen there can't be theirs.
+    spots = ((400, 0), (1600, -320))
+    seen = tuple(
+        ((x + BIG_MM.cx) / 16 + camera.PORTAL_DX - 37, (y + BIG_MM.cy) / 16 + camera.PORTAL_DY)
+        for x, y in spots
+    )
+    view = MinimapView((200, 100), (100.0, 50.0), (), seen)
+
+    def info(hidden):
+        portals = tuple(Portal(x, y, "2", hidden) for x, y in spots)
+        return MapInfo("1", "s", "n", True, BIG_MM, portals, None)
+
+    assert player_world(view, info(False)) == approx(((100 + 37) * 16 - 800, 50 * 16 - 800))
+    assert player_world(view, info(True)) is None
+    assert can_place(view, info(False)) and not can_place(view, info(True))

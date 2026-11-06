@@ -39,6 +39,7 @@ ARROW_SIZE = 36  # logical px, the arrow's square
 ARRIVED_S = 5.0  # "Arrived at …" stays this long
 UNREAD_S = 3.0  # map name unreadable this long before asking for the minimap
 OPEN = "Open your minimap to see the arrow"
+HIDDEN = "Hidden portal: stand on it and press ↑"
 MATCH_ROWS = 3  # visible matches; the list scrolls for the rest
 # Mockup 3's route list and mockup 2's field.
 _DONE, _AHEAD, _NUM, _HERE_BG, _FIELD, _DARK = (
@@ -304,7 +305,8 @@ class PathArrowTool:
         self._choose.setVisible(self.trip is None and self._arrived is None)
         self._running.setVisible(self.trip is not None)
         world = self._world()
-        why = self._why(world)
+        hint = HIDDEN if self.trip and self.trip.hidden_next(world) else ""
+        why = "\n".join(t for t in (self._why(world), hint) if t)
         self._message.setText(why)
         self._message.setVisible(bool(why))
         known = self._here is not None and not self._unread()
