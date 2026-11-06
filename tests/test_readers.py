@@ -179,7 +179,7 @@ def test_exp_one_px_noise_is_never_another_value():
             assert read_exp(out) in (None, EXPECTED[name]), (xx, yy)
 
 
-needs_ocr = pytest.mark.skipif(ocr.engine() is None, reason="no Windows OCR engine")
+needs_ocr = pytest.mark.skipif(ocr.engine() is None, reason="no OCR engine")
 
 
 def test_crop_maps_the_normalized_box_onto_the_native_shot():

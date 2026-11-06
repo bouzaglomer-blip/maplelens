@@ -1,6 +1,7 @@
 """MapleLens's own windows: a click-through layer over the game and small draggable boxes."""
 
 import ctypes
+import sys
 from collections.abc import Callable
 from ctypes import wintypes
 
@@ -42,6 +43,8 @@ def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
 
 def exclude_from_capture(widget: QWidget) -> None:
     """Keep one of MapleLens's own windows out of screen grabs, so readers never see it."""
+    if sys.platform != "win32":
+        return
     set_affinity = ctypes.windll.user32.SetWindowDisplayAffinity
     set_affinity.argtypes = [wintypes.HWND, wintypes.DWORD]
     set_affinity(int(widget.winId()), _WDA_EXCLUDEFROMCAPTURE)  # returns 0 on old Windows: ignore

@@ -1,6 +1,6 @@
-"""Words (map name, class) via the OCR built into Windows: no example letters needed."""
+"""Words (map name, class) via the OCR built into the system: no example letters needed."""
 
-import asyncio
+import sys
 from functools import cache, lru_cache
 
 import cv2
@@ -16,17 +16,23 @@ PAD = 12
 MARGIN = 1
 
 
+def _backend():
+    """The platform OCR module, or None where there is none (or its import fails)."""
+    try:
+        if sys.platform == "win32":
+            from maplelens.readers import ocr_win
+
+            return ocr_win
+    except Exception:
+        pass
+    return None
+
+
 @cache
 def engine():
-    """An English OCR engine (the game text is English), else the user-profile one, else None."""
-    try:
-        from winrt.windows.globalization import Language
-        from winrt.windows.media.ocr import OcrEngine
-
-        en = OcrEngine.try_create_from_language(Language("en-US"))
-        return en or OcrEngine.try_create_from_user_profile_languages()
-    except Exception:  # missing packages, or WinRT failing (old Windows, no OCR feature)
-        return None
+    """The platform OCR engine, or None when the system has none."""
+    backend = _backend()
+    return backend.engine() if backend else None
 
 
 def crop(frame: np.ndarray, native: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
@@ -45,24 +51,14 @@ def crop(frame: np.ndarray, native: np.ndarray, box: tuple[int, int, int, int]) 
 
 @lru_cache(maxsize=64)
 def _recognize(shape: tuple[int, int], data: bytes) -> list[str]:
-    from winrt.windows.graphics.imaging import BitmapPixelFormat, SoftwareBitmap
-
     img = np.where(np.frombuffer(data, bool).reshape(shape), 0, 255).astype(np.uint8)
     img = cv2.copyMakeBorder(img, PAD, PAD, PAD, PAD, cv2.BORDER_CONSTANT, value=255)
-    h, w = img.shape
-    bmp = SoftwareBitmap.create_copy_from_buffer(img.tobytes(), BitmapPixelFormat.GRAY8, w, h)
-
-    async def run():
-        return await engine().recognize_async(bmp)
-
-    # asyncio.run, not the operation's blocking get(): get() refuses to block the Qt
-    # main thread (a single-threaded apartment).
-    return [line.text.strip() for line in asyncio.run(run()).lines]
+    return _backend().recognize(img)
 
 
 def read_lines(m: np.ndarray) -> list[str] | None:
     """Text lines of a bool ink mask (True = ink, already at the OCR scale, see crop),
-    or None when Windows has no OCR engine. Cached by mask bytes, 64 entries."""
+    or None when the system has no OCR engine. Cached by mask bytes, 64 entries."""
     if engine() is None:
         return None
     rows, cols = np.flatnonzero(m.any(axis=1)), np.flatnonzero(m.any(axis=0))

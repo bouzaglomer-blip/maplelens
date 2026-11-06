@@ -13,14 +13,7 @@ from pathlib import Path
 
 import cv2
 
-from maplelens.capture import (
-    client_rect,
-    find_window,
-    grab,
-    list_windows,
-    set_dpi_aware,
-    window_title,
-)
+from maplelens import capture
 from maplelens.store import data_dir, load_settings, save_settings
 
 
@@ -44,16 +37,18 @@ def _auto(args, out_dir: Path) -> int:
     n = black = 0
     try:
         while time.monotonic() < end:
-            hwnd = find_window(args.title)
-            rect = client_rect(hwnd) if hwnd is not None else None
+            hwnd = capture.find_window(args.title)
+            rect = capture.client_rect(hwnd) if hwnd is not None else None
             if rect is None:
                 print("skipped: window missing or minimized")
             else:
                 if n == 0:
-                    print(f"matched window: {window_title(hwnd)}")
+                    print(f"matched window: {capture.window_title(hwnd)}")
                     _remember_title(args.title)
                 n += 1
-                out, mean = _save(grab(rect), out_dir, f"{args.label}_{n:03d}_{{size}}.png")
+                out, mean = _save(
+                    capture.grab(hwnd, rect), out_dir, f"{args.label}_{n:03d}_{{size}}.png"
+                )
                 print(f"{out}  mean brightness {mean:.1f}")
                 if mean < 5:
                     black += 1
@@ -80,25 +75,25 @@ def main() -> int:
         ap.error("--every and --minutes must be positive")
     if args.every is not None and not args.title:
         ap.error("--every/--minutes need --title and --label")
-    set_dpi_aware()
+    capture.set_dpi_aware()
     if not args.title:
-        print("\n".join(list_windows()))
+        print("\n".join(capture.list_windows()))
         return 0
     out_dir = data_dir() / "grabs"
     out_dir.mkdir(exist_ok=True)
     if args.every is not None:
         return _auto(args, out_dir)  # window may appear later; missing ticks are skipped
-    hwnd = find_window(args.title)
+    hwnd = capture.find_window(args.title)
     if hwnd is None:
         print(f"no visible window with '{args.title}' in its title", file=sys.stderr)
         return 1
-    print(f"matched window: {window_title(hwnd)}")
-    rect = client_rect(hwnd)
+    print(f"matched window: {capture.window_title(hwnd)}")
+    rect = capture.client_rect(hwnd)
     if rect is None:
         print("window is minimized or gone", file=sys.stderr)
         return 1
     _remember_title(args.title)
-    out, mean = _save(grab(rect), out_dir, f"{args.label}_{{size}}.png")
+    out, mean = _save(capture.grab(hwnd, rect), out_dir, f"{args.label}_{{size}}.png")
     print(f"{out}  mean brightness {mean:.1f}")
     if mean < 5:
         print("capture returned a black frame - tell the developer")

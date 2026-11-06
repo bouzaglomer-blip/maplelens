@@ -8,7 +8,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
-from maplelens.capture import client_rect, find_window, grab, set_dpi_aware
+from maplelens import capture
 from maplelens.overlay import Box, Layer
 from maplelens.readers import read_all
 from maplelens.store import data_dir, load_settings, save_settings
@@ -57,7 +57,7 @@ def update_tools(box: Box, exp, path, reading, rect, now: float, seen: set[str])
 
 def main() -> int:
     app = QApplication(sys.argv)
-    set_dpi_aware()
+    capture.set_dpi_aware()
     path = data_dir() / "settings.json"
     settings = load_settings(path)
     title = settings["window_title"]
@@ -79,8 +79,8 @@ def main() -> int:
     def tick() -> None:
         nonlocal hwnd
         now = time.time()
-        hwnd = hwnd or find_window(title)
-        rect = client_rect(hwnd) if hwnd else None
+        hwnd = hwnd or capture.find_window(title)
+        rect = capture.client_rect(hwnd) if hwnd else None
         if rect is None:
             hwnd = None  # gone or minimized: look again next tick
             layer.hide()
@@ -89,7 +89,7 @@ def main() -> int:
         layer.follow(rect)
         layer.show()
         try:
-            reading = read_all(grab(rect), now)
+            reading = read_all(capture.grab(hwnd, rect), now)
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, seen)
             reading = None
