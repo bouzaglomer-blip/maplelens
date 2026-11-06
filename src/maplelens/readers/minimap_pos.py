@@ -4,7 +4,7 @@ The minimap's map area sits in a white frame under the title. The map picture fi
 frame's height; when it is narrower than the window it is centred on see-through padding.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
@@ -51,6 +51,8 @@ class MinimapView:
     dot: tuple[float, float]  # the "you" dot's centre
     npcs: tuple[tuple[float, float], ...]  # NPC marker centres
     portals: tuple[tuple[float, float], ...] = ()  # portal spiral centres
+    # The map area itself (normalized BGR, `size` px), for matching against a map picture.
+    pixels: np.ndarray | None = field(default=None, compare=False, repr=False)
 
     @property
     def fraction(self) -> tuple[float, float]:
@@ -136,7 +138,7 @@ def read_view(frame: np.ndarray) -> MinimapView | None:
         if w == NPC_W and NPC_H[0] <= h <= NPC_H[1] and NPC_AREA[0] <= px <= NPC_AREA[1]
     )
     dot = (float(dots[0][0]), float(dots[0][1]))
-    return MinimapView((int(x1 - x0), int(y1 - y0)), dot, npcs, _portals(img))
+    return MinimapView((int(x1 - x0), int(y1 - y0)), dot, npcs, _portals(img), img.copy())
 
 
 def read_player(frame: np.ndarray) -> tuple[float, float] | None:

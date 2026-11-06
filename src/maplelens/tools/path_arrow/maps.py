@@ -1,10 +1,16 @@
-"""The bundled map data: portals, minimap geometry and cab links."""
+"""The bundled map data: portals, minimap geometry, cab links and minimap pictures."""
 
 import json
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 DATA = Path(__file__).parents[2] / "data" / "maps.json"
+# One PNG per map, named by map id: the whole minimap picture, without markers.
+PICTURES = Path(__file__).parents[2] / "data" / "minimaps"
 
 
 @dataclass(frozen=True)
@@ -12,6 +18,7 @@ class Portal:
     x: int
     y: int
     to: str
+    hidden: bool = False  # no spiral on the minimap: walk there and press up
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,20 @@ def load(path: Path = DATA) -> dict[str, MapInfo]:
             tuple((n["x"], n["y"]) for n in e["npcs"]),
         )
     return maps
+
+
+@cache
+def picture(map_id: str) -> np.ndarray | None:
+    """The map's whole minimap picture (BGRA), or None if we don't ship one.
+
+    Alpha 255 marks the solid map art; the rest is see-through in the game.
+    """
+    path = PICTURES / f"{map_id}.png"
+    if not path.is_file():
+        return None
+    # fromfile + imdecode: imread fails on non-ASCII paths
+    img = cv2.imdecode(np.fromfile(path, np.uint8), cv2.IMREAD_UNCHANGED)
+    return img if img.shape[2] == 4 else cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
 
 
 def find(maps: dict[str, MapInfo], title: str, previous: str | None) -> MapInfo | None:

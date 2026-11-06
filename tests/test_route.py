@@ -71,3 +71,30 @@ def test_target_nearest_portal():
 
 def test_target_cab_step():
     assert Trip(graph(), "A", "D", True).target((0, 0)) == (5, 6)
+
+
+def hidden_trip(portals):
+    here = MapInfo(
+        "H", "S", "H", False, None, tuple(Portal(x, 0, "B", h) for x, h in portals), None
+    )
+    maps = {"H": here, "B": mk("B", [(0, "H")])}
+    return Trip(maps, "H", "B", False)
+
+
+def test_hidden_next_follows_the_target():
+    trip = hidden_trip([(0, True), (1000, False)])
+    assert trip.hidden_next((10, 0)) is True
+    assert trip.hidden_next((990, 0)) is False
+    assert trip.hidden_next(None) is False  # not every portal to B is hidden
+
+
+def test_hidden_next_unknown_position_all_hidden():
+    assert hidden_trip([(0, True)]).hidden_next(None) is True
+
+
+def test_hidden_next_cab_step_or_arrived_is_false():
+    cab = Trip(graph(), "A", "D", True)  # leaves A by cab
+    assert cab.steps[0].cab and cab.hidden_next(None) is False
+    there = hidden_trip([(0, True)])
+    there.on_map("B")
+    assert there.arrived and there.hidden_next(None) is False

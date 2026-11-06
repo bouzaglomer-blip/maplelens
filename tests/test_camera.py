@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import cv2
+import numpy as np
+import pytest
 from pytest import approx
 
 from maplelens.readers.minimap_pos import MinimapView, read_view
@@ -8,11 +10,12 @@ from maplelens.tools.path_arrow import camera
 from maplelens.tools.path_arrow.camera import (
     by_size,
     can_place,
+    picture_scroll,
     player_world,
     to_screen,
     to_world,
 )
-from maplelens.tools.path_arrow.maps import MapInfo, Minimap, load
+from maplelens.tools.path_arrow.maps import MapInfo, Minimap, Portal, load, picture
 
 MM = Minimap(2000, 1000, 1000, 500)
 VIEW = (1366, 768)
@@ -169,3 +172,113 @@ def test_by_size_tells_same_title_maps_apart():
     assert by_size(maps, "s / n", MinimapView((60, 40), (1.0, 1.0), ())) is None
     twins = dict(maps, d=MapInfo("d", "s", "n", True, Minimap(1408, 760, 0, 0), (), None))
     assert by_size(twins, "s / n", MinimapView((88, 47), (1.0, 1.0), ())) is None
+
+
+def test_hidden_portals_predict_no_spiral():
+    # Two portals in view at scroll 37: as spirals they place the player; hidden, they
+    # draw nothing, so spirals seen there can't be theirs.
+    spots = ((400, 0), (1600, -320))
+    seen = tuple(
+        ((x + BIG_MM.cx) / 16 + camera.PORTAL_DX - 37, (y + BIG_MM.cy) / 16 + camera.PORTAL_DY)
+        for x, y in spots
+    )
+    view = MinimapView((200, 100), (100.0, 50.0), (), seen)
+
+    def info(hidden):
+        portals = tuple(Portal(x, y, "2", hidden) for x, y in spots)
+        return MapInfo("1", "s", "n", True, BIG_MM, portals, None)
+
+    assert player_world(view, info(False)) == approx(((100 + 37) * 16 - 800, 50 * 16 - 800))
+    assert player_world(view, info(True)) is None
+    assert can_place(view, info(False)) and not can_place(view, info(True))
+
+
+# The Forest North of Ellinia (010002070): 130x428 px picture, 19 hidden portals. Scrolls
+# found by the picture match and checked by eye against the picture; the bottom ones also
+# by its two portal spirals. Mid frames show no NPC and at most one spiral.
+FNE = "010002070"
+EXPECTED_SCROLL = {
+    "pos_fne_bottom_2560x1440_100.png": (0, 316),
+    "pos_fne_mid_2560x1440_100.png": (0, 271),
+    "pos_fne_top_2560x1440_100.png": (0, 0),
+    "pos_fne_bottom_1366x768_100.png": (0, 316),
+    "pos_fne_mid_1366x768_100.png": (0, 263),  # a monster shows through the minimap
+    "pos_fne_top_1366x768_100.png": (0, 0),
+}
+
+
+def fixture_view(name):
+    return read_view(cv2.imread(str(SCREENS / name)))
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED_SCROLL))
+def test_player_world_by_picture_fixtures(name):
+    view, info = fixture_view(name), load()[FNE]
+    sx, sy = EXPECTED_SCROLL[name]
+    want = ((view.dot[0] + sx) * 16 - info.minimap.cx, (view.dot[1] + sy) * 16 - info.minimap.cy)
+    assert player_world(view, info, picture(FNE)) == approx(want, abs=32)  # 2 minimap px
+
+
+def test_forest_north_mid_has_too_few_markers():
+    # Why the picture is needed: the markers alone can't place the player here.
+    assert player_world(fixture_view("pos_fne_mid_2560x1440_100.png"), load()[FNE]) is None
+
+
+def test_picture_scroll_ignores_painted_dots():
+    view = fixture_view("pos_fne_mid_2560x1440_100.png")
+    painted = view.pixels.copy()
+    disc = np.ones((6, 6), bool)  # a 24 px dot, like ours
+    for cy, cx in ((0, 0), (0, 5), (5, 0), (5, 5)):
+        disc[cy, cx] = disc[cy, abs(cx - 1)] = disc[abs(cy - 1), cx] = False
+    # Other players' red and a party member's orange, away from our own dot.
+    for (x, y), bgr in (
+        ((90, 20), (40, 40, 230)),
+        ((100, 80), (30, 140, 250)),
+        ((15, 70), (40, 40, 230)),
+    ):
+        painted[y - 3 : y + 3, x - 3 : x + 3][disc] = bgr
+    other = MinimapView(view.size, view.dot, view.npcs, view.portals, painted)
+    assert picture_scroll(other, picture(FNE)) == approx(
+        picture_scroll(view, picture(FNE)), abs=0.5
+    )
+
+
+def test_picture_scroll_repeating_picture_is_none():
+    rng = np.random.default_rng(1)
+    tile = rng.integers(0, 256, (40, 40, 4), dtype=np.uint8)
+    tile[:, :, 3] = 255
+    pic = np.tile(tile, (10, 3, 1))  # 400 x 120, the same 40x40 tile everywhere
+    view = MinimapView((100, 60), (50.0, 30.0), (), (), pic[85:145, 10:110, :3].copy())
+    assert picture_scroll(view, pic) is None
+
+
+def test_picture_scroll_wrong_map_is_none():
+    view = fixture_view("pos_fne_mid_2560x1440_100.png")
+    assert picture_scroll(view, picture("010004000")) is None  # Perion's picture
+
+
+def test_picture_and_markers_agree():
+    # Perion's red and orange rocks must not be mistaken for other players' dots.
+    for name, id in (
+        ("pos_e_2560x1440_100.png", "010000000"),
+        ("pos_f_2560x1440_100.png", "010004000"),
+    ):
+        view, info = fixture_view(name), load()[id]
+        s = picture_scroll(view, picture(id))
+        assert s is not None, name
+        assert player_world(view, info, picture(id)) == approx(player_world(view, info), abs=16)
+
+
+def test_can_place_with_picture():
+    view = MinimapView((200, 100), (100.0, 50.0), ())
+    assert not can_place(view, big(npcs=()))
+    assert can_place(view, big(npcs=()), np.zeros((100, 400, 4), np.uint8))
+
+
+def test_player_world_tree_tunnel_by_picture():
+    # The Tree Tunnel's walls are one even texture: the best scroll scores 0.0033, the
+    # next one (the tunnel's top) only 0.0116. Clearly worse by ratio, not by a fixed gap.
+    view, info = fixture_view("pos_tunnel_2560x1440_100.png"), load()["010002071"]
+    assert player_world(view, info) is None  # one spiral in view: markers can't
+    want = (view.dot[0] * 16 - info.minimap.cx, (view.dot[1] + 75) * 16 - info.minimap.cy)
+    assert player_world(view, info, picture(info.id)) == approx(want, abs=32)

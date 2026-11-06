@@ -29,7 +29,7 @@ from maplelens.overlay import (
 )
 from maplelens.readers import Reading, glyphs
 from maplelens.tools.path_arrow.camera import by_size, can_place, fits, player_world, to_screen
-from maplelens.tools.path_arrow.maps import MapInfo, find, load, search
+from maplelens.tools.path_arrow.maps import MapInfo, find, load, picture, search
 from maplelens.tools.path_arrow.route import Trip
 
 # Normalized px from the feet (the dot's world spot) up to the arrow's centre: just above
@@ -39,6 +39,7 @@ ARROW_SIZE = 36  # logical px, the arrow's square
 ARRIVED_S = 5.0  # "Arrived at …" stays this long
 UNREAD_S = 3.0  # map name unreadable this long before asking for the minimap
 OPEN = "Open your minimap to see the arrow"
+HIDDEN = "Hidden portal: stand on it and press ↑"
 MATCH_ROWS = 3  # visible matches; the list scrolls for the rest
 # Mockup 3's route list and mockup 2's field.
 _DONE, _AHEAD, _NUM, _HERE_BG, _FIELD, _DARK = (
@@ -304,7 +305,8 @@ class PathArrowTool:
         self._choose.setVisible(self.trip is None and self._arrived is None)
         self._running.setVisible(self.trip is not None)
         world = self._world()
-        why = self._why(world)
+        hint = HIDDEN if self.trip and self.trip.hidden_next(world) else ""
+        why = "\n".join(t for t in (self._why(world), hint) if t)
         self._message.setText(why)
         self._message.setVisible(bool(why))
         known = self._here is not None and not self._unread()
@@ -316,7 +318,7 @@ class PathArrowTool:
         r, here = self._r, self._here
         # Never aim with another map's minimap, so the title must be the confirmed one.
         if self.trip and here and r and r.minimap and r.map_name == self._title:
-            return player_world(r.minimap, here)
+            return player_world(r.minimap, here, picture(here.id))
         return None
 
     def _fit(self, template: str, name: str) -> str:
@@ -362,7 +364,7 @@ class PathArrowTool:
             return "No minimap on this map"
         if r.map_name is not None and r.minimap is None:
             return OPEN
-        if r.minimap is not None and not can_place(r.minimap, here):
+        if r.minimap is not None and not can_place(r.minimap, here, picture(here.id)):
             return "No arrow on this map yet"
         if world is None and r.minimap and r.map_name == self._title:
             if not fits(r.minimap, here.minimap):  # too few NPC markers in the window
