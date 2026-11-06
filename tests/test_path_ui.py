@@ -322,7 +322,7 @@ def test_tick_feeds_both_tools_and_dots_path_tab(make):
     from maplelens.tools.exp_meter.ui import ExpMeterTool
 
     path = make()
-    exp = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(":memory:"), lambda: None)
+    exp = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(":memory:"))
     box = build_box({"boxes": {}}, lambda: None, [exp, path])
     widths = set()
     for i in (0, 1):

@@ -163,7 +163,7 @@ def test_covered_level_up_never_negative():
         for dt in (0, 0.5):
             m.feed(Reading(t + dt, None, level, "Rogue", MAP))
     feed(m, 120, 60000, 30.0, level=23)
-    segs = m.pop_closed() + [m.open_segment()]
+    segs = [*m.pop_closed(), m.open_segment()]
     assert all(s.pct >= 0 and s.exp >= 0 for s in segs)
     assert segs[0].pct == pytest.approx(1.0)
     assert m.rate(150).pct_per_min > 0

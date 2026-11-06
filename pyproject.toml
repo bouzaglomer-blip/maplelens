@@ -41,4 +41,32 @@ testpaths = ["tests"]
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = [
+    "E", "F", "I", "UP", "B",
+    "C90",  # McCabe complexity
+    "PL",   # pylint: too many branches/statements/args, misc smells
+    "SIM",  # simplifiable code
+    "C4",   # comprehensions
+    "RET",  # return style
+    "PIE",  # unnecessary code
+    "PERF", # slow idioms
+    "ARG",  # unused arguments
+    "N",    # naming
+    "RUF",  # ruff's own
+]
+ignore = [
+    "PLR2004",  # magic numbers: pixel offsets and thresholds are the domain here
+    "PLR0911",  # guard-clause ladders read better than split helpers; C901 covers branching
+    "PLC0415",  # platform modules are imported inside functions on purpose
+]
+
+[tool.ruff.lint.per-file-ignores]
+# fakes mirror Qt/pyobjc names and signatures; test factories take many fields
+# RUF001: OCR misreads (dotless i) are the test data; SIM300: asserts on UPPER module constants
+"tests/**" = ["ARG", "N802", "N815", "PLR0913", "PLR0917", "RUF001", "SIM300"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pep8-naming]
+extend-ignore-names = ["*Event"]  # Qt event overrides

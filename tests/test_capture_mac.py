@@ -1,10 +1,10 @@
 import pytest
 
 pytest.importorskip("Quartz")
-import Quartz  # noqa: E402
+import Quartz
 
-from maplelens import capture_mac  # noqa: E402
-from maplelens.capture import pick_window  # noqa: E402
+from maplelens import capture_mac
+from maplelens.capture import pick_window
 
 INFOS = [
     {

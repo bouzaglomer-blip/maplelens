@@ -3,7 +3,6 @@
 import sqlite3
 import sys
 import time
-from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -87,7 +86,7 @@ class HistoryWindow(QTableWidget):
 
 
 class ExpMeterTool:
-    def __init__(self, settings: dict, conn: sqlite3.Connection, on_settings_changed: Callable):
+    def __init__(self, settings: dict, conn: sqlite3.Connection):
         self._conn = conn
         self._meter = ExpMeter(settings["idle_cutoff_s"], settings["jump_factor"])
         self._last_flush: float | None = None
@@ -140,7 +139,7 @@ class ExpMeterTool:
             save_segment(self._conn, seg)
             self._last_flush = now
 
-    def update(self, r: Reading | None, game_rect: tuple | None, now: float) -> None:
+    def update(self, r: Reading | None, _game_rect: tuple | None, now: float) -> None:
         self._meter.feed(r)
         if self._last_flush is None:
             self._last_flush = now

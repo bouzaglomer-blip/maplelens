@@ -58,7 +58,7 @@ def normalize(frame: np.ndarray) -> np.ndarray:
 def _anchor_names(name: str) -> list[str]:
     """Template stems for anchor `name`: <name>.png and variants <name>_<digits>.png."""
     if name not in _anchors:
-        paths = [TEMPLATES / f"{name}.png"] + sorted(TEMPLATES.glob(f"{name}_[0-9]*.png"))
+        paths = [TEMPLATES / f"{name}.png", *sorted(TEMPLATES.glob(f"{name}_[0-9]*.png"))]
         _anchors[name] = [p.stem for p in paths if p.exists()]
         if not _anchors[name]:
             raise FileNotFoundError(TEMPLATES / f"{name}.png")
@@ -73,9 +73,9 @@ def find_anchor(frame: np.ndarray, name: str, threshold: float = 0.9) -> tuple[i
         i, (x, y) = _last_hit[name]
         th, tw = tpls[i].shape[:2]
         crop = frame[y : y + th, x : x + tw]
-        if crop.shape == tpls[i].shape:
-            if cv2.matchTemplate(crop, tpls[i], cv2.TM_CCOEFF_NORMED)[0, 0] >= EXACT:
-                return x, y
+        same = crop.shape == tpls[i].shape
+        if same and cv2.matchTemplate(crop, tpls[i], cv2.TM_CCOEFF_NORMED)[0, 0] >= EXACT:
+            return x, y
     best, hit = threshold, None
     for i, tpl in enumerate(tpls):
         if frame.shape[0] < tpl.shape[0] or frame.shape[1] < tpl.shape[1]:

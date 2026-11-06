@@ -10,7 +10,7 @@ def pick_window(titles: list[tuple[int, str]], title: str) -> int | None:
 
 
 if sys.platform == "win32":
-    from maplelens.capture_win import (  # noqa: F401
+    from maplelens.capture_win import (
         client_rect,
         ensure_access,
         find_window,
