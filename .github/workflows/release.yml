@@ -1,0 +1,70 @@
+# Publishes MapleLens-Setup-X.Y.Z.exe when main holds a version that has no vX.Y.Z tag yet.
+# Merging the PR from prepare-release.yml is the usual way that happens. A failure in any
+# step before the last one creates no tag and no release.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One release run at a time, so two pushes can't race to the same tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      released: ${{ steps.read.outputs.released }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$version is already released, nothing to do"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "v$version has no tag yet: releasing it"
+          fi
+
+  release:
+    needs: version
+    if: needs.version.outputs.released == 'false'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Inno Setup 6
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+      - run: uv sync --locked --group build
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run python scripts/check_screen_only.py
+      - run: uv run pytest
+      - run: uv run --group build python scripts/build_installer.py
+      - name: Tag and publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # gh uploads the exe to a draft and publishes it (creating the tag) only after
+        run: >-
+          gh release create "v$VERSION" "dist/MapleLens-Setup-$VERSION.exe"
+          --target "$GITHUB_SHA" --title "MapleLens $VERSION" --generate-notes

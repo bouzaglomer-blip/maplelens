@@ -328,6 +328,9 @@ can't race to the same tag.
 - [ ] A forced failure (e.g. a deleted template on a test branch merged to the fork's main)
       → no tag, no Release.
 
+*(2026-11-06: `release.yml` written; `tests/test_release_workflow.py` keeps its checks in
+step with `ci.yml` and the publish step last. The three fork runs are still to do.)*
+
 **Verification:** the three fork runs; links in the PR description.
 
 **Dependencies:** T8. **Files:** `.github/workflows/release.yml`. **Scope:** S–M.
