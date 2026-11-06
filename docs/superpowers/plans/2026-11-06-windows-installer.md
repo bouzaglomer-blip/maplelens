@@ -238,8 +238,9 @@ when there's no console (`sys.stderr` is `None` in a windowed exe).
 (the picker list may need a small helper in `overlay.py`). **Scope:** S–M.
 
 ### Checkpoint B: first-run works
-- [ ] T4–T6 done; four checks; CI green on Windows and macOS (on the fork).
-- [ ] Mac behaviour from source unchanged apart from first-run (Mac CI is the check; Daniel
+- [x] T4–T6 done; four checks; CI green on Windows and macOS (on the fork).
+      *(2026-11-06: both jobs green at dcff3de, [run 42291074586](https://github.com/dbeilin/maplelens/actions/runs/42291074586).)*
+- [x] Mac behaviour from source unchanged apart from first-run (Mac CI is the check; Daniel
       has no Mac, which the PR description will say).
 
 ---
@@ -301,8 +302,11 @@ version and writes `dist\MapleLens-Setup-X.Y.Z.exe`.
 `scripts/build_installer.py`. **Scope:** M.
 
 ### Checkpoint C: the installer works
-- [ ] Success criteria 1–4 of the spec met by hand.
-- [ ] Sizes and Sandbox results written down for the PR description.
+- [x] Success criteria 1–4 of the spec met by hand.
+      *(1: Windows Sandbox, T8. 2: T4–T6 live checks. 3: the frozen exe against the source
+      run, T2; the installed copy is the same files but wasn't run against the game.
+      4: the 0.1.0 → 0.1.1 upgrade, T8.)*
+- [x] Sizes and Sandbox results written down for the PR description.
 
 ---
 
@@ -409,9 +413,9 @@ PR). Harness design: one line noting packaging is done.
 `docs/superpowers/specs/2026-11-01-maplelens-harness-design.md`. **Scope:** S.
 
 ### Checkpoint D: done
-- [ ] All six spec success criteria met; evidence (fork run links, Sandbox notes, sizes) in
+- [x] All six spec success criteria met; evidence (fork run links, Sandbox notes, sizes) in
       the PR descriptions.
-- [ ] One PR open to `or-keren/maplelens`, linking the spec, with the evidence above, the
+- [x] One PR open to `or-keren/maplelens`, linking the spec, with the evidence above, the
       `AppId` / name / icon questions, the one setting the owner must enable, the
       required-checks caveat, and what merging releases (see Open questions).
 

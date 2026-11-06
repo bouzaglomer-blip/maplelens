@@ -65,6 +65,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         # gh uploads the exe to a draft and publishes it (creating the tag) only after
+        # the upload succeeds, so a failed upload leaves no tag
         run: >-
           gh release create "v$VERSION" "dist/MapleLens-Setup-$VERSION.exe"
           --target "$GITHUB_SHA" --title "MapleLens $VERSION" --generate-notes
