@@ -25,8 +25,9 @@ is what matters, and pull requests that break it are not accepted.
 
 ## Requirements
 
-- Windows 10/11
-- The game running **windowed or borderless**. True fullscreen hides overlay windows.
+- Windows 10/11, or macOS with MapleStory Classic from Nexon's Mac launcher
+- The game running **windowed or borderless** (windowed only on the Mac). True fullscreen hides overlay windows.
+- On the Mac, the first run asks for Screen Recording for the app you start MapleLens from (Terminal, say).
 
 ## Roadmap
 
@@ -43,6 +44,8 @@ Start the game windowed or borderless, then save its window title once and run:
 uv run python scripts/grab.py --title <game title> --label first
 uv run maplelens
 ```
+
+On the Mac the game's window title is `MapleStory`, so use `--title MapleStory`.
 
 Drag the box where you want it. History opens the per-map table.
 

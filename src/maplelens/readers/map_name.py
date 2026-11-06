@@ -4,6 +4,14 @@ The title has two forms. Normal: a "MINI MAP" header bar, then region and name o
 text lines. Minimized (and small indoor maps): one bar reading "Region : Name".
 """
 
+import json
+import re
+import sys
+from collections.abc import Collection
+from difflib import SequenceMatcher
+from functools import cache, lru_cache
+from pathlib import Path
+
 import numpy as np
 
 from maplelens.readers import glyphs, ocr
@@ -29,6 +37,38 @@ BAR = (221, 221, 221)
 BAR_INK_LO, BAR_INK_HI = (0, 0, 0), (150, 150, 150)
 # Max per-channel step from PANEL / BAR that still counts as plain background.
 BG_TOL = 6
+
+# Vision misreads letters ("Sumset", "Harhor"); on macOS the text snaps to the known titles.
+SNAP = sys.platform == "darwin"
+# A snap needs a similarity of at least SNAP_MIN and a lead of SNAP_LEAD over the runner-up.
+SNAP_MIN, SNAP_LEAD = 0.9, 0.1
+# Vision reads a trailing roman numeral as digits.
+ROMAN = {"1": "I", "11": "II", "111": "III"}
+
+
+@cache
+def known_titles() -> frozenset[str]:
+    data = Path(__file__).parents[1] / "data" / "maps.json"
+    return frozenset(f"{m['street']} / {m['name']}" for m in json.loads(data.read_text("utf-8")))
+
+
+def snap_title(text: str, titles: Collection[str]) -> str:
+    """`text` as the known title it most clearly resembles, else unchanged."""
+    if text in titles:
+        return text
+    roman = re.sub(r"\b(1|11|111)$", lambda m: ROMAN[m[1]], text)
+    if roman in titles:
+        return roman
+    scored = sorted(((SequenceMatcher(None, text, t).ratio(), t) for t in titles), reverse=True)
+    if len(scored) < 2:
+        return text
+    (best, title), (second, _) = scored[:2]
+    return title if best >= SNAP_MIN and best - second >= SNAP_LEAD else text
+
+
+@lru_cache(maxsize=256)
+def _snap(text: str) -> str:
+    return snap_title(text, known_titles())
 
 
 def _plain(row: np.ndarray, colour: tuple[int, int, int]) -> int:
@@ -83,6 +123,8 @@ def read_map_name(frame: np.ndarray, native: np.ndarray | None = None) -> str | 
     band = frame[:BAND_H, :BAND_W]
     hit = glyphs.find_anchor(band, "minimap_title")
     if hit is not None:
-        return _normal(frame, native, *hit)
-    hit = glyphs.find_anchor(band, "minimap_bar")
-    return None if hit is None else _bar(frame, native, *hit)
+        name = _normal(frame, native, *hit)
+    else:
+        hit = glyphs.find_anchor(band, "minimap_bar")
+        name = None if hit is None else _bar(frame, native, *hit)
+    return _snap(name) if SNAP and name is not None else name

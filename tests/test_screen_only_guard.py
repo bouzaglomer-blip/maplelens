@@ -26,8 +26,8 @@ def test_flags_win32_name(tmp_path):
     f.write_text("x = 1\nk32.ReadProcessMemory(h)\nuser32.SendMessageW(w)\n", encoding="utf-8")
     r = run_guard(str(f))
     assert r.returncode == 2
-    assert "bad.py:2: banned Win32 call 'ReadProcessMemory'" in r.stderr
-    assert "bad.py:3: banned Win32 call 'SendMessage'" in r.stderr
+    assert "bad.py:2: banned system call 'ReadProcessMemory'" in r.stderr
+    assert "bad.py:3: banned system call 'SendMessage'" in r.stderr
 
 
 def test_clean_file_passes(tmp_path):
@@ -56,7 +56,7 @@ def test_syntax_error_does_not_crash(tmp_path):
     f.write_text("def broken(:\n    OpenProcess(1)\n", encoding="utf-8")
     r = run_guard(str(f))
     assert "Traceback" not in r.stderr
-    assert r.returncode == 2 and "half.py:2: banned Win32 call 'OpenProcess'" in r.stderr
+    assert r.returncode == 2 and "half.py:2: banned system call 'OpenProcess'" in r.stderr
 
 
 def test_directory_arg_walks_py_files(tmp_path):
@@ -93,8 +93,8 @@ def test_flags_game_input_libs_and_message_variants(tmp_path):
     assert r.returncode == 2
     assert "bad.py:1: banned import 'pydirectinput'" in r.stderr
     assert "bad.py:2: banned import 'ahk'" in r.stderr
-    assert "bad.py:3: banned Win32 call 'SendMessageTimeout'" in r.stderr
-    assert "bad.py:4: banned Win32 call 'PostThreadMessage'" in r.stderr
+    assert "bad.py:3: banned system call 'SendMessageTimeout'" in r.stderr
+    assert "bad.py:4: banned system call 'PostThreadMessage'" in r.stderr
 
 
 def test_flags_banned_namespace_by_dotted_prefix(tmp_path):
@@ -158,3 +158,75 @@ def test_clean_lock_passes(tmp_path):
 
 def test_repo_is_clean_from_any_cwd(tmp_path):
     assert run_guard(cwd=tmp_path).returncode == 0
+
+
+def test_flags_mac_name(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "Quartz.CGEventPost(0, e)\n"
+        "CGEventCreateKeyboardEvent(None, 0, True)\n"
+        "task_for_pid(t, p, r)\n"
+        "AXUIElementPerformAction(el, a)\n"
+        "CGWarpMouseCursorPosition(p)\n"
+        "app.activateWithOptions_(0)\n"
+        "CGPostKeyboardEvent(p, 0, 0, True)\n"
+        "CGPostMouseEvent(p, 1, 1, True)\n"
+        "CGPostScrollWheelEvent(1, 5)\n"
+        "CGEventTapPostEvent(proxy, e)\n"
+        "CGDisplayMoveCursorToPoint(d, p)\n"
+        "app.activateFromApplication_options_(a, 0)\n"
+        "app.activateFromApplication(a)\n"
+        'subprocess.run(["osascript", "-e", "x"])\n',
+        encoding="utf-8",
+    )
+    r = run_guard(str(f))
+    assert r.returncode == 2
+    names = [
+        "CGEventPost",
+        "CGEventCreateKeyboardEvent",
+        "task_for_pid",
+        "AXUIElementPerformAction",
+        "CGWarpMouseCursorPosition",
+        "activateWithOptions",
+        "CGPostKeyboardEvent",
+        "CGPostMouseEvent",
+        "CGPostScrollWheelEvent",
+        "CGEventTapPostEvent",
+        "CGDisplayMoveCursorToPoint",
+        "activateFromApplication_options",
+        "activateFromApplication",
+        "osascript",
+    ]
+    for n, name in enumerate(names, 1):
+        assert f"bad.py:{n}: banned system call '{name}'" in r.stderr
+
+
+def test_flags_mac_modules(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "import ApplicationServices\n"
+        "from HIServices import AXUIElementCreateApplication\n"
+        "import ScriptingBridge\n"
+        "import applescript\n"
+        "import appscript\n",
+        encoding="utf-8",
+    )
+    r = run_guard(str(f))
+    assert r.returncode == 2
+    names = ["ApplicationServices", "HIServices", "ScriptingBridge", "applescript", "appscript"]
+    for n, name in enumerate(names, 1):
+        assert f"bad.py:{n}: banned import '{name}'" in r.stderr
+
+
+def test_mac_lookalikes_not_flagged(tmp_path):
+    f = tmp_path / "ok.py"
+    f.write_text(
+        "import Quartz\n"
+        "import Vision\n"
+        "from AppKit import NSApplication\n"
+        "CGWindowListCreateImage(r, o, w, i)\n"
+        "CGRequestScreenCaptureAccess()\n"
+        "NSApp.activateIgnoringOtherApps_(True)\n",
+        encoding="utf-8",
+    )
+    assert run_guard(str(f)).returncode == 0

@@ -1,11 +1,12 @@
 """MapleLens's own windows: a click-through layer over the game and small draggable boxes."""
 
 import ctypes
+import sys
 from collections.abc import Callable
 from ctypes import wintypes
 
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QAction, QColor, QFont, QPainter
+from PySide6.QtGui import QAction, QColor, QFont, QGuiApplication, QPainter
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -21,7 +22,7 @@ _WDA_EXCLUDEFROMCAPTURE = 0x11
 _INSET = 40  # px from the game's top-right corner for a box with no saved position
 
 # The box's look (mockup 1), shared by every tab: grey labels, larger bold values.
-FONT = "Segoe UI"
+FONT = "Helvetica Neue" if sys.platform == "darwin" else "Segoe UI"
 LABEL_PT, LABEL_COLOR = 9, "#9fb0c8"
 VALUE_PT, VALUE_COLOR = 12, "#ffffff"
 ACCENT = "#ffcc33"
@@ -40,8 +41,18 @@ def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
     return px / dpr, py / dpr
 
 
-def exclude_from_capture(widget: QWidget) -> None:
-    """Keep one of MapleLens's own windows out of screen grabs, so readers never see it."""
+def native_setup(widget: QWidget) -> None:
+    """Platform setup for one of MapleLens's own windows, run each time it's shown.
+
+    Windows: keep it out of screen grabs, so readers never see it. Mac: a panel that stays
+    visible over the game and leaves it the keyboard.
+    """
+    if sys.platform == "darwin" and QGuiApplication.platformName() == "cocoa":
+        from maplelens import overlay_mac  # AppKit only exists on the Mac
+
+        overlay_mac.make_panel(widget)
+    if sys.platform != "win32":
+        return
     set_affinity = ctypes.windll.user32.SetWindowDisplayAffinity
     set_affinity.argtypes = [wintypes.HWND, wintypes.DWORD]
     set_affinity(int(widget.winId()), _WDA_EXCLUDEFROMCAPTURE)  # returns 0 on old Windows: ignore
@@ -66,7 +77,7 @@ class Layer(QWidget):
         self.setGeometry(round(x), round(y), round(pw), round(ph))
 
     def showEvent(self, event):
-        exclude_from_capture(self)
+        native_setup(self)
         super().showEvent(event)
 
 
@@ -133,6 +144,10 @@ class Box(QWidget):
         """Let the box take keyboard focus (only while a text field needs it)."""
         self.setWindowFlag(Qt.WindowDoesNotAcceptFocus, not on)
         self.show()  # changing a window flag hides a shown window
+        if not on and sys.platform == "darwin":
+            from maplelens import overlay_mac
+
+            overlay_mac.release_keyboard()
 
     def add_menu_item(self, label: str, callback: Callable[[], None]) -> None:
         """An item in the box's right-click menu."""
@@ -158,7 +173,7 @@ class Box(QWidget):
             self.move(target)
 
     def showEvent(self, event):
-        exclude_from_capture(self)
+        native_setup(self)
         super().showEvent(event)
 
     def paintEvent(self, event):

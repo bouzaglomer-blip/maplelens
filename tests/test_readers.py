@@ -8,7 +8,7 @@ from maplelens.readers import ExpValue, Reading, glyphs, job, map_name, ocr, rea
 from maplelens.readers.exp import EXP_DX, EXP_DY, EXP_H, EXP_INK_HI, EXP_INK_LO, EXP_W, read_exp
 from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
-from maplelens.readers.map_name import read_map_name
+from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
 
 SCREENS = Path(__file__).parent / "fixtures" / "screens"
@@ -65,6 +65,11 @@ EXPECTED = {
     "minimap_nominimap_2560x1440_100.png": None,  # game scene pasted over the minimap
     "minimap_a_1366x768_100.png": "Kerning City Subway / Transfer Area",
     "minimap_a_1920x1080_100.png": "Kerning City Subway / Transfer Area",
+    # macOS: the Retina capture, 2732x1536 in the game, normalized to 768 rows.
+    "exp_mac_2732x1536_100.png": ExpValue(23749, 43.26),
+    "level_mac_2732x1536_100.png": 26,
+    "job_mac_2732x1536_100.png": "Rogue",
+    "minimap_mac_2732x1536_100.png": "Dungeon / Sleepywood",
 }
 
 # Player position fixtures: the whole minimap panel, map area included; other players'
@@ -179,7 +184,7 @@ def test_exp_one_px_noise_is_never_another_value():
             assert read_exp(out) in (None, EXPECTED[name]), (xx, yy)
 
 
-needs_ocr = pytest.mark.skipif(ocr.engine() is None, reason="no Windows OCR engine")
+needs_ocr = pytest.mark.skipif(ocr.engine() is None, reason="no OCR engine")
 
 
 def test_crop_maps_the_normalized_box_onto_the_native_shot():
@@ -254,6 +259,63 @@ def test_job_snaps_to_known_job(monkeypatch, lines, want):
 def test_map_name_from_ocr_lines(monkeypatch, name, lines, want):
     monkeypatch.setattr(map_name.ocr, "read_lines", lambda m: lines)
     assert read_map_name(screen(name)) == want
+
+
+V = "Victoria Road / "
+
+
+@pytest.mark.parametrize(
+    "text, want",
+    [
+        (V + "Sumset Sky", V + "Sunset Sky"),
+        (V + "Lithı Harhor", V + "Lith Harbor"),
+        (V + "Lith Harlor", V + "Lith Harbor"),
+        (
+            V + "Construction Site Nortlı of Kerning City",
+            V + "Construction Site North of Kerning City",
+        ),
+        (V + "kerning City", V + "Kerning City"),
+        ("Hidden Street / ist Accompaniment <Bonus>", "Hidden Street / 1st Accompaniment <Bonus>"),
+    ],
+)
+def test_snap_misreads(text, want):
+    assert snap_title(text, known_titles()) == want
+
+
+@pytest.mark.parametrize(
+    "text, want",
+    [
+        ("Warning Street / The Swamp of Despair 1", "Warning Street / The Swamp of Despair I"),
+        ("Warning Street / The Swamp of Despair 11", "Warning Street / The Swamp of Despair II"),
+        ("Warning Street / The Swamp of Despair I", "Warning Street / The Swamp of Despair I"),
+        ("Warning Street / The Swamp of Despair II", "Warning Street / The Swamp of Despair II"),
+    ],
+)
+def test_snap_roman_siblings(text, want):
+    assert snap_title(text, known_titles()) == want
+
+
+@pytest.mark.parametrize("text", [V + "Zzyzx Hollow", "A b / C"])
+def test_snap_unknown_map_keeps_text(text):
+    assert snap_title(text, known_titles()) == text
+
+
+def test_snap_exact_is_kept():
+    text = "Kerning City Subway / Line 1 <Area 1>"
+    assert snap_title(text, known_titles()) == text
+
+
+def test_snap_needs_a_lead_over_runner_up():
+    # near-tie between <Area 1>/<Area 3> style siblings must stay unsnapped (SNAP_LEAD)
+    text = "Kerning City Subway / Line 1 cArea 13"
+    assert snap_title(text, known_titles()) == text
+
+
+@pytest.mark.parametrize("snap, want", [(True, V + "Sunset Sky"), (False, V + "Sumset Sky")])
+def test_map_name_snaps_only_on_mac(monkeypatch, snap, want):
+    monkeypatch.setattr(map_name.ocr, "read_lines", lambda m: ["Victoria Road", "Sumset Sky"])
+    monkeypatch.setattr(map_name, "SNAP", snap)
+    assert read_map_name(screen("minimap_a_1366x768_100.png")) == want
 
 
 def _job_box(img):
@@ -391,3 +453,23 @@ def test_read_all_fills_player():
     assert got.player is not None
     assert got.player == read_player(frame)
     assert got.minimap is not None and got.minimap == read_view(frame)
+
+
+def test_mac_vision_request_failure_raises(monkeypatch):
+    vision = pytest.importorskip("Vision")
+    from maplelens.readers import ocr_mac
+
+    class Failing:
+        @classmethod
+        def alloc(cls):
+            return cls()
+
+        def initWithData_options_(self, data, options):
+            return self
+
+        def performRequests_error_(self, requests, error):
+            return False, "boom"
+
+    monkeypatch.setattr(vision, "VNImageRequestHandler", Failing)
+    with pytest.raises(RuntimeError, match="boom"):
+        ocr_mac.recognize(np.full((40, 40), 255, np.uint8))

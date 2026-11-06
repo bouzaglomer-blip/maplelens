@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from pytest import approx
 
@@ -296,7 +298,9 @@ def test_long_names_elide_to_the_box_width(make):
     box.add_tab("Path", tool.tab)
     box.show()  # a shown box's pages size from their raw hints
     feed(tool, title("L"))
-    assert tool._header.text().startswith("From: The Very") and "…" in tool._header.text()
+    # Mac fonts are wider, so fewer letters fit before the cut
+    prefix = "From: The Very" if sys.platform == "win32" else "From: The"
+    assert tool._header.text().startswith(prefix) and "…" in tool._header.text()
     assert tool._header.text().endswith("(where you are)")
     tool._search.setText("r")  # the full, scrolling list
     width = ui.TAB_W + 24  # the box's 12 px side margins

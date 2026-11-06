@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import sys
 from pathlib import Path
 
 DEFAULTS = {
@@ -15,7 +16,10 @@ DEFAULTS = {
 
 
 def data_dir() -> Path:
-    d = Path(os.environ["APPDATA"]) / "MapleLens"
+    if sys.platform == "darwin":
+        d = Path.home() / "Library/Application Support/MapleLens"
+    else:
+        d = Path(os.environ["APPDATA"]) / "MapleLens"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

@@ -1,5 +1,6 @@
 """MapleLens entry point: watch the game window and run the tools."""
 
+import os
 import sys
 import time
 import traceback
@@ -8,7 +9,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
-from maplelens.capture import client_rect, find_window, grab, set_dpi_aware
+from maplelens import capture
 from maplelens.overlay import Box, Layer
 from maplelens.readers import read_all
 from maplelens.store import data_dir, load_settings, save_settings
@@ -56,8 +57,18 @@ def update_tools(box: Box, exp, path, reading, rect, now: float, seen: set[str])
 
 
 def main() -> int:
+    if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
+        os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
+        os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
     app = QApplication(sys.argv)
-    set_dpi_aware()
+    if sys.platform == "darwin":
+        from maplelens import overlay_mac
+
+        overlay_mac.make_accessory()
+        app.processEvents()  # finish launching first: a window shown before that activates us
+    capture.set_dpi_aware()
+    if not capture.ensure_access():
+        return 1
     path = data_dir() / "settings.json"
     settings = load_settings(path)
     title = settings["window_title"]
@@ -79,8 +90,8 @@ def main() -> int:
     def tick() -> None:
         nonlocal hwnd
         now = time.time()
-        hwnd = hwnd or find_window(title)
-        rect = client_rect(hwnd) if hwnd else None
+        hwnd = hwnd or capture.find_window(title)
+        rect = capture.client_rect(hwnd) if hwnd else None
         if rect is None:
             hwnd = None  # gone or minimized: look again next tick
             layer.hide()
@@ -89,7 +100,7 @@ def main() -> int:
         layer.follow(rect)
         layer.show()
         try:
-            reading = read_all(grab(rect), now)
+            reading = read_all(capture.grab(hwnd, rect), now)
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, seen)
             reading = None
