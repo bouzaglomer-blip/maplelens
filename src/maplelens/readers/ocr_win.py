@@ -1,10 +1,12 @@
 """Windows OCR backend: the engine built into Windows, no example letters needed."""
 
 import asyncio
+from functools import cache
 
 import numpy as np
 
 
+@cache
 def engine():
     """An English OCR engine (the game text is English), else the user-profile one, else None."""
     try:

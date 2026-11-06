@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from maplelens.store import DEFAULTS, data_dir, load_settings, save_settings
 
 
@@ -21,7 +23,7 @@ def test_corrupt_settings_gives_defaults(tmp_path):
 
 def test_data_dir_mac(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.platform", "darwin")
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)  # HOME is ignored on Windows
     want = tmp_path / "Library/Application Support/MapleLens"
     assert data_dir() == want
     assert want.is_dir()
