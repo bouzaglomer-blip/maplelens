@@ -5,16 +5,18 @@ import sys
 import time
 import traceback
 from collections.abc import Callable
+from importlib.metadata import version
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from maplelens import capture
 from maplelens.overlay import Box, Layer
-from maplelens.readers import read_all
+from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.exp_meter.history import open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
+from maplelens.tools.path_arrow import maps
 from maplelens.tools.path_arrow.ui import PathArrowTool
 
 _TICK_MS = 500
@@ -58,7 +60,28 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
     box.set_tab_dot(1, path.running)  # the Path tab's index in build_box's tools list
 
 
+def self_check() -> int:
+    """0 if everything MapleLens ships loads, else 1: the build's smoke test.
+
+    Templates, maps.json, every minimap picture, the OCR engine and the version.
+    The exit code is the answer: the frozen app is windowed, so it has no console.
+    """
+    try:
+        glyphs.load_all()
+        maps.load()
+        pictures = sorted(maps.PICTURES.glob("*.png"))
+        if not pictures or any(maps.picture(p.stem) is None for p in pictures):
+            return 1
+        if not version("maplelens"):  # None when its metadata file is missing
+            return 1
+    except Exception:
+        return 1
+    return 0 if ocr.engine() is not None else 1
+
+
 def main() -> int:
+    if "--self-check" in sys.argv[1:]:
+        return self_check()
     if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
         os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")

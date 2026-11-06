@@ -6,15 +6,16 @@
 # that collects every installed projection with its _table.pywinrt.
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
 ROOT = Path(SPECPATH).parent.parent
 
 a = Analysis(
     [str(ROOT / "src" / "maplelens" / "app.py")],
     pathex=[str(ROOT / "src")],
-    # templates, maps.json and minimap pictures, at their module-relative paths
-    datas=collect_data_files("maplelens"),
+    # templates, maps.json and minimap pictures, at their module-relative paths;
+    # the metadata is where --self-check and the app read the version
+    datas=collect_data_files("maplelens") + copy_metadata("maplelens"),
     excludes=["tkinter", "unittest", "pydoc", "PyInstaller"],
 )
 

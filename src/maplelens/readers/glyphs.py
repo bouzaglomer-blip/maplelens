@@ -57,6 +57,21 @@ def load(name: str) -> np.ndarray:
     return _images[name]
 
 
+def load_all() -> int:
+    """Read every template under TEMPLATES (anchors and font glyphs); the number read.
+
+    Raises FileNotFoundError if there are none, or if one can't be read.
+    """
+    anchors = sorted(TEMPLATES.glob("*.png"))
+    for p in anchors:
+        load(p.stem)
+    fonts = [d.name for d in sorted(TEMPLATES.iterdir()) if d.is_dir()]
+    n = len(anchors) + sum(len(_font(f)) for f in fonts)
+    if not n:
+        raise FileNotFoundError(f"no templates in {TEMPLATES}")
+    return n
+
+
 def normalize(frame: np.ndarray) -> np.ndarray:
     """Resize to height BASE_H, keeping aspect. A frame already that high is returned as is."""
     h, w = frame.shape[:2]
