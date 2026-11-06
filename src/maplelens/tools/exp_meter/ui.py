@@ -8,6 +8,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QLabel,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -101,17 +102,29 @@ class ExpMeterTool:
         button.setFocusPolicy(Qt.NoFocus)
         button.clicked.connect(self._show_history)
         self._button_row = button
+        self._shape: list[int] | None = None  # values per row of what's shown
+        self._texts: list[QLabel] = []
         self._show(box_lines(None, True))
 
     def _show(self, lines: list[tuple[str, list[str]]]) -> None:
+        texts = [t for label, values in lines for t in (label, *values)]
+        shape = [len(values) for _, values in lines]
+        if shape == self._shape:  # same rows: new text only, or the box blinks each tick
+            for w, t in zip(self._texts, texts, strict=True):
+                w.setText(t)
+            return
+        self._shape = shape
         while self._lines.count():  # rebuild: the label/value rows are few and cheap
             item = self._lines.takeAt(0)
             if (w := item.widget()) and w is not self._button_row:
                 w.deleteLater()
+        self._texts = []
         for label, values in lines:
-            self._lines.addWidget(text_label(label, LABEL_PT, LABEL_COLOR))
-            for v in values:
-                self._lines.addWidget(text_label(v, VALUE_PT, VALUE_COLOR, bold=True))
+            row = [text_label(label, LABEL_PT, LABEL_COLOR)]
+            row += [text_label(v, VALUE_PT, VALUE_COLOR, bold=True) for v in values]
+            for w in row:
+                self._lines.addWidget(w)
+            self._texts += row
             self._lines.addSpacing(6)
         self._lines.addWidget(self._button_row)
 
