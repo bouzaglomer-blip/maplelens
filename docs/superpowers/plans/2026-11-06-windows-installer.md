@@ -255,8 +255,11 @@ PySide6/Qt (LGPL-3.0), OpenCV, numpy and MapleLens itself into the app folder, p
 the meowdb credit.
 
 **Acceptance criteria:**
-- [ ] Exe Properties show product name MapleLens and the version from `pyproject.toml`.
-- [ ] `dist\MapleLens\licenses\` holds the license files listed above.
+- [x] Exe Properties show product name MapleLens and the version from `pyproject.toml`.
+      *(0.1.0; placeholder "ML" icon embedded, owner to replace.)*
+- [x] `dist\MapleLens\licenses\` holds the license files listed above.
+      *(Plus winrt and Python. The PySide6 wheels carry no LGPL text, so the LGPL-3.0
+      and GPL-3.0 texts are vendored in `packaging/windows/licenses/`.)*
 
 **Verification:** build; check Properties and the folder.
 

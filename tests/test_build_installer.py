@@ -12,8 +12,10 @@ _spec.loader.exec_module(build_installer)
 
 
 @pytest.fixture
-def bundle_ok(monkeypatch):
+def bundle_ok(monkeypatch, tmp_path):
     monkeypatch.setattr(build_installer, "check_bundle", lambda src, bundle: None)
+    monkeypatch.setattr(build_installer, "VERSION_FILE", tmp_path / "version_info.txt")
+    monkeypatch.setattr(build_installer, "LICENSES", tmp_path / "licenses")
 
 
 def test_freeze_only_runs_pyinstaller_then_the_self_check(bundle_ok):
@@ -60,3 +62,68 @@ def test_check_bundle_counts_templates_and_minimaps(tmp_path):
     (bundle / "readers/templates/f/1.png").unlink()
     with pytest.raises(SystemExit, match="templates"):
         build_installer.check_bundle(src, bundle)
+
+
+def test_read_version_from_pyproject(tmp_path):
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "1.2.3"\n')
+    assert build_installer.read_version(tmp_path / "pyproject.toml") == "1.2.3"
+
+
+def test_version_info_names_maplelens_and_the_version():
+    text = build_installer.version_info("1.2.3")
+    assert "filevers=(1, 2, 3, 0)" in text
+    assert "prodvers=(1, 2, 3, 0)" in text
+    assert "StringStruct('ProductName', 'MapleLens')" in text
+    assert "StringStruct('FileVersion', '1.2.3')" in text
+    assert "StringStruct('ProductVersion', '1.2.3')" in text
+
+
+def test_version_info_rejects_a_non_numeric_version():
+    with pytest.raises(SystemExit, match="rc1"):
+        build_installer.version_info("1.0.0rc1")
+
+
+def test_freeze_writes_the_version_file_first_and_licenses_before_the_check(bundle_ok):
+    seen = []
+
+    def run(cmd):
+        seen.append(
+            (
+                cmd[-1],
+                build_installer.VERSION_FILE.is_file(),
+                build_installer.LICENSES.is_dir(),
+            )
+        )
+
+    build_installer.main(["--freeze-only"], run=run)
+    (_, version_before_freeze, _), (check, _, licenses_before_check) = seen
+    assert version_before_freeze
+    assert check == "--self-check"
+    assert licenses_before_check
+    version = build_installer.read_version(ROOT / "pyproject.toml")
+    assert f"'{version}'" in build_installer.VERSION_FILE.read_text(encoding="utf-8")
+
+
+def test_copy_licenses_ships_every_license(tmp_path):
+    build_installer.copy_licenses(tmp_path)
+    names = {p.name for p in tmp_path.iterdir()}
+    assert names == {
+        "NOTICE.txt",
+        "MapleLens-LICENSE.txt",
+        "PySide6-Qt-LGPL-3.0.txt",
+        "PySide6-Qt-GPL-3.0.txt",
+        "OpenCV-LICENSE.txt",
+        "OpenCV-LICENSE-3RD-PARTY.txt",
+        "numpy-LICENSE.txt",
+        "winrt-LICENSE.txt",
+        "Python-LICENSE.txt",
+    }
+    lgpl = (tmp_path / "PySide6-Qt-LGPL-3.0.txt").read_text(encoding="utf-8")
+    assert "GNU LESSER GENERAL PUBLIC LICENSE" in lgpl
+    notice = (tmp_path / "NOTICE.txt").read_text(encoding="utf-8")
+    assert "meowdb" in notice
+    assert all(p.stat().st_size > 0 for p in tmp_path.iterdir())
+
+
+def test_icon_exists():
+    assert (ROOT / "packaging" / "windows" / "icon.ico").is_file()

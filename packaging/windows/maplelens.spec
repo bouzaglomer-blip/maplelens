@@ -8,7 +8,10 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
-ROOT = Path(SPECPATH).parent.parent
+HERE = Path(SPECPATH)
+ROOT = HERE.parent.parent
+# written by build_installer.py from pyproject.toml's version
+VERSION_FILE = ROOT / "build" / "version_info.txt"
 
 a = Analysis(
     [str(ROOT / "src" / "maplelens" / "app.py")],
@@ -50,5 +53,7 @@ exe = EXE(
     name="MapleLens",
     console=False,
     upx=False,
+    icon=str(HERE / "icon.ico"),
+    version=str(VERSION_FILE),
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="MapleLens", upx=False)
