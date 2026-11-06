@@ -284,9 +284,16 @@ version and writes `dist\MapleLens-Setup-X.Y.Z.exe`.
       "Looking for MapleStory…" line, uninstall; program folder and shortcuts gone.
       *(Daniel, 2026-11-06. The first run found uninstall left MapleLens running; Setup and
       the uninstaller now close it after one OK, and the re-run passed.)*
-- [ ] On Daniel's PC: install 0.1.0, use it, build again with the version temporarily set to
+- [x] On Daniel's PC: install 0.1.0, use it, build again with the version temporarily set to
       0.1.1 (not committed), install over it while MapleLens runs → asked to close it,
       settings and history kept, one entry in Settings → Apps.
+      *(2026-11-06, scripted with `/VERYSILENT /SUPPRESSMSGBOXES` and the setup logs: the
+      0.1.1 setup asked "MapleLens is running. Close it and continue?" and closed it;
+      exe, bundled metadata and the one uninstall entry all read 0.1.1, with no 0.1.0 files
+      left; `settings.json` and `maplelens.db` hashes unchanged; the installed 0.1.1 passed
+      `--self-check`. Uninstalling while it ran asked, closed it, and removed the folder,
+      Start-menu shortcut and registry entry, and kept `%APPDATA%\MapleLens`. Not
+      covered: the dialogs as a player sees them, and use with the game running.)*
 
 **Verification:** the three manual runs above, written into the PR description.
 
