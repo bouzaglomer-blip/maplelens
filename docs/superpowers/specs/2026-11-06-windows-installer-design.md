@@ -34,12 +34,16 @@ Goals → Upgrades).
 - Package data that has to ship: `src/maplelens/data/maps.json` (108 KB, 453 maps,
   adapted from meowdb) and **139 PNG glyph templates** under
   `src/maplelens/readers/templates/` (194 KB: the label images, `exp_font/`,
-  `level_font/`). Both are found next to their module through `Path(__file__)`
-  (`readers/glyphs.py:8`, `readers/map_name.py:51`, `tools/path_arrow/maps.py:7`).
+  `level_font/`), plus **299 minimap pictures** in `src/maplelens/data/minimaps/`
+  (5.5 MB, added by the owner in `53eddbc` and used by the path arrow). All are found
+  next to their module through `Path(__file__)` (`readers/glyphs.py`,
+  `readers/map_name.py`, `tools/path_arrow/maps.py`), and both image loaders already
+  read through `np.fromfile` + `cv2.imdecode`, so non-ASCII paths work.
+- `maps.picture()` returns `None` when a map's picture file is missing, so a build that
+  dropped the minimaps would **run without complaint** and the path arrow would just get
+  worse. The build has to check this (Testing).
 - Must **not** ship: `tests/fixtures/screens/` (61 PNGs, 1 MB), `scripts/level_sprites/`,
   `scripts/`, `docs/`.
-- No map images. The tools read the minimap from the screen and only use each map's
-  minimap size and centre from `maps.json`.
 - Runtime dependencies: PySide6, numpy, opencv-python-headless and the `winrt-*`
   packages (Windows Graphics Capture and Windows OCR).
 - `app.py` prints its messages and tracebacks to the console, and exits on first run
@@ -76,7 +80,7 @@ Goals → Upgrades).
   Tracebacks that `report_once` prints today also go to a log file,
   `%APPDATA%\MapleLens\maplelens.log`, capped in size *(builder: simplest cap that works,
   e.g. truncate on start)*.
-- **Bundled data**: `maps.json` and all 139 templates are inside the build at the same
+- **Bundled data**: `maps.json`, all 139 templates and all minimap pictures are inside the build at the same
   paths relative to their modules, so the `Path(__file__)` lookups work unchanged. A
   build missing any of them **fails**, not ships.
 - **Installer**: Inno Setup, producing `MapleLens-Setup-<version>.exe` (Daniel chose
@@ -204,8 +208,9 @@ tests/test_first_run.py            first-run logic
   unset title + only `MapleStory wiki – Chrome` → not found; saved title keeps
   substring matching; picking a window saves its title.
 - **Smoke check of the frozen build**, in CI and locally: the built exe starts, finds
-  its bundled `maps.json` and every template, and loads the Windows OCR engine, then
-  exits with code 0 (or non-zero on any failure). *(Builder: a hidden
+  its bundled `maps.json`, every template and every minimap picture, and loads the
+  Windows OCR engine, then exits with code 0 (or non-zero on any failure). The build
+  also fails if the built app holds fewer template or minimap files than `src/`. *(Builder: a hidden
   `--self-check` flag on the exe or a check in the build script; the exit code is the
   signal since the exe has no console.)*
 - **Manual, on a clean Windows** (Windows Sandbox, built into Windows 11 Pro): install

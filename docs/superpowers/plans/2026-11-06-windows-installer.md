@@ -23,7 +23,7 @@ Daniel's PC, not a Python dependency).
   reads the version from `pyproject.toml`, runs PyInstaller, runs the exe's self-check,
   then runs Inno Setup. CI never has build logic of its own beyond calling it.
 - **Self-check flag on the exe** (`MapleLens.exe --self-check`): loads every template,
-  `maps.json`, the OCR engine and the version, then exits 0 or 1. The exit code is the
+  `maps.json`, every minimap picture, the OCR engine and the version, then exits 0 or 1. The exit code is the
   signal, because a windowed exe has no console. This is the only reliable way to prove
   the *frozen* app has its data. Checking the files in `dist/` would not catch a missing
   hidden import.
@@ -127,16 +127,19 @@ exclude unused Qt modules. Check the current PyInstaller docs and the PySide6 ho
 ### Task 3: `--self-check` and runtime version
 
 **Description:** `maplelens --self-check` loads every template font and anchor, loads
-`maps.json` through `tools/path_arrow/maps.load`, creates the OCR engine, and reads the
-app version (`importlib.metadata`; the PyInstaller spec copies `maplelens`'s metadata).
-It exits 0 if all succeed, else 1, before any window opens. `build_installer.py` runs the
-built exe with `--self-check` and fails the build on non-zero.
+`maps.json` through `tools/path_arrow/maps.load`, decodes every picture in
+`data/minimaps/` through `maps.picture`, creates the OCR engine, and reads the app version
+(`importlib.metadata`; the PyInstaller spec copies `maplelens`'s metadata). It exits 0 if
+all succeed, else 1, before any window opens. `build_installer.py` runs the built exe with
+`--self-check` and fails the build on non-zero. It also fails if the built app holds fewer
+template or minimap PNGs than `src/` (`maps.picture` quietly returns `None` for a missing
+file, so the self-check alone can't catch a dropped picture).
 
 **Acceptance criteria:**
 - [ ] From source, `uv run maplelens --self-check` exits 0.
 - [ ] A unit test with `TEMPLATES` pointing at an empty folder gets 1.
-- [ ] Deleting one template from `dist\MapleLens\…` makes the self-check, and so the build
-      script, fail.
+- [ ] Deleting one template, or one minimap picture, from `dist\MapleLens\…` makes the
+      build script fail.
 
 **Verification:** `uv run pytest tests/test_app.py`; build, delete a template by hand,
 re-run the check, then rebuild.
