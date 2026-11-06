@@ -103,12 +103,29 @@ def client_rect(wid: int) -> tuple[int, int, int, int] | None:
     )
 
 
+def game_top(rgb: np.ndarray, top: int) -> int:
+    """`top`, or `top + 1` when the game sits one backing pixel lower.
+
+    On Retina the game draws at point size and shows pixel-doubled, so its rows come in
+    equal pairs. The game's own surface can sit half a point below the title bar (seen
+    after the window moved), which puts the pairs at odd rows from `top`.
+    """
+    eq = (rgb[top:-1] == rgb[top + 1 :]).all(axis=(1, 2))
+    even, odd = int(eq[0::2].sum()), int(eq[1::2].sum())
+    # Flat rows are equal in both phases; only doubled content gives one phase a clear lead.
+    return top + 1 if odd > len(eq) // 4 and odd > 2 * even else top
+
+
 def crop_bgr(rgb: np.ndarray, rect: tuple[int, int, int, int]) -> np.ndarray:
-    """RGB frame -> BGR client area: the bottom rect[3] rows, left rect[2] columns."""
+    """RGB frame -> BGR client area: rect[3] rows from the game's top, left rect[2] columns."""
     h, w = rgb.shape[:2]
     if rect[3] > h or rect[2] > w:
         raise RuntimeError("window shrank since its size was read")
-    return np.ascontiguousarray(rgb[h - rect[3] :, : rect[2], ::-1])
+    top = game_top(rgb, h - rect[3])
+    out = rgb[top : top + rect[3], : rect[2], ::-1]
+    if len(out) < rect[3]:  # the window cuts the game's last backing row: its pair repeats it
+        out = np.vstack([out, out[-1:]])
+    return np.ascontiguousarray(out)
 
 
 def grab(wid: int, rect: tuple[int, int, int, int]) -> np.ndarray:
