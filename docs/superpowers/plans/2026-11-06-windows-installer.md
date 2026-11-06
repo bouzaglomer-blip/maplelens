@@ -280,8 +280,10 @@ version and writes `dist\MapleLens-Setup-X.Y.Z.exe`.
 - [x] `uv run python scripts/build_installer.py` produces the setup exe (≤ 150 MB, or a reason).
       *(60 MB, Inno Setup 6.7.3 from `winget install JRSoftware.InnoSetup --scope user`.
       Run with `--group build`.)*
-- [ ] In **Windows Sandbox**: install with no admin prompt, launch from Start menu, see the
+- [x] In **Windows Sandbox**: install with no admin prompt, launch from Start menu, see the
       "Looking for MapleStory…" line, uninstall; program folder and shortcuts gone.
+      *(Daniel, 2026-11-06. The first run found uninstall left MapleLens running; Setup and
+      the uninstaller now close it after one OK, and the re-run passed.)*
 - [ ] On Daniel's PC: install 0.1.0, use it, build again with the version temporarily set to
       0.1.1 (not committed), install over it while MapleLens runs → asked to close it,
       settings and history kept, one entry in Settings → Apps.
