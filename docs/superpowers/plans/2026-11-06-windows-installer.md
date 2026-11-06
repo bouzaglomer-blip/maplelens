@@ -322,18 +322,27 @@ tag and publish the Release with the setup exe and generated notes (`gh release 
 can't race to the same tag.
 
 **Acceptance criteria:**
-- [ ] On the fork: a push that doesn't change the version → run ends "already released",
+- [x] On the fork: a push that doesn't change the version → run ends "already released",
       nothing created.
+      *(2026-11-06, [run 42285879241](https://github.com/dbeilin/maplelens/actions/runs/42285879241):
+      "v0.1.0 is already released, nothing to do"; the Windows job skipped.)*
 - [x] A push with a new version → tag + published Release with the exe and notes.
       *(2026-11-06, [run 42285355184](https://github.com/dbeilin/maplelens/actions/runs/42285355184):
       published [v0.1.0](https://github.com/dbeilin/maplelens/releases/tag/v0.1.0) at
       66598e2 with `MapleLens-Setup-0.1.0.exe` (61 MB) and generated notes, in 2.5 min.
       `windows-latest` already had Inno Setup 6, and `--self-check` passed on it.)*
-- [ ] A forced failure (e.g. a deleted template on a test branch merged to the fork's main)
+- [x] A forced failure (e.g. a deleted template on a test branch merged to the fork's main)
       → no tag, no Release.
+      *(2026-11-06: version 0.1.1 with `exp_label_1366.png` deleted, pushed to the fork's
+      main. [Run 42286113698](https://github.com/dbeilin/maplelens/actions/runs/42286113698)
+      failed at `pytest` (the EXP reader tests); an earlier try,
+      [42285989590](https://github.com/dbeilin/maplelens/actions/runs/42285989590), failed at
+      `uv sync --locked` because `uv.lock` still said 0.1.0. Neither created a v0.1.1 tag
+      or release.)*
 
-*(2026-11-06: `release.yml` written; `tests/test_release_workflow.py` keeps its checks in
-step with `ci.yml` and the publish step last. The three fork runs are still to do.)*
+*(2026-11-06: `tests/test_release_workflow.py` keeps the checks in step with `ci.yml` and
+the publish step last. The fork's v0.1.0 tag and release are test output, removed with
+Task 10's.)*
 
 **Verification:** the three fork runs; links in the PR description.
 
