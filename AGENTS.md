@@ -28,13 +28,14 @@ uv run python scripts/check_screen_only.py   # screen-only guard
 ## Layout
 
 - `src/maplelens/` — the package
-  - `capture.py` — find the game window, grab its pixels
-  - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`); `read_all` in `__init__`); numbers via glyph templates, words (map, class) via Windows OCR
-  - `overlay.py` — the see-through `Layer` and draggable `Box`
+  - `capture.py` (shared: `pick_window`) + `capture_win.py` / `capture_mac.py` — find the game window, grab its pixels
+  - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`); `read_all` in `__init__`); numbers via glyph templates, words (map, class) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`
+  - `overlay.py` — the see-through `Layer` and draggable `Box`; `overlay_mac.py` — the macOS panels
+  - `data/maps.json` — the map data
   - `store.py` — settings file and data folder
   - `app.py` — entry point (`uv run maplelens`)
   - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`
-  - `tools/path_arrow/` — the path arrow: `maps`, `route`, `camera`, `ui`, `maps.json`
+  - `tools/path_arrow/` — the path arrow: `maps`, `route`, `camera`, `ui`
 - `scripts/check_screen_only.py` — the guard; banned lists live there, with reasons
 - `scripts/grab.py` — save a cropped fixture screenshot of the game
 - `scripts/make_level_font.py` — build the level digit templates from `scripts/level_sprites/`
