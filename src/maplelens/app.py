@@ -39,7 +39,9 @@ def report_once(e: Exception, seen: set[str]) -> None:
         traceback.print_exc()
 
 
-def update_tools(box: Box, exp, path, reading, rect, now: float, seen: set[str]) -> None:
+def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bundle would hide them
+    box: Box, exp, path, reading, rect, now: float, seen: set[str]
+) -> None:
     """Feed both tools the same reading; the Path tab shows a dot while a trip runs.
 
     Each tool runs on its own: one raising doesn't stop the other.
@@ -81,8 +83,9 @@ def main() -> int:
     def save() -> None:
         save_settings(path, settings)
 
-    tool = ExpMeterTool(settings, open_db(data_dir() / "maplelens.db"), save)
-    path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))
+    tool = ExpMeterTool(settings, open_db(data_dir() / "maplelens.db"))
+    # the lambda defers the lookup: `box` is built from path_tool on the next line
+    path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))  # noqa: PLW0108
     box = build_box(settings, save, [tool, path_tool])
     hwnd = None
     seen: set[str] = set()  # error types/messages already printed

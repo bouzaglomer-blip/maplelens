@@ -120,6 +120,24 @@ def dynamic_import(node: ast.AST) -> str | None:
     return arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
 
 
+def imported_names(node: ast.AST) -> list[str]:
+    """Every module name `node` may import, or [] if it imports nothing."""
+    if isinstance(node, ast.Import):
+        return [a.name for a in node.names]
+    if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+        # `from a.b import c` may import the module a.b.c
+        return [node.module, *(f"{node.module}.{a.name}" for a in node.names)]
+    dyn = dynamic_import(node)
+    return [dyn] if dyn else []
+
+
+def banned_in(name: str) -> list[str]:
+    """The banned modules/prefixes that module `name` falls under."""
+    top = name.split(".", maxsplit=1)[0]
+    hits = [top] if top in BANNED_MODULES else []
+    return hits + [p for p in BANNED_PREFIXES if name == p or name.startswith(p + ".")]
+
+
 def find_violations(path: Path) -> list[str]:
     # utf-8-sig: a BOM (common from Windows editors) would otherwise break ast.parse
     text = path.read_text(encoding="utf-8-sig", errors="replace")
@@ -131,22 +149,8 @@ def find_violations(path: Path) -> list[str]:
         return [f"{path}:{lineno}: {msg}" for lineno, msg in sorted(found)]
     try:
         for node in ast.walk(ast.parse(text)):
-            if isinstance(node, ast.Import):
-                names = [a.name for a in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                # `from a.b import c` may import the module a.b.c
-                names = [node.module] + [f"{node.module}.{a.name}" for a in node.names]
-            elif dynamic_import(node):
-                names = [dynamic_import(node)]
-            else:
-                continue
-            for name in names:
-                top = name.split(".")[0]
-                if top in BANNED_MODULES:
-                    found.add((node.lineno, f"banned import '{top}'"))
-                for prefix in BANNED_PREFIXES:
-                    if name == prefix or name.startswith(prefix + "."):
-                        found.add((node.lineno, f"banned import '{prefix}'"))
+            for name in imported_names(node):
+                found.update((node.lineno, f"banned import '{b}'") for b in banned_in(name))
     except SyntaxError:
         pass  # half-written file; the name check below still runs
     for lineno, line in enumerate(text.splitlines(), 1):

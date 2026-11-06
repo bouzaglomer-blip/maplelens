@@ -13,12 +13,12 @@ def set_dpi_aware() -> None:
 
 def window_entries(infos: list[dict]) -> list[tuple[int, str]]:
     """One (id, text) per window title and per owner name, front to back."""
-    found: list[tuple[int, str]] = []
-    for info in infos:
-        for key in ("kCGWindowName", "kCGWindowOwnerName"):
-            if info.get(key):
-                found.append((info["kCGWindowNumber"], info[key]))
-    return found
+    return [
+        (info["kCGWindowNumber"], info[key])
+        for info in infos
+        for key in ("kCGWindowName", "kCGWindowOwnerName")
+        if info.get(key)
+    ]
 
 
 def _infos() -> list[dict]:

@@ -89,23 +89,29 @@ class ExpMeter:
         if None in ctx:
             self._last_event_t = None
 
-    def _on_exp(self, old: ExpValue, old_level, paused: bool, t: float) -> None:
+    def _gain(self, old: ExpValue, old_level) -> tuple[float, float] | None:
+        """(exp, %) gained since `old`, or None for a death, a misread or a spike."""
         new, level = self._exp.value, self._level.value
         gain = None
-        if old_level is not None and level is not None:
-            if level == old_level:
-                if new.raw >= old.raw and new.pct >= old.pct:  # a drop at the same level is a death
-                    gain = (new.raw - old.raw, new.pct - old.pct)
-            elif level > old_level:
-                # ponytail: level-up needs the level and the % drop to confirm on the same feed;
-                # a level misread at that moment counts the wrap as a death. Look at the level
-                # one feed later if that shows up.
-                base = old.raw / (old.pct / 100) - old.raw if old.pct else 0
-                gain = (round(base) + new.raw, (100 - old.pct) + new.pct)
+        if old_level is None or level is None:
+            return None
+        if level == old_level:
+            if new.raw >= old.raw and new.pct >= old.pct:  # a drop at the same level is a death
+                gain = (new.raw - old.raw, new.pct - old.pct)
+        elif level > old_level:
+            # ponytail: level-up needs the level and the % drop to confirm on the same feed;
+            # a level misread at that moment counts the wrap as a death. Look at the level
+            # one feed later if that shows up.
+            base = old.raw / (old.pct / 100) - old.raw if old.pct else 0
+            gain = (round(base) + new.raw, (100 - old.pct) + new.pct)
         if gain and len(self._recent) >= 10:
             med = median(self._recent)
             if med > 0 and gain[1] > self.jump_factor * med:
-                gain = None
+                return None
+        return gain
+
+    def _on_exp(self, old: ExpValue, old_level, paused: bool, t: float) -> None:
+        gain = self._gain(old, old_level)
         if gain:
             self._recent.append(gain[1])
             self._window.append((t, *gain))

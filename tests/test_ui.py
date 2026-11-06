@@ -11,7 +11,7 @@ def test_tool_flushes_open_segment_each_minute(monkeypatch, tmp_path):
 
     app = QApplication.instance() or QApplication([])
     conn = open_db(tmp_path / "h.db")
-    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), conn, lambda: None)
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), conn)
     for i in range(73):  # 3 minutes at 2.5 s; each EXP value is read twice, as the meter needs
         t = 1000.0 + i * 2.5
         exp = ExpValue(1000 + i // 2 * 100, 10 + i // 2 * 0.1)
@@ -67,7 +67,7 @@ def test_quit_menu_item_saves_and_quits(monkeypatch, tmp_path):
 
     app = QApplication.instance() or QApplication([])
     conn = open_db(tmp_path / "h.db")
-    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), conn, lambda: None)
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), conn)
     for i in range(9):  # 20 s of play: too short for the periodic flush
         t = 1000.0 + i * 2.5
         exp = ExpValue(1000 + i // 2 * 100, 10 + i // 2 * 0.1)
@@ -95,7 +95,7 @@ def test_history_button_on_exp_tab(monkeypatch, tmp_path):
     from maplelens.tools.exp_meter.ui import ExpMeterTool
 
     QApplication.instance() or QApplication([])
-    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"), lambda: None)
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"))
     assert tool.title == "EXP"
     (button,) = tool.tab.findChildren(QPushButton)
     assert button.text() == "History"
@@ -112,7 +112,7 @@ def test_tick_updates_labels_in_place(monkeypatch, tmp_path):
     from maplelens.tools.exp_meter.ui import ExpMeterTool
 
     QApplication.instance() or QApplication([])
-    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"), lambda: None)
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"))
     before = tool.tab.findChildren(QLabel)
     tool.update(None, None, 1.0)
     assert tool.tab.findChildren(QLabel) == before

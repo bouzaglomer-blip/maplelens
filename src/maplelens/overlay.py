@@ -169,7 +169,7 @@ class Box(QWidget):
         native_setup(self)
         super().showEvent(event)
 
-    def paintEvent(self, event):
+    def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setPen(Qt.NoPen)

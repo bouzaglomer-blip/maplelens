@@ -60,7 +60,7 @@ def _auto(args, out_dir: Path) -> int:
     return 1 if black else 0
 
 
-def main() -> int:
+def _parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--title")
     ap.add_argument("--label")
@@ -75,6 +75,11 @@ def main() -> int:
         ap.error("--every and --minutes must be positive")
     if args.every is not None and not args.title:
         ap.error("--every/--minutes need --title and --label")
+    return args
+
+
+def main() -> int:
+    args = _parse_args()
     capture.set_dpi_aware()
     if not capture.ensure_access():
         return 1
@@ -85,6 +90,10 @@ def main() -> int:
     out_dir.mkdir(exist_ok=True)
     if args.every is not None:
         return _auto(args, out_dir)  # window may appear later; missing ticks are skipped
+    return _once(args, out_dir)
+
+
+def _once(args: argparse.Namespace, out_dir: Path) -> int:
     hwnd = capture.find_window(args.title)
     if hwnd is None:
         print(f"no visible window with '{args.title}' in its title", file=sys.stderr)

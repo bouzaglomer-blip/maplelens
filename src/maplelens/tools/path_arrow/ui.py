@@ -71,7 +71,7 @@ class _Arrow(QWidget):
         self.angle = 0.0
         self.hide()
 
-    def paintEvent(self, event):
+    def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.translate(ARROW_SIZE / 2, ARROW_SIZE / 2)
@@ -140,10 +140,13 @@ class PathArrowTool:
         self._rect: tuple | None = None
         self._now = 0.0
         self.arrow = _Arrow(layer)
+        self.tab = self._build_tab(settings["path_taxi"])
+        self._render()
 
-        self.tab = QWidget()
-        self.tab.setStyleSheet(_STYLE)
-        self.tab.setFixedWidth(TAB_W)  # long names elide instead of widening the box
+    def _build_tab(self, taxi: bool) -> QWidget:
+        tab = QWidget()
+        tab.setStyleSheet(_STYLE)
+        tab.setFixedWidth(TAB_W)  # long names elide instead of widening the box
         self._header = text_label("", LABEL_PT, LABEL_COLOR)
         self._message = text_label("", LABEL_PT, ACCENT)
         self._message.setWordWrap(True)
@@ -161,7 +164,7 @@ class PathArrowTool:
         self._matches.hide()
         self._taxi = QCheckBox("Use taxi")
         self._taxi.setFocusPolicy(Qt.NoFocus)
-        self._taxi.setChecked(settings["path_taxi"])
+        self._taxi.setChecked(taxi)
         self._start = _button("Start")
         self._start.setObjectName("start")
         self._start.clicked.connect(self._on_start)
@@ -180,12 +183,12 @@ class PathArrowTool:
             col.setSpacing(6)
             for w in widgets:
                 col.addWidget(w)
-        col = QVBoxLayout(self.tab)
+        col = QVBoxLayout(tab)
         col.setContentsMargins(0, 4, 0, 0)
         col.setSpacing(6)
         for w in (self._header, self._message, self._choose, self._running):
             col.addWidget(w)
-        self._render()
+        return tab
 
     @property
     def running(self) -> bool:
@@ -366,9 +369,9 @@ class PathArrowTool:
             return OPEN
         if r.minimap is not None and not can_place(r.minimap, here, picture(here.id)):
             return "No arrow on this map yet"
-        if world is None and r.minimap and r.map_name == self._title:
-            if not fits(r.minimap, here.minimap):  # too few NPC markers in the window
-                return "No arrow on this part of the map yet"
+        on_map = world is None and r.minimap and r.map_name == self._title
+        if on_map and not fits(r.minimap, here.minimap):  # too few NPC markers in the window
+            return "No arrow on this part of the map yet"
         return ""  # a map that fits may still miss a frame: the arrow just hides
 
     def _place_arrow(self, world: tuple[float, float] | None) -> None:

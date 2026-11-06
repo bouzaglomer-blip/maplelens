@@ -7,7 +7,7 @@ GUARD = Path(__file__).resolve().parent.parent / "scripts" / "check_screen_only.
 
 def run_guard(*args, cwd=None):
     return subprocess.run(
-        [sys.executable, str(GUARD), *args], capture_output=True, text=True, cwd=cwd
+        [sys.executable, str(GUARD), *args], capture_output=True, text=True, cwd=cwd, check=False
     )
 
 

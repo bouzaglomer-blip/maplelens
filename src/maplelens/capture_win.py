@@ -1,6 +1,7 @@
 """Windows: find the game window and grab its pixels. Window geometry and screen capture only."""
 
 import asyncio
+import contextlib
 import ctypes
 import time
 from ctypes import wintypes
@@ -28,10 +29,8 @@ _PER_MONITOR_AWARE_V2 = -4
 
 
 def set_dpi_aware() -> None:
-    try:
+    with contextlib.suppress(OSError):  # Qt may have set it already
         user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(_PER_MONITOR_AWARE_V2))
-    except OSError:
-        pass  # Qt may have set it already
 
 
 def _windows() -> list[tuple[int, str]]:
@@ -100,10 +99,8 @@ class _Session:
         )
         self._session = self._pool.create_capture_session(item)
         self._session.is_cursor_capture_enabled = False
-        try:
+        with contextlib.suppress(OSError):  # Windows 10 before 2104 always draws it
             self._session.is_border_required = False  # no yellow frame round the game
-        except OSError:
-            pass  # Windows 10 before 2104 always draws it
         self._session.start_capture()
         self.last: np.ndarray | None = None  # BGRA, the whole window
 
@@ -161,7 +158,7 @@ _live: _Session | None = None
 
 def grab(hwnd: int, rect: tuple[int, int, int, int]) -> np.ndarray:
     """The client area of window `hwnd` (screen rect `rect`) as BGR."""
-    global _live
+    global _live  # noqa: PLW0603 - one capture session per process, reused across grabs
     if _live is None or _live.hwnd != hwnd:
         if _live is not None:
             _live.close()
