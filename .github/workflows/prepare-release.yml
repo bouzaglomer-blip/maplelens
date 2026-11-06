@@ -41,12 +41,16 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+      # Without re-locking: this runner's uv may be newer than the one that wrote uv.lock and
+      # would rewrite the lock's format, not only its version line. uv sync --locked below
+      # fails if the two files don't agree.
       - name: Bump the version
         env:
           BUMP: ${{ inputs.bump }}
         run: |
-          uv version --bump "$BUMP" --no-sync
-          echo "VERSION=$(uv version --short)" >> "$GITHUB_ENV"
+          version=$(uv version --bump "$BUMP" --frozen --short)
+          sed -i "/^name = \"maplelens\"\r\?$/{n;s/^version = \"[^\"]*\"/version = \"$version\"/}" uv.lock
+          echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Refuse a version already in flight
         run: |
           fail=

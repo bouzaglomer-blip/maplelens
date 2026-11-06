@@ -63,8 +63,16 @@ def test_prepare_is_started_by_hand_with_a_bump_choice():
     text = _prepare()
     assert re.search(r"^on:\n  workflow_dispatch:\n", text, re.M)
     assert re.search(r"options: \[patch, minor, major\]", text)
-    assert 'uv version --bump "$BUMP"' in text
     assert "BUMP: ${{ inputs.bump }}" in text  # through env, never pasted into the script
+
+
+def test_prepare_bump_never_relocks():
+    # the runner's uv may be newer than the one that wrote uv.lock, and re-locking would
+    # rewrite the lock's format too, so the PR diff would be more than the version lines
+    text = _prepare()
+    assert 'uv version --bump "$BUMP" --frozen' in text
+    assert "uv lock" not in text
+    assert text.index("--frozen") < text.index("run: uv sync --locked")
 
 
 def test_prepare_refuses_a_version_already_in_flight_before_pushing():
