@@ -324,7 +324,11 @@ can't race to the same tag.
 **Acceptance criteria:**
 - [ ] On the fork: a push that doesn't change the version → run ends "already released",
       nothing created.
-- [ ] A push with a new version → tag + published Release with the exe and notes.
+- [x] A push with a new version → tag + published Release with the exe and notes.
+      *(2026-11-06, [run 42285355184](https://github.com/dbeilin/maplelens/actions/runs/42285355184):
+      published [v0.1.0](https://github.com/dbeilin/maplelens/releases/tag/v0.1.0) at
+      66598e2 with `MapleLens-Setup-0.1.0.exe` (61 MB) and generated notes, in 2.5 min.
+      `windows-latest` already had Inno Setup 6, and `--self-check` passed on it.)*
 - [ ] A forced failure (e.g. a deleted template on a test branch merged to the fork's main)
       → no tag, no Release.
 
