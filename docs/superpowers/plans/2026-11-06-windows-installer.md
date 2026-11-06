@@ -223,9 +223,14 @@ chosen title (the next tick uses it). Separately, `report_once` also appends to
 when there's no console (`sys.stderr` is `None` in a windowed exe).
 
 **Acceptance criteria:**
-- [ ] Picking a window saves its title and the overlay follows that window.
-- [ ] A raised error in a tool shows up once in `maplelens.log`.
-- [ ] With `sys.stderr = None` (monkeypatched), `report_once` writes the log and doesn't raise.
+- [x] Picking a window saves its title and the overlay follows that window.
+- [x] A raised error in a tool shows up once in `maplelens.log`.
+- [x] With `sys.stderr = None` (monkeypatched), `report_once` writes the log and doesn't raise.
+      *(2026-11-06: the picker lists `capture.window_titles()`, new on both platforms: the
+      titles `find_window` matches. On the Mac, `list_windows()` gives "app — window"
+      strings that could never match. MapleLens's own window is left out. Checked live:
+      starting from a title that matched nothing, choosing "MapleStory" from the menu saved
+      it and moved the box onto the game. The log is emptied at startup.)*
 
 **Verification:** `uv run pytest`; manual pick on Daniel's PC; four checks.
 

@@ -124,3 +124,18 @@ def test_status_line_replaces_the_tabs(monkeypatch):
     assert not box._status.isVisibleTo(box)
     assert page.isVisibleTo(box) and box._tab_buttons[0].isVisibleTo(box)
     assert box._tab_dots[0].isVisibleTo(box)
+
+
+def test_submenu_lists_choices_when_opened(monkeypatch):
+    box = _box(monkeypatch)
+    picked, choices = [], ["A", "B"]
+    box.add_submenu("Pick", lambda: choices, picked.append)
+    [action] = box.actions()
+    menu = action.menu()
+    menu.aboutToShow.emit()
+    assert [a.text() for a in menu.actions()] == ["A", "B"]
+    choices = ["C"]  # the list is read again each time the menu opens
+    menu.aboutToShow.emit()
+    [c] = menu.actions()
+    c.trigger()
+    assert picked == ["C"]

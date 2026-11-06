@@ -52,6 +52,11 @@ def list_windows() -> list[str]:
     return [title for _, title in _windows()]
 
 
+def window_titles() -> list[str]:
+    """Titles find_window can match, each once, in window order."""
+    return list(dict.fromkeys(t for _, t in _windows()))
+
+
 def find_window(title: str, exact: bool = False) -> int | None:
     from maplelens.capture import pick_window  # late: capture imports this module
 

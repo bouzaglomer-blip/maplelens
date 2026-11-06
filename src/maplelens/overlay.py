@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLayout,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -161,6 +162,21 @@ class Box(QWidget):
         action = QAction(label, self)
         action.triggered.connect(callback)
         self.addAction(action)
+        self.setContextMenuPolicy(Qt.ActionsContextMenu)
+
+    def add_submenu(
+        self, label: str, choices: Callable[[], list[str]], on_pick: Callable[[str], None]
+    ) -> None:
+        """A right-click submenu listing `choices()`, read again each time it opens."""
+        menu = QMenu(label, self)
+
+        def fill() -> None:
+            menu.clear()
+            for text in choices():
+                menu.addAction(text).triggered.connect(lambda _=False, t=text: on_pick(t))
+
+        menu.aboutToShow.connect(fill)
+        self.addAction(menu.menuAction())
         self.setContextMenuPolicy(Qt.ActionsContextMenu)
 
     def place(self, game_rect: tuple[int, int, int, int]) -> None:

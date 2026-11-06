@@ -83,3 +83,55 @@ def test_saved_title_still_matches_by_substring(windows):
     settings, saves = {"window_title": "Thief Guide"}, []
     assert app.find_game(settings, lambda: saves.append(1)) == 1
     assert saves == []
+
+
+def test_choosing_a_window_saves_its_title():
+    settings, saves = {"window_title": None}, []
+    app.choose_window(settings, lambda: saves.append(1), "Some Client")
+    assert settings["window_title"] == "Some Client"
+    assert saves == [1]
+
+
+class _Raises:
+    def update(self, *_):
+        raise ValueError("bad frame")
+
+
+class _Quiet:
+    running = False
+
+    def update(self, *_):
+        pass
+
+
+class _Box:
+    def set_tab_dot(self, *_):
+        pass
+
+
+@pytest.fixture
+def log(tmp_path, monkeypatch):
+    path = tmp_path / "maplelens.log"
+    path.write_text("from last run\n")
+    app.start_log(path)
+    yield path
+    monkeypatch.setattr(app, "_log_path", None)
+
+
+def test_start_log_empties_the_file(log):
+    assert log.read_text() == ""
+
+
+def test_a_tool_error_is_logged_once(log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)  # a windowed exe has no console
+    seen: set[str] = set()
+    for _ in range(3):
+        app.update_tools(_Box(), _Raises(), _Quiet(), None, None, 0.0, seen)
+    text = log.read_text(encoding="utf-8")
+    assert text.count("ValueError: bad frame") == 1
+    assert "Traceback" in text
+
+
+def test_picker_leaves_out_our_own_windows(monkeypatch):
+    monkeypatch.setattr(app.capture, "window_titles", lambda: ["MapleLens", "MapleStory"])
+    assert app.game_choices() == ["MapleStory"]
