@@ -83,6 +83,14 @@ EXPECTED_POS = {
     "pos_e_2560x1440_100.png": (0.500, 0.795),  # Lith Harbor, map as wide as the window
     "pos_f_2560x1440_100.png": (0.305, 0.777),  # Perion, map taller than the window
     "pos_g_2560x1440_100.png": (0.492, 0.446),  # The Forest of Wisdom, taller, no NPCs
+    # The Forest North of Ellinia: 130 px of a 428 px tall picture, hidden portals.
+    "pos_fne_bottom_2560x1440_100.png": (0.246, 0.518),
+    "pos_fne_mid_2560x1440_100.png": (0.300, 0.446),
+    "pos_fne_top_2560x1440_100.png": (0.469, 0.304),
+    "pos_fne_bottom_1366x768_100.png": (0.223, 0.830),
+    "pos_fne_mid_1366x768_100.png": (0.515, 0.446),  # a monster shows through the minimap
+    "pos_fne_top_1366x768_100.png": (0.485, 0.295),
+    "pos_tunnel_2560x1440_100.png": (0.493, 0.446),  # Tree Tunnel; a dot painted out
     "pos_bar_2560x1440_100.png": None,  # minimap minimized to its bar
     "pos_covered_2560x1440_100.png": None,  # inventory window over the map area
     "pos_nominimap_1920x1080_100.png": None,  # game scene, no minimap

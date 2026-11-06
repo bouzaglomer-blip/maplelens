@@ -71,12 +71,16 @@ def load(path: Path = DATA) -> dict[str, MapInfo]:
 
 @cache
 def picture(map_id: str) -> np.ndarray | None:
-    """The map's whole minimap picture (BGR), or None if we don't ship one."""
+    """The map's whole minimap picture (BGRA), or None if we don't ship one.
+
+    Alpha 255 marks the solid map art; the rest is see-through in the game.
+    """
     path = PICTURES / f"{map_id}.png"
     if not path.is_file():
         return None
     # fromfile + imdecode: imread fails on non-ASCII paths
-    return cv2.imdecode(np.fromfile(path, np.uint8), cv2.IMREAD_COLOR)
+    img = cv2.imdecode(np.fromfile(path, np.uint8), cv2.IMREAD_UNCHANGED)
+    return img if img.shape[2] == 4 else cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
 
 
 def find(maps: dict[str, MapInfo], title: str, previous: str | None) -> MapInfo | None:
