@@ -277,7 +277,9 @@ upgrading, uninstall leaves `%APPDATA%\MapleLens`. `build_installer.py` runs `is
 version and writes `dist\MapleLens-Setup-X.Y.Z.exe`.
 
 **Acceptance criteria:**
-- [ ] `uv run python scripts/build_installer.py` produces the setup exe (≤ 150 MB, or a reason).
+- [x] `uv run python scripts/build_installer.py` produces the setup exe (≤ 150 MB, or a reason).
+      *(60 MB, Inno Setup 6.7.3 from `winget install JRSoftware.InnoSetup --scope user`.
+      Run with `--group build`.)*
 - [ ] In **Windows Sandbox**: install with no admin prompt, launch from Start menu, see the
       "Looking for MapleStory…" line, uninstall; program folder and shortcuts gone.
 - [ ] On Daniel's PC: install 0.1.0, use it, build again with the version temporarily set to

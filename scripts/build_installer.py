@@ -1,14 +1,16 @@
-"""Build MapleLens for Windows: freeze it with PyInstaller into dist/MapleLens/.
+"""Build MapleLens for Windows: freeze it, then wrap it in dist/MapleLens-Setup-X.Y.Z.exe.
 
-Usage: uv run --group build python scripts/build_installer.py --freeze-only
+Usage: uv run --group build python scripts/build_installer.py [--freeze-only]
 Before the freeze it writes the exe's version info from pyproject.toml; after it, it copies
 the license texts into dist/MapleLens/licenses/. The build fails if the app holds fewer
 templates or minimap pictures than src/, or if MapleLens.exe --self-check exits non-zero.
-The installer step (Inno Setup) comes later; for now only --freeze-only runs.
+Then Inno Setup 6 (ISCC.exe: the ISCC environment variable, PATH, or its default install
+folders) builds the installer; --freeze-only stops before that step.
 """
 
 import argparse
 import importlib.metadata
+import os
 import re
 import shutil
 import subprocess
@@ -20,16 +22,27 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PACKAGING = REPO / "packaging" / "windows"
 SPEC = PACKAGING / "maplelens.spec"
+ISS = PACKAGING / "maplelens.iss"
 DIST = REPO / "dist"
 WORK = REPO / "build"
 # maplelens.spec reads the version info from here
 VERSION_FILE = WORK / "version_info.txt"
-EXE = DIST / "MapleLens" / "MapleLens.exe"
+APP = DIST / "MapleLens"
+EXE = APP / "MapleLens.exe"
 LICENSES = DIST / "MapleLens" / "licenses"
 SRC_PKG = REPO / "src" / "maplelens"
 BUNDLE_PKG = DIST / "MapleLens" / "_internal" / "maplelens"
 # Data folders, relative to the package, whose PNG count must survive the freeze.
 COUNTED = ["readers/templates", "data/minimaps"]
+# Where Inno Setup 6 installs ISCC.exe: for all users, and per user (winget --scope user).
+ISCC_PLACES = [
+    Path(folder) / "Inno Setup 6" / "ISCC.exe"
+    for folder in [
+        os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+        os.environ.get("PROGRAMFILES", r"C:\Program Files"),
+        Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Programs",
+    ]
+]
 
 
 def _dist_file(dist: str, name: str) -> Callable[[], Path]:
@@ -129,6 +142,28 @@ def freeze_cmd() -> list[str]:
     ]
 
 
+def find_iscc() -> Path:
+    if env := os.environ.get("ISCC"):
+        return Path(env)
+    if found := shutil.which("ISCC"):
+        return Path(found)
+    for place in ISCC_PLACES:
+        if place.is_file():
+            return place
+    sys.exit("Inno Setup 6 not found: install it, or set ISCC to its ISCC.exe")
+
+
+def installer_cmd(iscc: Path, version: str) -> list[str]:
+    return [
+        str(iscc),
+        "/Q",
+        f"/DAppVersion={version}",
+        f"/DSourceDir={APP}",
+        f"/O{DIST}",
+        str(ISS),
+    ]
+
+
 def check_bundle(src: Path, bundle: Path) -> None:
     """Exit if `bundle` holds fewer PNGs than `src` in any COUNTED folder."""
     for rel in COUNTED:
@@ -142,10 +177,10 @@ def main(argv: list[str] | None = None, run: Callable[[list[str]], None] = _run)
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--freeze-only", action="store_true", help="build dist/MapleLens/ only")
     args = parser.parse_args(argv)
-    if not args.freeze_only:
-        sys.exit("the installer step isn't written yet: use --freeze-only")
+    iscc = None if args.freeze_only else find_iscc()  # missing Inno Setup fails fast
+    version = read_version()
     VERSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    VERSION_FILE.write_text(version_info(read_version()), encoding="utf-8")
+    VERSION_FILE.write_text(version_info(version), encoding="utf-8")
     run(freeze_cmd())
     check_bundle(SRC_PKG, BUNDLE_PKG)
     copy_licenses(LICENSES)
@@ -153,7 +188,19 @@ def main(argv: list[str] | None = None, run: Callable[[list[str]], None] = _run)
         run([str(EXE), "--self-check"])
     except subprocess.CalledProcessError:
         sys.exit(f"{EXE.name} --self-check failed")
+    if iscc:
+        run(installer_cmd(iscc, version))
+        report_size(DIST / f"MapleLens-Setup-{version}.exe")
     return 0
+
+
+def report_size(setup: Path) -> None:
+    """Print the installer's size; over 150 MB is a budget to explain, not a failure."""
+    if not setup.is_file():
+        return
+    mb = setup.stat().st_size / 1_000_000
+    note = " (over the 150 MB budget)" if mb > 150 else ""
+    print(f"{setup.name}: {mb:.0f} MB{note}")
 
 
 if __name__ == "__main__":

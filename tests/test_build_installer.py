@@ -1,4 +1,5 @@
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -33,9 +34,55 @@ def test_spec_file_exists():
     assert (ROOT / "packaging" / "windows" / "maplelens.spec").is_file()
 
 
-def test_full_build_not_available_yet(bundle_ok):
-    with pytest.raises(SystemExit, match="--freeze-only"):
-        build_installer.main([], run=lambda cmd: None)
+def test_full_build_freezes_checks_then_runs_inno_setup(bundle_ok, monkeypatch, tmp_path):
+    iscc = tmp_path / "ISCC.exe"
+    monkeypatch.setattr(build_installer, "find_iscc", lambda: iscc)
+    calls = []
+    assert build_installer.main([], run=calls.append) == 0
+    _, check, setup = calls
+    assert check[-1] == "--self-check"
+    version = build_installer.read_version(ROOT / "pyproject.toml")
+    assert setup[0] == str(iscc)
+    assert f"/DAppVersion={version}" in setup
+    assert f"/DSourceDir={ROOT / 'dist' / 'MapleLens'}" in setup
+    assert f"/O{ROOT / 'dist'}" in setup
+    assert setup[-1] == str(ROOT / "packaging" / "windows" / "maplelens.iss")
+
+
+def test_full_build_needs_inno_setup_before_freezing(bundle_ok, monkeypatch):
+    monkeypatch.delenv("ISCC", raising=False)
+    monkeypatch.setattr(build_installer, "ISCC_PLACES", [])
+    monkeypatch.setattr(build_installer.shutil, "which", lambda name: None)
+    calls = []
+    with pytest.raises(SystemExit, match="Inno Setup"):
+        build_installer.main([], run=calls.append)
+    assert calls == []
+
+
+def test_find_iscc_takes_the_env_var_first(monkeypatch, tmp_path):
+    iscc = tmp_path / "ISCC.exe"
+    iscc.write_bytes(b"")
+    monkeypatch.setenv("ISCC", str(iscc))
+    assert build_installer.find_iscc() == iscc
+
+
+def test_find_iscc_looks_in_the_usual_places(monkeypatch, tmp_path):
+    iscc = tmp_path / "Inno Setup 6" / "ISCC.exe"
+    iscc.parent.mkdir()
+    iscc.write_bytes(b"")
+    monkeypatch.delenv("ISCC", raising=False)
+    monkeypatch.setattr(build_installer.shutil, "which", lambda name: None)
+    monkeypatch.setattr(build_installer, "ISCC_PLACES", [tmp_path / "nope.exe", iscc])
+    assert build_installer.find_iscc() == iscc
+
+
+def test_iss_installs_per_user_with_a_fixed_app_id():
+    iss = (ROOT / "packaging" / "windows" / "maplelens.iss").read_text(encoding="utf-8")
+    assert re.search(r"^AppId=\{\{[0-9A-F-]{36}\}$", iss, re.MULTILINE)
+    assert "PrivilegesRequired=lowest" in iss
+    assert "DefaultDirName={userpf}\\MapleLens" in iss
+    assert "OutputBaseFilename=MapleLens-Setup-{#AppVersion}" in iss
+    assert "{userappdata}" not in iss  # uninstall keeps settings and history
 
 
 def test_failed_self_check_fails_the_build(bundle_ok):
