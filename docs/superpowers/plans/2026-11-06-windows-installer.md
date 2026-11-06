@@ -85,15 +85,15 @@ and decode them instead (`np.fromfile` + `cv2.imdecode`), keeping the same flags
 same `FileNotFoundError`.
 
 **Acceptance criteria:**
-- [ ] A template copied into a folder named with non-ASCII characters (e.g. `tmp_path / "דניאל"`)
+- [x] A template copied into a folder named with non-ASCII characters (e.g. `tmp_path / "דניאל"`)
       loads through `glyphs.load` and the font loader, with `TEMPLATES` monkeypatched.
-- [ ] A missing template still raises `FileNotFoundError`.
-- [ ] All existing reader tests pass with the same values.
+- [x] A missing template still raises `FileNotFoundError`.
+- [x] All existing reader tests pass with the same values.
 
 **Verification:**
-- [ ] Write the non-ASCII test first and see it fail on Windows (if it passes, OpenCV has
+- [x] Write the non-ASCII test first and see it fail on Windows (if it passes, OpenCV has
       fixed this: keep the test, drop the code change, note it in the spec).
-- [ ] `uv run pytest tests/test_glyphs.py tests/test_readers.py`, then the four repo checks.
+- [x] `uv run pytest tests/test_glyphs.py tests/test_readers.py`, then the four repo checks.
 
 **Dependencies:** T0. **Files:** `src/maplelens/readers/glyphs.py`, `tests/test_glyphs.py`.
 **Scope:** S.
