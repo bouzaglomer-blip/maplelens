@@ -1,0 +1,35 @@
+"""macOS: MapleLens's own windows float over the game without taking the keyboard from it."""
+
+import objc
+from AppKit import (
+    NSApplication,
+    NSApplicationActivationPolicyAccessory,
+    NSFloatingWindowLevel,
+    NSPanel,
+    NSWindowStyleMaskNonactivatingPanel,
+)
+from PySide6.QtWidgets import QWidget
+
+
+def make_panel(widget: QWidget) -> None:
+    """Keep the widget's window visible while the game is active, and out of the keyboard."""
+    window = objc.objc_object(c_void_p=int(widget.winId())).window()  # winId is an NSView
+    if window is None:
+        return
+    if isinstance(window, NSPanel):
+        window.setStyleMask_(window.styleMask() | NSWindowStyleMaskNonactivatingPanel)
+        window.setBecomesKeyOnlyIfNeeded_(True)  # clicks and drags leave the keyboard alone
+    window.setHidesOnDeactivate_(False)
+    window.setLevel_(NSFloatingWindowLevel)
+
+
+def make_accessory() -> None:
+    """No Dock icon or menu bar: the game stays the frontmost app."""
+    NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+
+
+def release_keyboard() -> None:
+    """Our window gives up the keyboard, so keys go back to the game."""
+    window = NSApplication.sharedApplication().keyWindow()  # only ever one of ours
+    if window is not None:
+        window.resignKeyWindow()

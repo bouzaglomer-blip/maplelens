@@ -20,7 +20,7 @@ from maplelens.overlay import (
     TAB_W,
     VALUE_COLOR,
     VALUE_PT,
-    exclude_from_capture,
+    native_setup,
     text_label,
 )
 from maplelens.readers import Reading
@@ -77,7 +77,7 @@ class HistoryWindow(QTableWidget):
         self.sortItems(len(_COLUMNS) - 1, Qt.DescendingOrder)
 
     def showEvent(self, event):
-        exclude_from_capture(self)
+        native_setup(self)
         super().showEvent(event)
 
 

@@ -57,6 +57,10 @@ def update_tools(box: Box, exp, path, reading, rect, now: float, seen: set[str])
 
 def main() -> int:
     app = QApplication(sys.argv)
+    if sys.platform == "darwin":
+        from maplelens import overlay_mac
+
+        overlay_mac.make_accessory()
     capture.set_dpi_aware()
     if not capture.ensure_access():
         return 1
