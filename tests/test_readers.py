@@ -391,3 +391,23 @@ def test_read_all_fills_player():
     assert got.player is not None
     assert got.player == read_player(frame)
     assert got.minimap is not None and got.minimap == read_view(frame)
+
+
+def test_mac_vision_request_failure_raises(monkeypatch):
+    vision = pytest.importorskip("Vision")
+    from maplelens.readers import ocr_mac
+
+    class Failing:
+        @classmethod
+        def alloc(cls):
+            return cls()
+
+        def initWithData_options_(self, data, options):
+            return self
+
+        def performRequests_error_(self, requests, error):
+            return False, "boom"
+
+    monkeypatch.setattr(vision, "VNImageRequestHandler", Failing)
+    with pytest.raises(RuntimeError, match="boom"):
+        ocr_mac.recognize(np.full((40, 40), 255, np.uint8))

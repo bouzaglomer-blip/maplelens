@@ -30,5 +30,7 @@ def recognize(img: np.ndarray) -> list[str]:
     handler = vision.VNImageRequestHandler.alloc().initWithData_options_(
         NSData.dataWithBytes_length_(png, len(png)), None
     )
-    handler.performRequests_error_([req], None)
+    ok, err = handler.performRequests_error_([req], None)
+    if not ok:  # a failed request is not a blank crop
+        raise RuntimeError(f"Vision text request failed: {err}")
     return [o.topCandidates_(1)[0].string().strip() for o in req.results() or []]
