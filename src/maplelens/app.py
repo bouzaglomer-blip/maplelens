@@ -58,6 +58,8 @@ def update_tools(box: Box, exp, path, reading, rect, now: float, seen: set[str])
 def main() -> int:
     app = QApplication(sys.argv)
     capture.set_dpi_aware()
+    if not capture.ensure_access():
+        return 1
     path = data_dir() / "settings.json"
     settings = load_settings(path)
     title = settings["window_title"]

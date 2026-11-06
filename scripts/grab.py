@@ -76,6 +76,8 @@ def main() -> int:
     if args.every is not None and not args.title:
         ap.error("--every/--minutes need --title and --label")
     capture.set_dpi_aware()
+    if not capture.ensure_access():
+        return 1
     if not args.title:
         print("\n".join(capture.list_windows()))
         return 0

@@ -19,3 +19,13 @@ if sys.platform == "win32":
         set_dpi_aware,
         window_title,
     )
+elif sys.platform == "darwin":
+    from maplelens.capture_mac import (  # noqa: F401
+        client_rect,
+        ensure_access,
+        find_window,
+        grab,
+        list_windows,
+        set_dpi_aware,
+        window_title,
+    )
