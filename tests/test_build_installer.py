@@ -1,8 +1,12 @@
 import importlib.util
 import re
+import sys
 from pathlib import Path
 
 import pytest
+
+# The build makes the Windows installer and ships the licenses of win32-only packages (winrt).
+pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="the build is Windows-only")
 
 ROOT = Path(__file__).parent.parent
 _spec = importlib.util.spec_from_file_location(
