@@ -108,17 +108,24 @@ exclude unused Qt modules. Check the current PyInstaller docs and the PySide6 ho
 (source-driven).
 
 **Acceptance criteria:**
-- [ ] `uv run python scripts/build_installer.py --freeze-only` produces
+- [x] `uv run python scripts/build_installer.py --freeze-only` produces
       `dist\MapleLens\MapleLens.exe`; `build/` is gitignored.
 - [ ] With the game running windowed and Daniel's existing `settings.json`, the exe shows
       the box, and the EXP meter and path arrow read the same as `uv run maplelens`.
-- [ ] No console window opens.
-- [ ] `uv run python scripts/check_screen_only.py` passes with the new `uv.lock`.
-- [ ] Folder size recorded (target: installer ≤ 150 MB later).
+      *(2026-11-06: no `settings.json` existed on Daniel's PC. A frozen probe of `read_all`
+      on the live game matched the source run exactly: EXP, level, job, and map name via
+      OCR. The frozen app ran 25 s against the game with no tracebacks. Still to do: Daniel
+      looks at the box and the arrow.)*
+- [x] No console window opens. *(exe subsystem is GUI.)*
+- [x] `uv run python scripts/check_screen_only.py` passes with the new `uv.lock`.
+- [x] Folder size recorded (target: installer ≤ 150 MB later). *(207 MB after trimming
+      ~55 MB of unused OpenCV video and Qt Pdf/Quick/Qml/translations; 262 MB untrimmed.
+      PyInstaller 6.22.3, hooks-contrib 2026.9.)*
 
 **Verification:**
 - [ ] Build, launch, compare EXP/level/map readings side by side with the source run.
-- [ ] Four repo checks.
+      *(Readings compared by the probe; the visual check is Daniel's.)*
+- [x] Four repo checks.
 
 **Dependencies:** T1. **Files:** `pyproject.toml`, `uv.lock`,
 `packaging/windows/maplelens.spec`, `scripts/build_installer.py`, `.gitignore`.
