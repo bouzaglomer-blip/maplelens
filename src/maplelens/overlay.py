@@ -1,9 +1,7 @@
 """MapleLens's own windows: a click-through layer over the game and small draggable boxes."""
 
-import ctypes
 import sys
 from collections.abc import Callable
-from ctypes import wintypes
 
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QAction, QColor, QFont, QGuiApplication, QPainter
@@ -18,7 +16,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-_WDA_EXCLUDEFROMCAPTURE = 0x11
 _INSET = 40  # px from the game's top-right corner for a box with no saved position
 
 # The box's look (mockup 1), shared by every tab: grey labels, larger bold values.
@@ -44,18 +41,14 @@ def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
 def native_setup(widget: QWidget) -> None:
     """Platform setup for one of MapleLens's own windows, run each time it's shown.
 
-    Windows: keep it out of screen grabs, so readers never see it. Mac: a panel that stays
-    visible over the game and leaves it the keyboard.
+    Mac: a panel that stays visible over the game and leaves it the keyboard. Nothing on
+    Windows: capture grabs the game window alone, so the readers never see these windows,
+    and streams and screenshots do.
     """
     if sys.platform == "darwin" and QGuiApplication.platformName() == "cocoa":
         from maplelens import overlay_mac  # AppKit only exists on the Mac
 
         overlay_mac.make_panel(widget)
-    if sys.platform != "win32":
-        return
-    set_affinity = ctypes.windll.user32.SetWindowDisplayAffinity
-    set_affinity.argtypes = [wintypes.HWND, wintypes.DWORD]
-    set_affinity(int(widget.winId()), _WDA_EXCLUDEFROMCAPTURE)  # returns 0 on old Windows: ignore
 
 
 _OVERLAY = Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus

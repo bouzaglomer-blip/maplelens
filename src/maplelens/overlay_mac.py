@@ -4,8 +4,8 @@ import objc
 from AppKit import (
     NSApplication,
     NSApplicationActivationPolicyAccessory,
-    NSFloatingWindowLevel,
     NSPanel,
+    NSStatusWindowLevel,
     NSWindowStyleMaskNonactivatingPanel,
 )
 from PySide6.QtWidgets import QWidget
@@ -20,7 +20,8 @@ def make_panel(widget: QWidget) -> None:
         window.setStyleMask_(window.styleMask() | NSWindowStyleMaskNonactivatingPanel)
         window.setBecomesKeyOnlyIfNeeded_(True)  # clicks and drags leave the keyboard alone
     window.setHidesOnDeactivate_(False)
-    window.setLevel_(NSFloatingWindowLevel)
+    # Above floating level: the game's own window can sit there and then covers ours.
+    window.setLevel_(NSStatusWindowLevel)
 
 
 def make_accessory() -> None:
