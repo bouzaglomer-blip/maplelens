@@ -177,9 +177,13 @@ looks for `DEFAULT_TITLE = "MapleStory"` with `exact=True`, and saves the title 
 window matches. A saved title keeps today's exact-then-substring rule.
 
 **Acceptance criteria:**
-- [ ] Unset title + windows `[…, "MapleStory"]` → found, and `settings["window_title"]` saved.
-- [ ] Unset title + only `"MapleStory Classic Thief Guide - Chrome"` → not found.
-- [ ] Saved `"Thief Guide"` → still found by substring (existing test unchanged).
+- [x] Unset title + windows `[…, "MapleStory"]` → found, and `settings["window_title"]` saved.
+- [x] Unset title + only `"MapleStory Classic Thief Guide - Chrome"` → not found.
+- [x] Saved `"Thief Guide"` → still found by substring (existing test unchanged).
+      *(2026-11-06: `find_game` in `app.py`; checked on Daniel's PC with the game open:
+      the Windows client's title is exactly `MapleStory`, and Discord's `#maple-story`
+      and a Firefox tab were skipped. The `grab.py` exit went too, since with it the
+      default title could never be reached; Task 5 adds the status line.)*
 
 **Verification:** `uv run pytest tests/test_capture.py tests/test_capture_mac.py`; four checks.
 

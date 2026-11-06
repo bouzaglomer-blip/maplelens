@@ -39,10 +39,10 @@ def list_windows() -> list[str]:
     return out
 
 
-def find_window(title: str) -> int | None:
+def find_window(title: str, exact: bool = False) -> int | None:
     from maplelens.capture import pick_window  # late: capture imports this module
 
-    return pick_window(_windows(), title)
+    return pick_window(_windows(), title, exact)
 
 
 def window_title(wid: int) -> str:

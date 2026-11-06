@@ -20,6 +20,9 @@ from maplelens.tools.path_arrow import maps
 from maplelens.tools.path_arrow.ui import PathArrowTool
 
 _TICK_MS = 500
+# The game client's window title. With no title saved, only a window with exactly this
+# title counts, so a browser tab like "MapleStory wiki - Chrome" never does.
+DEFAULT_TITLE = "MapleStory"
 
 
 def build_box(settings: dict, save: Callable[[], None], tools: list) -> Box:
@@ -31,6 +34,21 @@ def build_box(settings: dict, save: Callable[[], None], tools: list) -> Box:
     box.add_menu_item("Quit MapleLens", QApplication.quit)
     box.show()
     return box
+
+
+def find_game(settings: dict, save: Callable[[], None]) -> int | None:
+    """The game window, or None.
+
+    A saved title matches exactly, else as a substring. With none saved, a window titled
+    exactly DEFAULT_TITLE counts, and its title is saved the first time one turns up.
+    """
+    if settings["window_title"]:
+        return capture.find_window(settings["window_title"])
+    found = capture.find_window(DEFAULT_TITLE, exact=True)
+    if found is not None:
+        settings["window_title"] = DEFAULT_TITLE
+        save()
+    return found
 
 
 def report_once(e: Exception, seen: set[str]) -> None:
@@ -96,11 +114,6 @@ def main() -> int:
         return 1
     path = data_dir() / "settings.json"
     settings = load_settings(path)
-    title = settings["window_title"]
-    if not title:
-        print("Run: uv run python scripts/grab.py --title <game title> --label first")
-        return 1
-
     layer = Layer()
 
     def save() -> None:
@@ -116,7 +129,7 @@ def main() -> int:
     def tick() -> None:
         nonlocal hwnd
         now = time.time()
-        hwnd = hwnd or capture.find_window(title)
+        hwnd = hwnd or find_game(settings, save)
         rect = capture.client_rect(hwnd) if hwnd else None
         if rect is None:
             hwnd = None  # gone or minimized: look again next tick
