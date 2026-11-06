@@ -23,6 +23,10 @@ def _backend():
             from maplelens.readers import ocr_win
 
             return ocr_win
+        if sys.platform == "darwin":
+            from maplelens.readers import ocr_mac
+
+            return ocr_mac
     except Exception:
         pass
     return None
