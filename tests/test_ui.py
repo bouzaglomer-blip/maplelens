@@ -102,3 +102,17 @@ def test_history_button_on_exp_tab(monkeypatch, tmp_path):
     button.click()
     assert tool._history.isVisible()
     tool._history.close()
+
+
+def test_tick_updates_labels_in_place(monkeypatch, tmp_path):
+    """Rebuilding the labels each tick blanks the box for a frame: it flickered."""
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QLabel
+
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+
+    QApplication.instance() or QApplication([])
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"), lambda: None)
+    before = tool.tab.findChildren(QLabel)
+    tool.update(None, None, 1.0)
+    assert tool.tab.findChildren(QLabel) == before

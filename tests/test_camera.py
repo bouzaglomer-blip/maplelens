@@ -94,7 +94,7 @@ def test_player_world_clipped_from_npc_markers():
 
 
 def test_player_world_too_few_markers_is_none():
-    view = MinimapView((200, 100), (100.0, 50.0), marks(37)[:2])
+    view = MinimapView((200, 100), (100.0, 50.0), marks(37)[:1])
     assert player_world(view, big()) is None
 
 
@@ -125,10 +125,28 @@ def test_player_world_perion_fixture():
     assert got == approx(want, abs=16)
 
 
+def test_player_world_by_portals_forest_of_wisdom_fixture():
+    # pos_g: 112 of 200 px tall, no NPCs; its two portal spirals give the scroll.
+    view = read_view(cv2.imread(str(SCREENS / "pos_g_2560x1440_100.png")))
+    info = load()["010002020"]
+    assert can_place(view, info)
+    got = player_world(view, info)
+    assert got is not None
+    assert got[0] == approx(view.dot[0] * 16 - info.minimap.cx, abs=16)  # not scrolled sideways
+
+
+def test_player_world_perion_by_portals_alone():
+    view = read_view(cv2.imread(str(SCREENS / "pos_f_2560x1440_100.png")))
+    info = load()["010004000"]
+    mm = info.minimap
+    got = player_world(MinimapView(view.size, view.dot, (), view.portals), info)
+    assert got == approx((view.dot[0] * 16 - mm.cx, (view.dot[1] + 80) * 16 - mm.cy), abs=16)
+
+
 def test_can_place():
     clipped = MinimapView((200, 100), (100.0, 50.0), ())
     assert can_place(clipped, big())
-    assert not can_place(clipped, big(NPCS[:2]))  # too few NPCs to ever match the scroll
+    assert not can_place(clipped, big(NPCS[:1]))  # too few markers to ever match the scroll
     fits = MinimapView((125, 62), (62.5, 31.0), ())
     assert can_place(fits, MapInfo("1", "s", "n", True, MM, (), None))
     assert not can_place(fits, MapInfo("1", "s", "n", True, None, (), None))

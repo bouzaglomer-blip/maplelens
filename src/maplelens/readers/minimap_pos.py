@@ -36,6 +36,11 @@ DOT_AREA = (18, 28)
 NPC_LO, NPC_HI = (0, 170, 0), (90, 255, 90)
 NPC_W, NPC_H = 4, (6, 7)
 NPC_AREA = (18, 24)
+# Portal spirals: a grey ring round a blue centre. The blue (B at least PORTAL_B and
+# PORTAL_BR over R), closed by 3x3, is an 8x8 blob of 51-52 px normalized at 1366, 1920
+# and 2560; Lith Harbor's sea gives only smaller bits.
+PORTAL_B, PORTAL_BR = 140, 80
+PORTAL_SIDE, PORTAL_AREA = 8, (48, 56)
 
 
 @dataclass(frozen=True)
@@ -45,6 +50,7 @@ class MinimapView:
     size: tuple[int, int]
     dot: tuple[float, float]  # the "you" dot's centre
     npcs: tuple[tuple[float, float], ...]  # NPC marker centres
+    portals: tuple[tuple[float, float], ...] = ()  # portal spiral centres
 
     @property
     def fraction(self) -> tuple[float, float]:
@@ -89,8 +95,21 @@ def _blobs(img, lo, hi) -> list[tuple[int, int, int, np.ndarray]]:
     ]
 
 
+def _portals(img: np.ndarray) -> tuple[tuple[float, float], ...]:
+    b, r = img[:, :, 0].astype(int), img[:, :, 2].astype(int)
+    blue = ((b >= PORTAL_B) & (b - r >= PORTAL_BR)).astype(np.uint8)
+    blue = cv2.morphologyEx(blue, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    n, _, stats, centres = cv2.connectedComponentsWithStats(blue, connectivity=8)
+    return tuple(
+        (float(centres[i][0] + 0.5), float(centres[i][1] + 0.5))
+        for i in range(1, n)
+        if stats[i, cv2.CC_STAT_WIDTH] == PORTAL_SIDE == stats[i, cv2.CC_STAT_HEIGHT]
+        and PORTAL_AREA[0] <= stats[i, cv2.CC_STAT_AREA] <= PORTAL_AREA[1]
+    )
+
+
 def read_view(frame: np.ndarray) -> MinimapView | None:
-    """The minimap's map area size, "you" dot and NPC markers, or None.
+    """The minimap's map area size, "you" dot, NPC markers and portal spirals, or None.
 
     `frame` is normalized. None when the minimap is closed, minimized, covered, or the
     dot isn't found exactly once.
@@ -116,7 +135,8 @@ def read_view(frame: np.ndarray) -> MinimapView | None:
         for w, h, px, c in _blobs(img, NPC_LO, NPC_HI)
         if w == NPC_W and NPC_H[0] <= h <= NPC_H[1] and NPC_AREA[0] <= px <= NPC_AREA[1]
     )
-    return MinimapView((int(x1 - x0), int(y1 - y0)), (float(dots[0][0]), float(dots[0][1])), npcs)
+    dot = (float(dots[0][0]), float(dots[0][1]))
+    return MinimapView((int(x1 - x0), int(y1 - y0)), dot, npcs, _portals(img))
 
 
 def read_player(frame: np.ndarray) -> tuple[float, float] | None:

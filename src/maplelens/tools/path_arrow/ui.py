@@ -156,7 +156,7 @@ class PathArrowTool:
         # sizes from raw hints, ignoring the tab's fixed width).
         self._matches.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self._matches.currentItemChanged.connect(lambda *_: self._render())
-        self._matches.itemClicked.connect(lambda _: self._set_typing(False))
+        self._matches.itemClicked.connect(self._pick)
         self._matches.hide()
         self._taxi = QCheckBox("Use taxi")
         self._taxi.setFocusPolicy(Qt.NoFocus)
@@ -256,6 +256,16 @@ class PathArrowTool:
             rows = self._matches.sizeHintForRow(0) * min(n, MATCH_ROWS)
             self._matches.setFixedHeight(rows + 2 * self._matches.frameWidth())
             self._matches.setCurrentRow(0)
+        self._render()
+
+    def _pick(self, item: QListWidgetItem) -> None:
+        """A clicked match fills the field and the list closes on it; Start goes there."""
+        self._search.blockSignals(True)  # re-searching the name could make another row current
+        self._search.setText(item.text())
+        self._search.blockSignals(False)
+        self._matches.setCurrentItem(item)
+        self._matches.hide()
+        self._set_typing(False)
         self._render()
 
     def _on_start(self) -> None:
