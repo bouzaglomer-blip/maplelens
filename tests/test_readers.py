@@ -82,6 +82,7 @@ EXPECTED_POS = {
     "pos_d_1366x768_100.png": (0.518, 0.626),  # Transfer Area, native pixels
     "pos_e_2560x1440_100.png": (0.500, 0.795),  # Lith Harbor, map as wide as the window
     "pos_f_2560x1440_100.png": (0.305, 0.777),  # Perion, map taller than the window
+    "pos_g_2560x1440_100.png": (0.492, 0.446),  # The Forest of Wisdom, taller, no NPCs
     "pos_bar_2560x1440_100.png": None,  # minimap minimized to its bar
     "pos_covered_2560x1440_100.png": None,  # inventory window over the map area
     "pos_nominimap_1920x1080_100.png": None,  # game scene, no minimap
@@ -396,6 +397,20 @@ def test_read_view_npc_markers(name, n):
     view = read_view(screen(name))
     assert len(view.npcs) == n
     assert read_player(screen(name)) == (view.dot[0] / view.size[0], view.dot[1] / view.size[1])
+
+
+@pytest.mark.parametrize(
+    "name, n",
+    [
+        ("pos_c_2560x1440_100.png", 0),  # Henesys Townstreet: none in view
+        ("pos_d_1366x768_100.png", 1),  # Transfer Area, native pixels
+        ("pos_e_2560x1440_100.png", 3),  # Lith Harbor: the sea isn't a spiral
+        ("pos_f_2560x1440_100.png", 5),  # Perion: 2 more cut by the window's edge
+        ("pos_g_2560x1440_100.png", 2),  # The Forest of Wisdom
+    ],
+)
+def test_read_view_portal_spirals(name, n):
+    assert len(read_view(screen(name)).portals) == n
 
 
 # The minimap's other markers, BGR, sampled from the owner's grabs.
