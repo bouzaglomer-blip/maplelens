@@ -33,8 +33,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
-; A running MapleLens holds its files: ask the player to close it, and don't restart it
-; (the last page offers to launch the new version).
+; A running MapleLens holds its files. Setup and the uninstaller both see its mutex
+; (APP_MUTEX in src/maplelens/app.py) and ask the player to close it first; Setup's
+; Restart Manager check backs that up. Don't restart it: the last page offers to launch.
+AppMutex=MapleLensRunning
 CloseApplications=yes
 RestartApplications=no
 

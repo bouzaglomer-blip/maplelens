@@ -135,3 +135,25 @@ def test_a_tool_error_is_logged_once(log, monkeypatch):
 def test_picker_leaves_out_our_own_windows(monkeypatch):
     monkeypatch.setattr(app.capture, "window_titles", lambda: ["MapleLens", "MapleStory"])
     assert app.game_choices() == ["MapleStory"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="named mutexes are a Windows thing")
+def test_mark_running_holds_the_mutex_the_installer_checks(monkeypatch):
+    import ctypes
+
+    monkeypatch.setattr(app, "APP_MUTEX", "MapleLensTestMutex")
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenMutexW.restype = ctypes.c_void_p
+    synchronize = 0x00100000
+    assert not kernel32.OpenMutexW(synchronize, False, "MapleLensTestMutex")
+    assert app.mark_running()
+    handle = kernel32.OpenMutexW(synchronize, False, "MapleLensTestMutex")
+    assert handle
+    kernel32.CloseHandle(ctypes.c_void_p(handle))
+
+
+def test_installer_checks_the_apps_mutex():
+    iss = (app.Path(__file__).parent.parent / "packaging" / "windows" / "maplelens.iss").read_text(
+        encoding="utf-8"
+    )
+    assert f"\nAppMutex={app.APP_MUTEX}\n" in iss

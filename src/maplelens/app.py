@@ -27,6 +27,9 @@ APP_NAME = "MapleLens"  # also the title of our own windows, which the picker le
 DEFAULT_TITLE = "MapleStory"
 _log_path: Path | None = None  # where report_once also writes; set by start_log
 LOOKING = f"Looking for {DEFAULT_TITLE}… right-click to pick the game window"
+# Held while MapleLens runs. The Windows installer and uninstaller look for it (AppMutex in
+# packaging/windows/maplelens.iss) and ask the player to close MapleLens first.
+APP_MUTEX = "MapleLensRunning"
 
 
 def build_box(
@@ -135,12 +138,29 @@ def self_check() -> int:
     return 0 if ocr.engine() is not None else 1
 
 
-def main() -> int:
-    if "--self-check" in sys.argv[1:]:
-        return self_check()
+def mark_running() -> int | None:
+    """Create APP_MUTEX on Windows; the handle stays open until MapleLens exits."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    return kernel32.CreateMutexW(None, False, APP_MUTEX)
+
+
+def _prepare_process() -> None:
+    """Process-wide setup that must happen before Qt starts."""
+    mark_running()
     if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
         os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
+
+
+def main() -> int:
+    if "--self-check" in sys.argv[1:]:
+        return self_check()
+    _prepare_process()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     if sys.platform == "darwin":
