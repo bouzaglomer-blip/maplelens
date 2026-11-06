@@ -156,4 +156,6 @@ def test_installer_checks_the_apps_mutex():
     iss = (app.Path(__file__).parent.parent / "packaging" / "windows" / "maplelens.iss").read_text(
         encoding="utf-8"
     )
-    assert f"\nAppMutex={app.APP_MUTEX}\n" in iss
+    assert f'#define AppMutexName "{app.APP_MUTEX}"' in iss
+    # AppMutex only tells the player to close MapleLens; the [Code] section closes it
+    assert "\nAppMutex=" not in iss
