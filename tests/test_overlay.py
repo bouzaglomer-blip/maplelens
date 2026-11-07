@@ -171,11 +171,17 @@ def test_notice_stays_while_the_status_line_shows(monkeypatch):
     assert box._notice.isVisibleTo(box)
 
 
-def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch):
-    from maplelens.app import update_notice
+@pytest.mark.parametrize("which", ["update", "downloading", "failed"])
+def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch, which):
+    from maplelens import app
 
+    text = {
+        "update": app.update_notice("10.10.10"),
+        "downloading": app.downloading_notice("10.10.10"),
+        "failed": app.UPDATE_FAILED,
+    }[which]
     box = _box(monkeypatch)
-    box.set_notice(update_notice("10.10.10"), lambda: None)
+    box.set_notice(text, lambda: None)
     assert box._notice.sizeHint().width() <= overlay.TAB_W
 
 

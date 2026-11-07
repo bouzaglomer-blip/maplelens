@@ -1,7 +1,9 @@
 """MapleLens entry point: watch the game window and run the tools."""
 
+import contextlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -182,25 +184,48 @@ def update_notice(new: str) -> str:
     return f"Update to {new}: right-click"
 
 
+def downloading_notice(new: str) -> str:
+    return f"Downloading {new}…"
+
+
+UPDATE_FAILED = "Update failed: right-click"  # the menu item tries again
+
+
+def _user_agent() -> dict[str, str]:
+    return {"User-Agent": f"MapleLens/{version('maplelens')}"}  # nothing about the player
+
+
 def fetch_latest(repo: str = update.REPO) -> dict:
     """GitHub's latest release of `repo`, as JSON. Sends only MapleLens's version."""
     req = urllib.request.Request(
         f"https://api.github.com/repos/{repo}/releases/latest",
-        headers={
-            "User-Agent": f"MapleLens/{version('maplelens')}",
-            "Accept": "application/vnd.github+json",
-        },
+        headers={**_user_agent(), "Accept": "application/vnd.github+json"},
     )
     with urllib.request.urlopen(req, timeout=10) as reply:
         return json.load(reply)
 
 
-class UpdateCheck:
-    """Asks for the latest release a few seconds after start, then once a day.
+def download_file(url: str, dest: Path) -> None:
+    """Save `url` to `dest`. The timeout is per read, so a 60 MB setup can take its time."""
+    req = urllib.request.Request(url, headers=_user_agent())
+    with urllib.request.urlopen(req, timeout=30) as reply, dest.open("wb") as f:
+        shutil.copyfileobj(reply, f)
 
-    The request runs on a thread of its own and only fills a slot; poll(), called from
-    the tick on the Qt thread, starts requests and shows what they found. A slow or
-    hanging request never delays a tick, and the next one waits for it to end.
+
+def clear_updates(folder: Path) -> None:
+    """Delete setups left from earlier updates. One still running stays until next time."""
+    for old in folder.glob("MapleLens-Setup-*"):
+        with contextlib.suppress(OSError):
+            old.unlink()
+
+
+class UpdateCheck:
+    """Asks for the latest release a few seconds after start, then once a day, and
+    updates on a click of "Update to X.Y.Z…".
+
+    Requests and the download each run on a thread of their own and only fill a slot;
+    poll(), called from the tick on the Qt thread, starts them and acts on what they
+    left. A slow or hanging request never delays a tick, and the next one waits for it.
     """
 
     FIRST_S = 5
@@ -215,16 +240,26 @@ class UpdateCheck:
         running: str,
         seen: set[str],
         now: float,
+        *,
+        folder: Path,
+        download: Callable[[str, Path], None] = download_file,
+        install: Callable[[Path], None] = install_update,
     ):
         self._box, self._settings, self._save = box, settings, save
         self._fetch, self._running, self._seen = fetch, running, seen
+        self._folder, self._download, self._install = folder, download, install
         self._due = now + self.FIRST_S
         self._thread: threading.Thread | None = None
         self._result: tuple[dict | None, Exception | None] = (None, None)
+        self._download_thread: threading.Thread | None = None
+        self._got: tuple[Path | None, Exception | None] = (None, None)
         self._item = None  # the "Update to X.Y.Z…" menu item, once an update is known
         self.release: update.Release | None = None
 
     def poll(self, now: float) -> None:
+        if self._download_thread is not None and not self._download_thread.is_alive():
+            self._download_thread = None
+            self._hand_over(*self._got)
         if self._thread is not None and not self._thread.is_alive():
             self._thread = None
             reply, error = self._result
@@ -252,7 +287,8 @@ class UpdateCheck:
             self._item = self._box.add_menu_item(label, self._update, first=True)
         else:
             self._item.setText(label)
-        if self._settings.get("update_dismissed") != release.version:
+        downloading = self._download_thread is not None  # its line stays until it ends
+        if not downloading and self._settings.get("update_dismissed") != release.version:
             self._box.set_notice(
                 update_notice(release.version), lambda: self._dismiss(release.version)
             )
@@ -262,7 +298,45 @@ class UpdateCheck:
         self._save()
 
     def _update(self) -> None:
-        """The menu item's click: the download and handoff come with the one-click update."""
+        """The menu item's click: download the setup; poll() hands over once it's checked."""
+        if self.release is None or self._download_thread is not None:
+            return  # a second click while downloading does nothing
+        self._box.set_notice(downloading_notice(self.release.version))
+        self._got = (None, None)
+        self._download_thread = threading.Thread(
+            target=self._get, args=(self.release,), daemon=True
+        )
+        self._download_thread.start()
+
+    def _get(self, release: update.Release) -> None:  # on the download's own thread: no Qt
+        setup = self._folder / f"MapleLens-Setup-{release.version}.exe"
+        part = setup.with_name(setup.name + ".part")  # renamed only once its digest matches
+        try:
+            if release.digest is None:
+                raise ValueError(f"GitHub gave no digest for {setup.name}: it can't be checked")
+            self._folder.mkdir(parents=True, exist_ok=True)
+            self._download(release.url, part)
+            if not update.digest_ok(part, release.digest):
+                raise ValueError(f"{setup.name} doesn't match GitHub's digest {release.digest}")
+            part.replace(setup)
+            self._got = (setup, None)
+        except Exception as e:
+            with contextlib.suppress(OSError):
+                part.unlink(missing_ok=True)
+            self._got = (None, e)
+
+    def _hand_over(self, setup: Path | None, error: Exception | None) -> None:
+        if setup is not None:
+            try:
+                self._install(setup)  # quits MapleLens: Setup takes it from here
+                return
+            except Exception as e:  # Setup didn't start; this version keeps running
+                error = e
+                with contextlib.suppress(OSError):
+                    setup.unlink(missing_ok=True)
+        if error is not None:
+            report_once(error, self._seen)
+        self._box.set_notice(UPDATE_FAILED)
 
 
 def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests swap
@@ -273,10 +347,15 @@ def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests
     now: float,
     fetch: Callable[[], dict] = fetch_latest,
 ) -> UpdateCheck | None:
-    """An UpdateCheck for the installed Windows app with the toggle on, else None."""
+    """An UpdateCheck for the installed Windows app with the toggle on, else None.
+
+    Clears the setups earlier updates left in the data folder's `updates`.
+    """
     if not update.should_check(getattr(sys, "frozen", False), sys.platform, settings):
         return None
-    return UpdateCheck(box, settings, save, fetch, version("maplelens"), seen, now)
+    folder = data_dir() / "updates"
+    clear_updates(folder)
+    return UpdateCheck(box, settings, save, fetch, version("maplelens"), seen, now, folder=folder)
 
 
 def _prepare_process() -> None:

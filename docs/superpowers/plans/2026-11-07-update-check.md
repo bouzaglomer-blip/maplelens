@@ -186,7 +186,7 @@ then the four checks. Manual: from source with the gate forced on and
 **Dependencies:** U1. **Files:** `src/maplelens/overlay.py`, `src/maplelens/app.py`,
 `src/maplelens/store.py`, `tests/test_overlay.py`, `tests/test_app.py`. **Scope:** M.
 
-### Task U4: one click, from download to digest to handoff
+### Task U4: one click, from download to digest to handoff (done)
 
 **Description:** "Update to X.Y.Z…" starts a download thread. It saves to
 `data_dir()/updates/MapleLens-Setup-X.Y.Z.exe`, writing a `.part` file and renaming it at
@@ -196,10 +196,24 @@ logged, and the file is deleted. A second click while a download runs does nothi
 setups in `updates/` are cleared at startup.
 
 **Acceptance criteria:**
-- [ ] A fake downloader with the right bytes calls `install_update` with the file.
-- [ ] Wrong bytes, a missing digest, or a raising downloader: `install_update` is never
+- [x] A fake downloader with the right bytes calls `install_update` with the file.
+- [x] Wrong bytes, a missing digest, or a raising downloader: `install_update` is never
       called, the failure line shows, and the log has the reason.
-- [ ] Clicking twice starts one download.
+- [x] Clicking twice starts one download.
+
+**Build notes (2026-11-07):**
+- The failure line is **"Update failed: right-click"**, since the spec's "Update failed,
+  right-click to retry" fit with 1 px to spare (185 of 186). It now measures 144 px, and
+  "Downloading 10.10.10…" measures 139 px. U6 brings the spec in line.
+- The `.part` is renamed to the setup only after its digest matches. With no digest,
+  nothing is downloaded. A setup that won't start (`install_update` raises) also shows
+  the failure line, and its file is deleted.
+- The daily check leaves the "Downloading…" line alone while a download runs.
+- `clear_updates` runs when the check is created and skips files it can't delete. The
+  last update's Setup may still be running when the new version starts; the next start
+  clears it.
+- The real `download_file` was tried once on `astral-sh/uv`'s smallest release asset.
+  It followed GitHub's redirect, and `digest_ok` passed with the real `sha256:` digest.
 
 **Verification:** `uv run pytest tests/test_app.py`, then the four checks.
 
@@ -242,7 +256,8 @@ checks.
   that updating is one click.
 - AGENTS.md Layout gets `update.py` and `tests/fixtures/github/`.
 - CONTRIBUTING gets "testing an update" with `MAPLELENS_UPDATE_REPO` and the fork.
-- Update-check spec: the notice copy becomes "Update to X.Y.Z: right-click" (U3 notes).
+- Update-check spec: the notice copy becomes "Update to X.Y.Z: right-click" (U3 notes),
+  and the failure line "Update failed: right-click" (U4 notes).
 - Update-check spec: "v0.1.0 ships without this" becomes "ships in v0.1.0 with #10",
   the open question "which version ships it" is closed, and Testing step 5 says the
   tampered download is a test (Architecture decisions).

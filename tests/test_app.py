@@ -1,3 +1,4 @@
+import hashlib
 import re
 import sys
 
@@ -233,7 +234,7 @@ def test_installer_knows_the_update_flag():
 # --- the update check ---------------------------------------------------------------
 
 
-def _latest(v):
+def _latest(v, digest="sha256:" + "0" * 64):
     """A releases/latest reply for version `v`."""
     return {
         "tag_name": f"v{v}",
@@ -241,7 +242,7 @@ def _latest(v):
             {
                 "name": f"MapleLens-Setup-{v}.exe",
                 "browser_download_url": f"https://example.invalid/MapleLens-Setup-{v}.exe",
-                "digest": "sha256:" + "0" * 64,
+                "digest": digest,
             }
         ],
     }
@@ -276,9 +277,16 @@ class _Fetch:
         return self.reply
 
 
-def _check(box, fetch, settings=None, save=lambda: None):
-    settings = {"update_dismissed": None} if settings is None else settings
-    return app.UpdateCheck(box, settings, save, fetch, "0.1.0", set(), now=0.0)
+@pytest.fixture
+def make_check(qt_box, tmp_path):
+    """make_check(fetch, settings, save, **kw): an UpdateCheck on qt_box, running 0.1.0."""
+
+    def make(fetch, settings=None, save=lambda: None, **kw):
+        settings = {"update_dismissed": None} if settings is None else settings
+        kw.setdefault("folder", tmp_path / "updates")
+        return app.UpdateCheck(qt_box, settings, save, fetch, "0.1.0", set(), now=0.0, **kw)
+
+    return make
 
 
 def _run(check, now):
@@ -293,49 +301,49 @@ def _menu(box):
     return [a.text() for a in box.actions()]
 
 
-def test_first_check_waits_a_few_seconds(qt_box):
+def test_first_check_waits_a_few_seconds(qt_box, make_check):
     fetch = _Fetch(NEWER)
-    check = _check(qt_box, fetch)
+    check = make_check(fetch)
     _run(check, app.UpdateCheck.FIRST_S - 1)
     assert fetch.calls == 0
     _run(check, app.UpdateCheck.FIRST_S)
     assert fetch.calls == 1
 
 
-def test_a_newer_release_shows_the_line_and_the_menu_item(qt_box):
-    check = _check(qt_box, _Fetch(NEWER))
+def test_a_newer_release_shows_the_line_and_the_menu_item(qt_box, make_check):
+    check = make_check(_Fetch(NEWER))
     _run(check, 10.0)
     assert qt_box._notice.isVisibleTo(qt_box)
     assert qt_box._notice_text.text() == app.update_notice("0.2.0")
     assert _menu(qt_box) == ["Update to 0.2.0…", "Quit MapleLens"]
 
 
-def test_the_same_version_shows_nothing(qt_box):
-    check = _check(qt_box, _Fetch(_latest("0.1.0")))
+def test_the_same_version_shows_nothing(qt_box, make_check):
+    check = make_check(_Fetch(_latest("0.1.0")))
     _run(check, 10.0)
     assert not qt_box._notice.isVisibleTo(qt_box)
     assert _menu(qt_box) == ["Quit MapleLens"]
 
 
-def test_dismissing_saves_the_version(qt_box):
+def test_dismissing_saves_the_version(qt_box, make_check):
     settings, saves = {"update_dismissed": None}, []
-    check = _check(qt_box, _Fetch(NEWER), settings, lambda: saves.append(1))
+    check = make_check(_Fetch(NEWER), settings, lambda: saves.append(1))
     _run(check, 10.0)
     qt_box._notice_close.click()
     assert settings["update_dismissed"] == "0.2.0"
     assert saves == [1]
 
 
-def test_a_dismissed_version_keeps_the_menu_item_but_no_line(qt_box):
-    check = _check(qt_box, _Fetch(NEWER), {"update_dismissed": "0.2.0"})
+def test_a_dismissed_version_keeps_the_menu_item_but_no_line(qt_box, make_check):
+    check = make_check(_Fetch(NEWER), {"update_dismissed": "0.2.0"})
     _run(check, 10.0)
     assert not qt_box._notice.isVisibleTo(qt_box)
     assert _menu(qt_box) == ["Update to 0.2.0…", "Quit MapleLens"]
 
 
-def test_a_later_version_brings_the_line_back_and_relabels_the_item(qt_box):
+def test_a_later_version_brings_the_line_back_and_relabels_the_item(qt_box, make_check):
     fetch = _Fetch(NEWER)
-    check = _check(qt_box, fetch, {"update_dismissed": "0.2.0"})
+    check = make_check(fetch, {"update_dismissed": "0.2.0"})
     _run(check, 10.0)
     fetch.reply = _latest("0.3.0")
     _run(check, 10.0 + app.UpdateCheck.EVERY_S)
@@ -345,9 +353,9 @@ def test_a_later_version_brings_the_line_back_and_relabels_the_item(qt_box):
     assert _menu(qt_box) == ["Update to 0.3.0…", "Quit MapleLens"]
 
 
-def test_checks_again_only_after_a_day(qt_box):
+def test_checks_again_only_after_a_day(qt_box, make_check):
     fetch = _Fetch(NEWER)
-    check = _check(qt_box, fetch)
+    check = make_check(fetch)
     _run(check, 10.0)
     _run(check, 10.0 + app.UpdateCheck.EVERY_S - 1)
     assert fetch.calls == 1
@@ -355,10 +363,10 @@ def test_checks_again_only_after_a_day(qt_box):
     assert fetch.calls == 2
 
 
-def test_a_failing_check_is_logged_once_and_shows_nothing(qt_box, log, monkeypatch):
+def test_a_failing_check_is_logged_once_and_shows_nothing(qt_box, make_check, log, monkeypatch):
     monkeypatch.setattr(sys, "stderr", None)
     fetch = _Fetch(error=OSError("offline"))
-    check = _check(qt_box, fetch)
+    check = make_check(fetch)
     _run(check, 10.0)
     _run(check, 10.0 + app.UpdateCheck.EVERY_S)
     assert fetch.calls == 2  # the next scheduled check tries again
@@ -369,7 +377,7 @@ def test_a_failing_check_is_logged_once_and_shows_nothing(qt_box, log, monkeypat
     assert "Traceback" in text
 
 
-def test_a_hanging_check_never_blocks_a_tick(qt_box, log, monkeypatch):
+def test_a_hanging_check_never_blocks_a_tick(qt_box, make_check, log, monkeypatch):
     import threading
 
     monkeypatch.setattr(sys, "stderr", None)
@@ -380,7 +388,7 @@ def test_a_hanging_check_never_blocks_a_tick(qt_box, log, monkeypatch):
         let_go.wait(5)
         raise TimeoutError("timed out")
 
-    check = _check(qt_box, hangs)
+    check = make_check(hangs)
     for day in range(5):  # ticks go on while the request hangs, and start no second one
         check.poll(10.0 + day * app.UpdateCheck.EVERY_S)
     assert calls == [1]
@@ -408,12 +416,18 @@ def test_toggle_off_there_is_no_update_check(qt_box, monkeypatch):
     assert fetch.calls == 0
 
 
-def test_the_installed_windows_app_gets_an_update_check(qt_box, monkeypatch):
+def test_the_installed_windows_app_gets_an_update_check(qt_box, monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(app, "data_dir", lambda: tmp_path)
+    old = tmp_path / "updates"
+    old.mkdir()
+    (old / "MapleLens-Setup-0.1.0.exe").write_bytes(b"last update's setup")
+    (old / "MapleLens-Setup-0.2.0.exe.part").write_bytes(b"half a download")
     settings = {"update_check": True, "update_dismissed": None}
     check = app.update_check(qt_box, settings, lambda: None, set(), 0.0, _Fetch(NEWER))
     assert isinstance(check, app.UpdateCheck)
+    assert list(old.iterdir()) == []  # old setups are cleared at startup
 
 
 def test_settings_default_to_checking():
@@ -438,3 +452,158 @@ def test_fetch_asks_github_with_only_the_version(monkeypatch):
     assert seen["url"] == "https://api.github.com/repos/someone/maplelens/releases/latest"
     assert seen["headers"]["User-agent"] == f"MapleLens/{app.version('maplelens')}"
     assert seen["timeout"] <= 15
+
+
+# --- one click: download, digest, handoff ---------------------------------------------
+
+SETUP = b"MZ stand-in for a setup exe"
+GOOD = "sha256:" + hashlib.sha256(SETUP).hexdigest()
+URL = "https://example.invalid/MapleLens-Setup-0.2.0.exe"
+
+
+class _Download:
+    """A fake download: writes .data to the file (or raises .error); records its calls."""
+
+    def __init__(self, data=SETUP, error=None, wait=None):
+        self.data, self.error, self.wait, self.calls = data, error, wait, []
+
+    def __call__(self, url, dest):
+        self.calls.append((url, dest))
+        if self.wait:
+            self.wait.wait(5)
+        if self.error:
+            raise self.error
+        dest.write_bytes(self.data)
+
+
+def _found(make_check, download, digest=GOOD, install=None):
+    """An UpdateCheck that has found 0.2.0 (with `digest`) and shows its menu item."""
+    check = make_check(
+        _Fetch(_latest("0.2.0", digest)), download=download, install=install or (lambda p: None)
+    )
+    _run(check, 10.0)
+    return check
+
+
+def _finish_download(check, now=11.0):
+    check._download_thread.join(5)
+    check.poll(now)
+
+
+def test_update_downloads_checks_the_digest_and_hands_over(qt_box, make_check, tmp_path):
+    installs, download = [], _Download()
+    check = _found(make_check, download, install=installs.append)
+    qt_box.actions()[0].trigger()  # "Update to 0.2.0…"
+    assert qt_box._notice_text.text() == app.downloading_notice("0.2.0")
+    _finish_download(check)
+    setup = tmp_path / "updates" / "MapleLens-Setup-0.2.0.exe"
+    assert installs == [setup]
+    assert setup.read_bytes() == SETUP
+    [(url, dest)] = download.calls
+    assert url == URL and dest.name == "MapleLens-Setup-0.2.0.exe.part"
+    assert list(setup.parent.iterdir()) == [setup]  # the .part became the setup
+
+
+@pytest.mark.parametrize(
+    ("digest", "download", "reason"),
+    [
+        (GOOD, _Download(b"tampered"), "doesn't match"),
+        (None, _Download(), "no digest"),
+        ("md5:" + "0" * 32, _Download(), "doesn't match"),
+        (GOOD, _Download(error=OSError("connection reset")), "connection reset"),
+    ],
+    ids=["wrong bytes", "no digest", "not sha256", "download fails"],
+)
+def test_an_unverified_setup_never_runs(
+    qt_box, make_check, tmp_path, log, monkeypatch, digest, download, reason
+):
+    monkeypatch.setattr(sys, "stderr", None)
+    installs = []
+    check = _found(make_check, download, digest, installs.append)
+    qt_box.actions()[0].trigger()
+    _finish_download(check)
+    assert installs == []
+    assert qt_box._notice.isVisibleTo(qt_box)
+    assert qt_box._notice_text.text() == app.UPDATE_FAILED
+    assert reason in log.read_text(encoding="utf-8")
+    assert list((tmp_path / "updates").glob("*")) == []  # nothing left to run by mistake
+
+
+def test_a_failed_update_can_be_retried(qt_box, make_check):
+    installs, download = [], _Download(error=OSError("connection reset"))
+    check = _found(make_check, download, install=installs.append)
+    qt_box.actions()[0].trigger()
+    _finish_download(check)
+    download.error = None
+    qt_box.actions()[0].trigger()
+    _finish_download(check)
+    assert len(download.calls) == 2
+    assert len(installs) == 1
+
+
+def test_clicking_twice_starts_one_download(qt_box, make_check):
+    import threading
+
+    let_go = threading.Event()
+    download = _Download(wait=let_go)
+    check = _found(make_check, download)
+    qt_box.actions()[0].trigger()
+    qt_box.actions()[0].trigger()
+    check.poll(11.0)
+    qt_box.actions()[0].trigger()
+    let_go.set()
+    _finish_download(check)
+    assert len(download.calls) == 1
+
+
+def test_the_daily_check_leaves_the_downloading_line_alone(qt_box, make_check):
+    import threading
+
+    let_go = threading.Event()
+    check = _found(make_check, _Download(wait=let_go))
+    qt_box.actions()[0].trigger()
+    _run(check, 10.0 + app.UpdateCheck.EVERY_S)  # finds 0.2.0 again mid-download
+    assert qt_box._notice_text.text() == app.downloading_notice("0.2.0")
+    let_go.set()
+    _finish_download(check)
+
+
+def test_setup_that_wont_start_shows_the_failure(qt_box, make_check, log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+
+    def blocked(path):
+        raise OSError("blocked by antivirus")
+
+    check = _found(make_check, _Download(), install=blocked)
+    qt_box.actions()[0].trigger()
+    _finish_download(check)
+    assert qt_box._notice_text.text() == app.UPDATE_FAILED
+    assert "blocked by antivirus" in log.read_text(encoding="utf-8")
+
+
+def test_clear_updates_skips_what_it_cant_delete(tmp_path, monkeypatch):
+    app.clear_updates(tmp_path / "missing")  # no folder yet: nothing to do
+    (tmp_path / "MapleLens-Setup-0.1.0.exe").write_bytes(b"still running")
+
+    def in_use(self, missing_ok=False):
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(app.Path, "unlink", in_use)
+    app.clear_updates(tmp_path)  # Setup may still be running; the next start clears it
+
+
+def test_download_file_saves_the_reply_with_the_user_agent(tmp_path, monkeypatch):
+    import io
+
+    seen = {}
+
+    def urlopen(req, timeout):
+        seen["url"], seen["headers"] = req.full_url, dict(req.headers)
+        return io.BytesIO(SETUP)
+
+    monkeypatch.setattr(app.urllib.request, "urlopen", urlopen)
+    dest = tmp_path / "MapleLens-Setup-0.2.0.exe.part"
+    app.download_file(URL, dest)
+    assert dest.read_bytes() == SETUP
+    assert seen["url"] == URL
+    assert seen["headers"]["User-agent"] == f"MapleLens/{app.version('maplelens')}"
