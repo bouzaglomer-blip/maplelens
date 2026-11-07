@@ -41,11 +41,11 @@ is what matters, and pull requests that break it are not accepted.
 3. Start MapleStory Classic **windowed or borderless**.
 4. Start MapleLens from the Start menu (or leave "Launch MapleLens" ticked on the last
    setup page). It finds the game window by itself. If the box says "Looking for
-   MapleStory…", right-click the box, choose **Pick game window…** and pick the game.
+   MapleStory…", click **•••** on the box, choose **Pick game window…** and pick the game.
 5. Drag the box where you want it. History opens the per-map table.
 
-**Updating:** when a new version is out, the box says "Update to X.Y.Z: right-click".
-Right-click the box and choose **Update to X.Y.Z…**. MapleLens downloads the setup,
+**Updating:** when a new version is out, the box says "Update to X.Y.Z: click •••".
+Click **•••** on the box and choose **Update to X.Y.Z…**. MapleLens downloads the setup,
 checks it against the SHA-256 checksum GitHub publishes for it, saves your session and
 closes. Setup then installs the new version without asking anything and starts it again.
 Your settings and EXP history are kept. You can also download the newer setup and run it
@@ -55,7 +55,7 @@ close it.
 **The update check talks to GitHub:** a few seconds after it starts and then once a day,
 MapleLens sends one HTTPS request to GitHub's API for the latest release. The request
 carries `MapleLens/<version>` as its User-Agent and nothing about you or the game; the
-update itself is downloaded from GitHub too. To turn the check off, right-click the box
+update itself is downloaded from GitHub too. To turn the check off, click **•••** on the box
 and untick **Check for updates automatically**. **Check for updates now** still works
 when you want it. Only the installed Windows app checks; running from source never does.
 
@@ -83,7 +83,7 @@ uv run maplelens
 ```
 
 MapleLens looks for the window titled `MapleStory`. If yours is called something else,
-right-click the box and use **Pick game window…**. The choice is saved.
+click **•••** on the box and use **Pick game window…**. The choice is saved.
 
 ## Development
 

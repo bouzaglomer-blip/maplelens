@@ -148,9 +148,9 @@ def test_notice_shows_under_the_tabs_and_x_dismisses_it(monkeypatch):
     page = QLabel("page")
     box.add_tab("A", page)
     dismissed = []
-    box.set_notice("Update to 0.2.0: right-click", lambda: dismissed.append(1))
+    box.set_notice("Update to 0.2.0: click •••", lambda: dismissed.append(1))
     assert box._notice.isVisibleTo(box)
-    assert box._notice_text.text() == "Update to 0.2.0: right-click"
+    assert box._notice_text.text() == "Update to 0.2.0: click •••"
     assert page.isVisibleTo(box) and box._tab_buttons[0].isVisibleTo(box)
     box._notice_close.click()
     assert not box._notice.isVisibleTo(box)
@@ -328,3 +328,19 @@ def test_right_click_still_opens_the_box_menu(monkeypatch):
     box = _box(monkeypatch)
     box.add_menu_item("Quit", lambda: None)
     assert box.contextMenuPolicy() == Qt.ActionsContextMenu
+
+
+def test_menu_button_lines_up_with_the_first_line_of_a_two_line_status(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.show()
+    box.set_status("Looking for the game…\nclick ••• to pick it")
+    box.adjustSize()
+    button, status = box._menu_button.geometry(), box._status.geometry()
+    assert abs(button.top() - status.top()) <= 2  # the corner, not between the lines
+    box.set_status(None)
+    box.adjustSize()
+    button, strip = box._menu_button.geometry(), box._strip_row.geometry()
+    assert abs(button.center().y() - strip.center().y()) <= 2  # level with the tab titles

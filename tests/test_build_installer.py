@@ -231,3 +231,11 @@ def test_the_spec_and_setup_point_at_the_packaged_icon():
     iss = (ROOT / "packaging" / "windows" / "maplelens.iss").read_text(encoding="utf-8")
     assert 'ROOT / "src" / "maplelens" / "data" / "icon.ico"' in spec
     assert r"SetupIconFile=..\..\src\maplelens\data\icon.ico" in iss
+
+
+def test_setup_says_where_to_quit_a_running_maplelens():
+    iss = (ROOT / "packaging" / "windows" / "maplelens.iss").read_text(encoding="utf-8")
+    # the menu button's bullets as character codes: the script stays ASCII
+    assert "Quit it from the ' + #$2022#$2022#$2022 +" in iss
+    assert "' menu on its box or its tray icon, then try again.'" in iss
+    assert "right-click" not in iss

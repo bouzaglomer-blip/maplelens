@@ -153,11 +153,16 @@ above.
 - Update the tests that assert the old strings.
 
 **Acceptance criteria:**
-- [ ] `git grep -i "right-click\|right click" -- src README.md packaging` finds nothing
+- [x] `git grep -i "right-click\|right click" -- src README.md packaging` finds nothing
       in what the player sees. The box's right-click still works, it just isn't
       mentioned.
-- [ ] `test_notice_fits_the_tab_width_at_the_longest_version` passes with the new text.
+      *2026-11-07: finds nothing. The text says "•••" (T2's glyph). The `.iss` writes it
+      as `#$2022` codes so the script stays ASCII; ISCC compiles it.*
+- [x] `test_notice_fits_the_tab_width_at_the_longest_version` passes with the new text.
 - [ ] By hand: the "Looking for…" state reads well next to the ⋯ at 100% and 150%.
+      *2026-11-07: two lines, picked from offscreen renders at 100% and 150%: one line
+      made the box 395 px wide, two make it 243. While the status shows, the button is
+      top-aligned, level with the first line. Still to see on a real screen.*
 
 **Verification:** `uv run pytest`, the four checks.
 

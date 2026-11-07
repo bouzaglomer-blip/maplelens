@@ -116,11 +116,11 @@ class Box(QWidget):
         self._menu = QMenu(self)
         self.attach_menu(self._menu)
         self._menu_button = mark_button(MENU_MARK, 10, self._open_menu)  # the tabs' size
-        top = QHBoxLayout()  # the strip or the status line, then the menu button
-        top.setSpacing(10)
-        top.addWidget(self._strip_row, 1)
-        top.addWidget(self._status, 1)
-        top.addWidget(self._menu_button, 0, Qt.AlignVCenter | Qt.AlignRight)
+        self._top = QHBoxLayout()  # the strip or the status line, then the menu button
+        self._top.setSpacing(10)
+        self._top.addWidget(self._strip_row, 1)
+        self._top.addWidget(self._status, 1)
+        self._top.addWidget(self._menu_button, 0, Qt.AlignVCenter | Qt.AlignRight)
         self._notice = QWidget()  # a line of its own, so it shows with the tabs or the status
         self._notice_text = text_label("", LABEL_PT, ACCENT)
         # a multiplication sign, the close mark
@@ -136,7 +136,7 @@ class Box(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 10)
         layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
-        layout.addLayout(top)
+        layout.addLayout(self._top)
         layout.addWidget(self._pages)
         layout.addWidget(self._notice)
 
@@ -174,14 +174,17 @@ class Box(QWidget):
             self._pages.widget(j).setSizePolicy(policy, policy)
 
     def set_status(self, text: str | None) -> None:
-        """Show one line of `text` in place of the tabs; None brings the tabs back.
+        """Show `text` in place of the tabs; None brings the tabs back.
 
-        The menu button stays in both.
+        The menu button stays in both: level with the tab titles, or with the status's
+        first line.
         """
         self._status.setText(text or "")
         self._status.setVisible(text is not None)
         self._strip_row.setVisible(text is None)
         self._pages.setVisible(text is None)
+        row = Qt.AlignVCenter if text is None else Qt.AlignTop
+        self._top.setAlignment(self._menu_button, row | Qt.AlignRight)
 
     def set_notice(self, text: str | None, on_dismiss: Callable[[], None] | None = None) -> None:
         """Show `text` on a line under the pages; None hides it.

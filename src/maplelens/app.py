@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QApplication
 
 import maplelens
 from maplelens import capture, update
-from maplelens.overlay import Box, Layer
+from maplelens.overlay import MENU_MARK, Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.exp_meter.history import open_db
@@ -38,7 +38,8 @@ ICON = Path(maplelens.__file__).parent / "data" / "icon.ico"
 # title counts, so a browser tab like "MapleStory wiki - Chrome" never does.
 DEFAULT_TITLE = "MapleStory"
 _log_path: Path | None = None  # where report_once also writes; set by start_log
-LOOKING = f"Looking for {DEFAULT_TITLE}… right-click to pick the game window"
+# Two lines: on one, the box would be nearly twice its width with the tabs.
+LOOKING = f"Looking for {DEFAULT_TITLE}…\nclick {MENU_MARK} to pick the game window"
 # Held while MapleLens runs. The Windows installer and uninstaller look for it (AppMutex in
 # packaging/windows/maplelens.iss) and ask the player to close MapleLens first.
 APP_MUTEX = "MapleLensRunning"
@@ -54,7 +55,7 @@ def build_box(
     tools: list,
     pick: Callable[[str], None] | None = None,
 ) -> Box:
-    """The one overlay box: a tab per tool; the window picker and Quit on right-click."""
+    """The one overlay box: a tab per tool; the window picker and Quit in its menu."""
     box = Box("exp_meter", settings, save)
     for tool in tools:
         box.add_tab(tool.title, tool.tab)
@@ -205,14 +206,14 @@ def install_update(setup: Path) -> None:
 
 def update_notice(new: str) -> str:
     """The box's line for an update; it fits TAB_W up to version 10.10.10."""
-    return f"Update to {new}: right-click"
+    return f"Update to {new}: click {MENU_MARK}"
 
 
 def downloading_notice(new: str) -> str:
     return f"Downloading {new}…"
 
 
-UPDATE_FAILED = "Update failed: right-click"  # the menu item tries again
+UPDATE_FAILED = f"Update failed: click {MENU_MARK}"  # the menu item tries again
 UP_TO_DATE = "MapleLens is up to date"  # "Check for updates now" replies
 COULDNT_CHECK = "Couldn't check for updates"
 

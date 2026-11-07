@@ -117,8 +117,9 @@ begin
     ewWaitUntilTerminated, Code);
   Result := WaitForExit(3000);
   if not Result then
-    SuppressibleMsgBox('MapleLens is still running. Quit it from its right-click menu, ' +
-      'then try again.', mbError, MB_OK, IDOK);
+    { #$2022 is a bullet: the box's menu button. As codes, the script stays ASCII. }
+    SuppressibleMsgBox('MapleLens is still running. Quit it from the ' + #$2022#$2022#$2022 +
+      ' menu on its box or its tray icon, then try again.', mbError, MB_OK, IDOK);
 end;
 
 function InitializeSetup(): Boolean;

@@ -784,3 +784,15 @@ def test_download_file_saves_the_reply_with_the_user_agent(tmp_path, monkeypatch
     assert dest.read_bytes() == SETUP
     assert seen["url"] == URL
     assert seen["headers"]["User-agent"] == f"MapleLens/{app.version('maplelens')}"
+
+
+def test_the_box_text_points_at_the_menu_button():
+    from maplelens.overlay import MENU_MARK
+
+    assert app.LOOKING.replace("\n", " ") == (
+        f"Looking for MapleStory… click {MENU_MARK} to pick the game window"
+    )
+    assert app.update_notice("1.2.3") == f"Update to 1.2.3: click {MENU_MARK}"
+    assert app.UPDATE_FAILED == f"Update failed: click {MENU_MARK}"
+    for text in (app.LOOKING, app.update_notice("1.2.3"), app.UPDATE_FAILED):
+        assert "right" not in text.lower()
