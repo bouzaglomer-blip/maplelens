@@ -26,6 +26,13 @@ def test_self_check_fails_without_templates(tmp_path, monkeypatch, no_cache):
     assert app.self_check() == 1
 
 
+def test_self_check_fails_without_classes_json(monkeypatch, no_cache):
+    from maplelens.tools.class_helper import data
+
+    monkeypatch.setattr(data, "load", lambda: (_ for _ in ()).throw(FileNotFoundError()))
+    assert app.self_check() == 1
+
+
 def test_self_check_fails_without_ocr(monkeypatch, no_cache):
     monkeypatch.setattr(ocr, "engine", lambda: None)
     assert app.self_check() == 1

@@ -28,7 +28,8 @@ class Advice:
 
 
 def band_at(build: Build, level: int) -> Band | None:
-    return next((b for b in build.ap if b.from_level <= level <= b.to_level), None)
+    """Bands are [from, to): edges are shared, so the later band wins (the last also takes 200)."""
+    return next((b for b in reversed(build.ap) if b.from_level <= level <= b.to_level), None)
 
 
 def ap_advice(band: Band, level: int, stats: dict[str, int], unspent: int) -> dict[str, Advice]:

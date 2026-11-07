@@ -57,8 +57,24 @@ def test_stats_outside_the_plan_never_get_points_or_tags():
 def test_growing_hold_and_band_lookup():
     grow = Band(1, 200, {"DEX": (0, 1.0)}, "LUK")
     assert ap_advice(grow, 30, s(4, 28, 4, 40), 2)["DEX"] == Advice(add=2)
-    build = Build("x", (Band(1, 29, {}, "LUK"), grow), (), (), None, None)
-    assert band_at(build, 29).to_level == 29 and band_at(build, 30) is grow
+    late = Band(30, 200, {"DEX": (0, 1.0)}, "LUK")
+    build = Build("x", (Band(1, 30, {}, "LUK"), late), (), (), None, None)
+    assert band_at(build, 29).to_level == 30 and band_at(build, 30) is late  # [from, to)
+    assert band_at(build, 200) is late
+
+
+def test_shipped_band_edges():
+    from maplelens.tools.class_helper.data import load
+
+    d = load()
+    rogue = d.jobs["Rogue"].builds[0]
+    assert band_at(rogue, 13).targets(13)["DEX"] == 5
+    assert band_at(rogue, 14).targets(14)["DEX"] == 10
+    for plan in d.jobs.values():
+        for b in plan.builds:
+            assert band_at(b, 200) is not None
+            for c in b.ap[1:]:
+                assert band_at(b, c.from_level) is c
 
 
 SK = {

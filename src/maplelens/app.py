@@ -21,6 +21,7 @@ from maplelens import capture, update
 from maplelens.overlay import Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
+from maplelens.tools.class_helper import data as class_data
 from maplelens.tools.class_helper.ui import ClassHelperTool
 from maplelens.tools.exp_meter.history import best_rate, open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
@@ -141,7 +142,7 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
         cls.update(reading, rect, now)
     except Exception as e:
         report_once(e, seen)
-    cls.hide_marks()
+        cls.hide_marks()  # never leave marks from a tick that failed
     box.set_tab_dot(1, path.running)  # the tabs' indexes in build_box's tools list
     box.set_tab_dot(2, cls.dot)
 
@@ -155,6 +156,7 @@ def self_check() -> int:
     try:
         glyphs.load_all()
         maps.load()
+        class_data.load()
         pictures = sorted(maps.PICTURES.glob("*.png"))
         if not pictures or any(maps.picture(p.stem) is None for p in pictures):
             return 1

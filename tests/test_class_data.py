@@ -95,6 +95,8 @@ def test_bands_cover_from_level_to_200():
             assert b.ap[-1].to_level == 200, f"{job}/{b.name}: last band end"
             for a, c in zip(b.ap, b.ap[1:], strict=False):
                 assert a.to_level == c.from_level, f"{job}/{b.name}: gap at {a.to_level}"
+            lv = [g.from_level for g in b.gear]
+            assert lv == sorted(lv), f"{job}/{b.name}: gear rows out of order"
             for band in b.ap:
                 assert band.rest in STATS and band.rest not in band.hold, f"{job}/{b.name}"
                 assert set(band.hold) <= set(STATS), f"{job}/{b.name}"

@@ -668,6 +668,30 @@ def test_number_text_ambiguous_glyph_is_none(monkeypatch):
     assert window.read_number_text(win, box) is None  # identical scores: no margin
 
 
+def test_number_text_light_patch_off_the_glyphs_is_none():
+    """The background check: a non-ink patch that differs from the field voids the read."""
+    from maplelens.readers import window
+
+    win = np.full((20, 40, 3), 222, np.uint8)
+    g = next(t for c, t in window._glyphs() if c == "8")
+    win[3:16, 5 : 5 + g.shape[1]] = g[..., None].astype(np.uint8)
+    box = (0, 0, 40, 20)
+    assert window.read_number_text(win, box) == "8"
+    win[2:4, 30:36] = 222 - window.BG_TOL - 8  # darker than the field, but above INK
+    assert window.read_number_text(win, box) is None
+
+
+def test_skill_name_near_twins_do_not_snap():
+    from maplelens.readers import skill_window
+
+    twins = ["Blunt Weapon Mastery", "Blunt Weapon Booster"]
+    assert skill_window._snap("Blunt Weapon Maoster", twins) is None  # 0.95 vs 0.90
+    assert skill_window._snap("Blunt Weapon Mastery", twins) == twins[0]  # clean read
+    assert skill_window._snap(
+        "Final Attack: Spear", ["Final Attack: Spear", "Final Attack: Polearm"]
+    )
+
+
 def _same_skills(got, want, k=0, scale=1):
     assert isinstance(got, SkillWindow), got
     assert (got.tab, got.sp) == (want.tab, want.sp)

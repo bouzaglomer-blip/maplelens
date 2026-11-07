@@ -61,8 +61,18 @@ def _max(skill: int) -> int:
 
 def _snap(text: str, names) -> str | None:
     """The known name `text` is read from (one letter may be misread), else None."""
-    near = difflib.get_close_matches(text, names, n=1, cutoff=0.8)
-    return near[0] if near and abs(len(near[0]) - len(text)) <= 1 else None
+    near = difflib.get_close_matches(text, names, n=2, cutoff=0.8)
+    if not near or abs(len(near[0]) - len(text)) > 1:
+        return None
+    if len(near) > 1:  # a twin name that scores nearly as well: don't guess
+        sm = difflib.SequenceMatcher(None, text)
+        ratios = []
+        for n in near:
+            sm.set_seq2(n)
+            ratios.append(sm.ratio())
+        if ratios[0] - ratios[1] < 0.1:
+            return None
+    return near[0]
 
 
 def read_skill_window(

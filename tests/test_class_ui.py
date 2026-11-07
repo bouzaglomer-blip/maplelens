@@ -254,3 +254,40 @@ def test_stat_window_of_another_level_gets_no_marks(make):
     tool = make()
     tool.update(R(level=20, stats=SW(level=19, ap=5)), RECT, 0)
     assert tool.marks() == []
+
+
+class _Quiet:
+    running = False
+    dot = False
+
+    def update(self, *_):
+        pass
+
+
+class _Box:
+    def set_tab_dot(self, *_):
+        pass
+
+
+def test_marks_survive_the_app_tick(make):
+    from maplelens import app
+
+    tool = make()
+    reading = R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30)))
+    app.update_tools(_Box(), _Quiet(), _Quiet(), tool, reading, RECT, 0.0, set())
+    assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
+
+
+def test_marks_hide_when_the_class_tool_raises(make, monkeypatch):
+    import sys
+
+    from maplelens import app
+
+    monkeypatch.setattr(sys, "stderr", None)
+    tool = make()
+    reading = R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30)))
+    tool.update(reading, RECT, 0)
+    assert tool.marks()
+    monkeypatch.setattr(tool, "_draw_marks", lambda: (_ for _ in ()).throw(ValueError("x")))
+    app.update_tools(_Box(), _Quiet(), _Quiet(), tool, reading, RECT, 1.0, set())
+    assert tool.marks() == []
