@@ -45,6 +45,14 @@ def test_a_second_start_exits_without_opening_a_window(monkeypatch):
     assert app.main() == 0
 
 
+def test_a_second_start_from_a_terminal_says_why(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["maplelens"])
+    monkeypatch.setattr(app, "mark_running", lambda: False)
+    monkeypatch.setattr(app, "QApplication", None)
+    app.main()
+    assert capsys.readouterr().err == "MapleLens is already running\n"
+
+
 def test_self_check_fails_without_a_version(monkeypatch, no_cache):
     # a dist-info folder without METADATA gives None, not an error
     monkeypatch.setattr(app, "version", lambda name: None)
@@ -346,6 +354,33 @@ def test_dismissing_saves_the_version(qt_box, make_check):
     qt_box._notice_close.click()
     assert settings["update_dismissed"] == "0.2.0"
     assert saves == [1]
+
+
+def test_an_error_in_the_update_step_is_logged_and_the_tick_goes_on(monkeypatch):
+    logged = []
+    monkeypatch.setattr(app, "report_once", lambda e, seen: logged.append(e))
+
+    class Broken:
+        def poll(self, now):
+            raise OSError("settings.json is locked")
+
+    app.poll_updates(Broken(), 1.0, set())  # doesn't raise
+    app.poll_updates(None, 1.0, set())  # no update check (run from source): nothing
+    assert [type(e) for e in logged] == [OSError]
+
+
+def test_a_failed_save_on_dismiss_is_logged(qt_box, make_check, monkeypatch):
+    # settings.json held by antivirus: the click mustn't raise into Qt, unlogged
+    logged = []
+    monkeypatch.setattr(app, "report_once", lambda e, seen: logged.append(e))
+
+    def save():
+        raise PermissionError("settings.json is locked")
+
+    check = make_check(_Fetch(NEWER), save=save)
+    _run(check, 10.0)
+    qt_box._notice_close.click()
+    assert [type(e) for e in logged] == [PermissionError]
 
 
 def test_a_dismissed_version_keeps_the_menu_item_but_no_line(qt_box, make_check):

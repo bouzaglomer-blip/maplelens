@@ -95,3 +95,37 @@ def test_prepare_commits_only_the_version_and_opens_the_pr():
     assert text.index("git push") < text.index("gh pr create")
     assert "contents: write" in text
     assert "pull-requests: write" in text
+
+
+def _job(text: str, name: str) -> str:
+    """The text of job `name` in a workflow, up to the next job."""
+    return re.split(r"^  (?=\w)", text.split(f"\n  {name}:\n", 1)[1], flags=re.M)[0]
+
+
+def test_the_build_can_only_read_and_publish_runs_no_build_code():
+    # every installed copy runs what this publishes: downloaded packages and hooks run in
+    # `build`, which can't write; `publish` only fetches the exe and runs gh
+    text = _release()
+    build, publish = _job(text, "build"), _job(text, "publish")
+    assert "contents: read" in build
+    assert "contents: write" not in build
+    assert build.count("persist-credentials: false") == 1
+    assert "scripts/build_installer.py" in build
+    assert "timeout-minutes:" in build
+    assert "contents: write" in publish
+    assert "gh release create" in publish
+    assert "actions/checkout" not in publish
+    assert "uv " not in publish
+
+
+def test_actions_are_pinned_to_commits():
+    for path in WORKFLOWS.glob("*.yml"):
+        for ref in re.findall(r"uses: (\S+)", path.read_text(encoding="utf-8")):
+            assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), (path.name, ref)
+
+
+def test_a_failed_tag_lookup_fails_rather_than_rebuilding():
+    # git ls-remote --exit-code: 2 means no such tag; 128 (a network error) must not
+    text = _job(_release(), "version")
+    assert '"$code" -eq 2' in text
+    assert "exit 1" in text

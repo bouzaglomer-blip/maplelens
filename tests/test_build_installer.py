@@ -23,9 +23,14 @@ def bundle_ok(monkeypatch, tmp_path):
     monkeypatch.setattr(build_installer, "LICENSES", tmp_path / "licenses")
 
 
+def _record(calls):
+    """A fake run: keeps each command, ignores the timeout."""
+    return lambda cmd, timeout=None: calls.append(cmd)
+
+
 def test_freeze_only_runs_pyinstaller_then_the_self_check(bundle_ok):
     calls = []
-    assert build_installer.main(["--freeze-only"], run=calls.append) == 0
+    assert build_installer.main(["--freeze-only"], run=_record(calls)) == 0
     cmd, check = calls
     assert check == [str(ROOT / "dist" / "MapleLens" / "MapleLens.exe"), "--self-check"]
     assert cmd[1:3] == ["-m", "PyInstaller"]
@@ -42,7 +47,7 @@ def test_full_build_freezes_checks_then_runs_inno_setup(bundle_ok, monkeypatch, 
     iscc = tmp_path / "ISCC.exe"
     monkeypatch.setattr(build_installer, "find_iscc", lambda: iscc)
     calls = []
-    assert build_installer.main([], run=calls.append) == 0
+    assert build_installer.main([], run=_record(calls)) == 0
     _, check, setup = calls
     assert check[-1] == "--self-check"
     version = build_installer.read_version(ROOT / "pyproject.toml")
@@ -59,7 +64,7 @@ def test_full_build_needs_inno_setup_before_freezing(bundle_ok, monkeypatch):
     monkeypatch.setattr(build_installer.shutil, "which", lambda name: None)
     calls = []
     with pytest.raises(SystemExit, match="Inno Setup"):
-        build_installer.main([], run=calls.append)
+        build_installer.main([], run=_record(calls))
     assert calls == []
 
 
@@ -86,16 +91,33 @@ def test_iss_installs_per_user_with_a_fixed_app_id():
     assert "PrivilegesRequired=lowest" in iss
     assert "DefaultDirName={userpf}\\MapleLens" in iss
     assert "OutputBaseFilename=MapleLens-Setup-{#AppVersion}" in iss
-    assert "{userappdata}" not in iss  # uninstall keeps settings and history
+    # uninstall keeps settings and history: it deletes only the downloaded setups
+    assert re.findall(r"^.*\{userappdata\}.*$", iss, re.MULTILINE) == [
+        r'Type: filesandordirs; Name: "{userappdata}\MapleLens\updates"'
+    ]
 
 
 def test_failed_self_check_fails_the_build(bundle_ok):
-    def run(cmd):
+    def run(cmd, timeout=None):
         if "--self-check" in cmd:
             raise build_installer.subprocess.CalledProcessError(1, cmd)
 
     with pytest.raises(SystemExit, match="self-check"):
         build_installer.main(["--freeze-only"], run=run)
+
+
+def test_a_hung_self_check_fails_the_build(bundle_ok):
+    # an error box in the windowed app would otherwise hold CI until the job's timeout
+    timeouts = []
+
+    def run(cmd, timeout=None):
+        timeouts.append(timeout)
+        if "--self-check" in cmd:
+            raise build_installer.subprocess.TimeoutExpired(cmd, timeout)
+
+    with pytest.raises(SystemExit, match="took over"):
+        build_installer.main(["--freeze-only"], run=run)
+    assert timeouts == [None, build_installer.SELF_CHECK_S]  # the freeze takes its time
 
 
 def _pngs(root, names):
@@ -107,12 +129,24 @@ def _pngs(root, names):
 def test_check_bundle_counts_templates_and_minimaps(tmp_path):
     files = ["readers/templates/a.png", "readers/templates/f/1.png", "data/minimaps/m.png"]
     src, bundle = tmp_path / "src", tmp_path / "bundle"
+    app = tmp_path / "app"
     _pngs(src, files)
     _pngs(bundle, files)
-    build_installer.check_bundle(src, bundle)  # same files: fine
+    _pngs(app, build_installer.REQUIRED)
+    build_installer.check_bundle(src, bundle, app)  # same files: fine
     (bundle / "readers/templates/f/1.png").unlink()
     with pytest.raises(SystemExit, match="templates"):
-        build_installer.check_bundle(src, bundle)
+        build_installer.check_bundle(src, bundle, app)
+
+
+def test_check_bundle_needs_the_qt_windows_plugin(tmp_path):
+    # the self-check opens no window, so it can't notice the box would never show
+    src, bundle, app = tmp_path / "src", tmp_path / "bundle", tmp_path / "app"
+    _pngs(app, build_installer.REQUIRED)
+    build_installer.check_bundle(src, bundle, app)
+    (app / "_internal/PySide6/plugins/platforms/qwindows.dll").unlink()
+    with pytest.raises(SystemExit, match=r"qwindows\.dll"):
+        build_installer.check_bundle(src, bundle, app)
 
 
 def test_read_version_from_pyproject(tmp_path):
@@ -137,7 +171,7 @@ def test_version_info_rejects_a_non_numeric_version():
 def test_freeze_writes_the_version_file_first_and_licenses_before_the_check(bundle_ok):
     seen = []
 
-    def run(cmd):
+    def run(cmd, timeout=None):
         seen.append(
             (
                 cmd[-1],

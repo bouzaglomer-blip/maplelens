@@ -110,6 +110,16 @@ def report_once(e: Exception, seen: set[str]) -> None:
             f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}")
 
 
+def poll_updates(updates: "UpdateCheck | None", now: float, seen: set[str]) -> None:
+    """The tick's update step; an error in it (a save failing) is logged, not raised."""
+    if updates is None:
+        return
+    try:
+        updates.poll(now)
+    except Exception as e:
+        report_once(e, seen)
+
+
 def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bundle would hide them
     box: Box, exp, path, reading, rect, now: float, seen: set[str]
 ) -> None:
@@ -296,7 +306,14 @@ class UpdateCheck:
     def set_auto(self, on: bool) -> None:
         """The "Check for updates automatically" toggle."""
         self._settings["update_check"] = on
-        self._save()
+        self._store()
+
+    def _store(self) -> None:
+        """Save settings from a click; a failed save (a locked file) is logged, not lost."""
+        try:
+            self._save()
+        except OSError as e:
+            report_once(e, self._seen)
 
     def _start(self) -> None:
         self._thread = threading.Thread(target=self._ask, daemon=True)
@@ -334,7 +351,7 @@ class UpdateCheck:
 
     def _dismiss(self, new: str) -> None:
         self._settings["update_dismissed"] = new
-        self._save()
+        self._store()
 
     def _update(self) -> None:
         """The menu item's click: download the setup; poll() hands over once it's checked."""
@@ -420,11 +437,13 @@ def early_exit() -> int | None:
     if "--self-check" in sys.argv[1:]:
         return self_check()
     if not mark_running():
+        if sys.stderr is not None:  # started from a terminal: say why nothing opens
+            sys.stderr.write("MapleLens is already running\n")
         return 0
     return None
 
 
-def main() -> int:  # noqa: PLR0915 - the entry point wires every part together
+def main() -> int:
     if (code := early_exit()) is not None:
         return code
     _prepare_process()
@@ -463,8 +482,7 @@ def main() -> int:  # noqa: PLR0915 - the entry point wires every part together
     def tick() -> None:
         nonlocal hwnd
         now = time.time()
-        if updates:  # before the game lookup: updates show with no game open too
-            updates.poll(now)
+        poll_updates(updates, now, seen)  # before the game lookup: shows with no game open
         hwnd = hwnd or find_game(settings, save)
         box.set_status(None if hwnd else LOOKING)  # a minimized game isn't "looking"
         rect = capture.client_rect(hwnd) if hwnd else None

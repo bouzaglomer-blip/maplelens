@@ -3,7 +3,8 @@
 Usage: uv run --group build python scripts/build_installer.py [--freeze-only]
 Before the freeze it writes the exe's version info from pyproject.toml; after it, it copies
 the license texts into dist/MapleLens/licenses/. The build fails if the app holds fewer
-templates or minimap pictures than src/, or if MapleLens.exe --self-check exits non-zero.
+templates or minimap pictures than src/, lacks Qt's Windows platform plugin, or if
+MapleLens.exe --self-check exits non-zero or takes over SELF_CHECK_S seconds.
 Then Inno Setup 6 (ISCC.exe: the ISCC environment variable, PATH, or its default install
 folders) builds the installer; --freeze-only stops before that step.
 """
@@ -34,6 +35,12 @@ SRC_PKG = REPO / "src" / "maplelens"
 BUNDLE_PKG = DIST / "MapleLens" / "_internal" / "maplelens"
 # Data folders, relative to the package, whose PNG count must survive the freeze.
 COUNTED = ["readers/templates", "data/minimaps"]
+# Files, relative to the app folder, the self-check can't miss: it opens no window, and
+# without Qt's Windows platform plugin the app can't show its box.
+REQUIRED = ["_internal/PySide6/plugins/platforms/qwindows.dll"]
+# A frozen app whose import fails shows an error box and waits for a click: on CI, until
+# the job's timeout. The self-check takes a few seconds.
+SELF_CHECK_S = 120
 # Where Inno Setup 6 installs ISCC.exe: for all users, and per user (winget --scope user).
 ISCC_PLACES = [
     Path(folder) / "Inno Setup 6" / "ISCC.exe"
@@ -123,8 +130,8 @@ def copy_licenses(dest: Path) -> None:
         shutil.copyfile(source(), dest / name)
 
 
-def _run(cmd: list[str]) -> None:
-    subprocess.run(cmd, check=True)
+def _run(cmd: list[str], timeout: float | None = None) -> None:
+    subprocess.run(cmd, check=True, timeout=timeout)
 
 
 def freeze_cmd() -> list[str]:
@@ -164,16 +171,20 @@ def installer_cmd(iscc: Path, version: str) -> list[str]:
     ]
 
 
-def check_bundle(src: Path, bundle: Path) -> None:
-    """Exit if `bundle` holds fewer PNGs than `src` in any COUNTED folder."""
+def check_bundle(src: Path, bundle: Path, app: Path = APP) -> None:
+    """Exit if `bundle` holds fewer PNGs than `src` in any COUNTED folder, or `app` lacks
+    a REQUIRED file."""
     for rel in COUNTED:
         want = len(list((src / rel).rglob("*.png")))
         have = len(list((bundle / rel).rglob("*.png")))
         if have < want:
             sys.exit(f"bundle has {have} of {want} PNGs in {rel}")
+    for rel in REQUIRED:
+        if not (app / rel).is_file():
+            sys.exit(f"bundle has no {rel}")
 
 
-def main(argv: list[str] | None = None, run: Callable[[list[str]], None] = _run) -> int:
+def main(argv: list[str] | None = None, run: Callable[..., None] = _run) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--freeze-only", action="store_true", help="build dist/MapleLens/ only")
     args = parser.parse_args(argv)
@@ -185,9 +196,11 @@ def main(argv: list[str] | None = None, run: Callable[[list[str]], None] = _run)
     check_bundle(SRC_PKG, BUNDLE_PKG)
     copy_licenses(LICENSES)
     try:
-        run([str(EXE), "--self-check"])
+        run([str(EXE), "--self-check"], timeout=SELF_CHECK_S)
     except subprocess.CalledProcessError:
         sys.exit(f"{EXE.name} --self-check failed")
+    except subprocess.TimeoutExpired:
+        sys.exit(f"{EXE.name} --self-check took over {SELF_CHECK_S} s (an error box?)")
     if iscc:
         run(installer_cmd(iscc, version))
         report_size(DIST / f"MapleLens-Setup-{version}.exe")

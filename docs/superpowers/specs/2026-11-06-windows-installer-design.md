@@ -117,7 +117,10 @@ installer is designed so it fits (see Goals → Upgrades).
     then creates tag `vX.Y.Z` and **publishes** a GitHub Release with
     `MapleLens-Setup-X.Y.Z.exe` attached and GitHub's generated release notes (the PRs
     merged since the last release). If the tag exists, it does nothing, so a release
-    can't happen twice. Any failure publishes nothing and creates no tag.
+    can't happen twice. Any failure publishes nothing and creates no tag. Every
+    installed copy runs what it publishes, so the job that runs the checks and the
+    build can only read the repo; a separate job that runs nothing but `gh` downloads
+    the exe and publishes it. Actions are pinned to commits (or-keren's review).
   - **Checks run inside both workflows** (Daniel's choice): a PR opened with the
     built-in `GITHUB_TOKEN` doesn't start `ci.yml`, so the release PR shows no checks
     of its own. No extra secrets or GitHub App.

@@ -60,7 +60,10 @@ Filename: "{app}\MapleLens.exe"; Description: "{cm:LaunchProgram,MapleLens}"; Fl
 Filename: "{app}\MapleLens.exe"; WorkingDir: "{app}"; Flags: nowait; Check: IsUpdateRun
 
 ; Settings, EXP history and the log live in %APPDATA%\MapleLens, outside {app}, so the
-; uninstaller leaves them alone.
+; uninstaller leaves them alone. Its updates folder holds only downloaded setups, which the
+; app can't delete while the newest is still running: those go.
+[UninstallDelete]
+Type: filesandordirs; Name: "{userappdata}\MapleLens\updates"
 
 [Code]
 function MapleLensRunning(): Boolean;
