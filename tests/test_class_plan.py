@@ -1,5 +1,30 @@
-from maplelens.tools.class_helper.data import STATS, Band, Build, Skill, SpStep
-from maplelens.tools.class_helper.plan import Advice, ap_advice, band_at, sp_advice
+from dataclasses import replace
+from pathlib import Path
+
+from maplelens.tools.class_helper.data import (
+    MAPS,
+    STATS,
+    Advance,
+    Band,
+    Build,
+    Skill,
+    SpStep,
+    load,
+)
+from maplelens.tools.class_helper.plan import (
+    Advice,
+    advance_due,
+    advance_text,
+    ap_advice,
+    band_at,
+    gear,
+    next_step,
+    short,
+    sp_advice,
+    training,
+)
+
+SMALL = Path(__file__).parent / "fixtures" / "classes_small.json"
 
 B = Band(1, 200, {"DEX": (25, 0.0)}, "LUK")
 
@@ -76,3 +101,49 @@ def test_finished_plan_places_nothing():
 
 def test_unknown_prerequisite_needs_a_scroll():
     assert sp_advice([SpStep(2, 2), SpStep(3, 1)], {2: 0, 3: 0}, 1, SK, "T") is None
+
+
+ROGUE = load(SMALL, MAPS).plan("Rogue")
+
+
+def test_up_to_three_maps_in_guide_order():
+    rows = training(ROGUE, 12)
+    assert len(rows) == 3 and all(r.from_level <= 12 <= r.to_level for r in rows)
+    assert [r.place.name for r in rows][1:] == ["Third", "Fourth"]
+
+
+def test_gear_now_next_and_shortfall():
+    now, nxt = gear(ROGUE.build("LUK"), 12)
+    assert (now.from_level, nxt.from_level) == (10, 15)
+    assert short(nxt.item, {"STR": 4, "DEX": 25, "INT": 4, "LUK": 40}) == {"DEX": 5}
+    assert short(nxt.item, None) == {}
+    assert gear(ROGUE.build("LUK"), 5) == (None, now)
+
+
+def test_advance_shows_two_levels_early():
+    assert advance_due(ROGUE, ROGUE.builds[0], 27) is None
+    assert advance_due(ROGUE, ROGUE.builds[0], 28).level == 30
+    assert advance_text(advance_due(ROGUE, ROGUE.builds[0], 31)) == (
+        "At 30: become an Assassin or a Bandit"
+    )
+
+
+def test_advance_text_single_job():
+    assert advance_text(Advance(70, ("Hermit",), None, None)) == "At 70: become a Hermit"
+
+
+def test_next_step_is_the_nearest_milestone():
+    luk, sindit = ROGUE.build("LUK"), ROGUE.build("Sindit")
+    assert next_step(ROGUE, luk, 12) == "At 15: get Second Claw"
+    assert next_step(ROGUE, luk, 16) == "At 30: become an Assassin or a Bandit"
+    assert next_step(ROGUE, sindit, 29) == "At 30: become an Assassin or a Bandit"
+    assert next_step(ROGUE, sindit, 30) == "Now: become an Assassin or a Bandit"
+    assert next_step(ROGUE, sindit, 31) == "Now: become an Assassin or a Bandit"
+
+
+def test_next_step_reset_and_none():
+    nobody = replace(ROGUE, advance=None)
+    sindit = nobody.build("Sindit")
+    assert next_step(nobody, sindit, 20) == "At 30: reset AP for the Sindit build"
+    assert next_step(nobody, sindit, 30) == "Now: reset AP for the Sindit build"
+    assert next_step(nobody, sindit, 31) is None
