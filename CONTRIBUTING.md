@@ -75,16 +75,16 @@ The Mac build is signed with a self-signed certificate, so macOS keeps a player'
 Recording permission across updates. Make it once, as the repo owner:
 
 ```
-openssl req -x509 -newkey rsa:2048 -nodes -days 7300 -subj "/CN=MapleLens Release" \
+/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 7300 -subj "/CN=MapleLens Release" \
   -addext "keyUsage=critical,digitalSignature" -addext "extendedKeyUsage=critical,codeSigning" \
   -keyout key.pem -out cert.pem
-openssl pkcs12 -export -legacy -inkey key.pem -in cert.pem -out maplelens-sign.p12
+/usr/bin/openssl pkcs12 -export -inkey key.pem -in cert.pem -out maplelens-sign.p12
 base64 -i maplelens-sign.p12 | gh secret set MAC_SIGN_P12_BASE64
 gh secret set MAC_SIGN_P12_PASSWORD     # the export password you typed
 ```
 
-`-legacy` matters: without it `openssl` 3 writes a `.p12` that `security import` rejects.
-Keep `maplelens-sign.p12` and its password in an offline backup, then delete `key.pem`.
+This is the macOS system `openssl` (LibreSSL), whose `.p12` `security import` accepts; no Homebrew needed.
+Keep `maplelens-sign.p12` and its password in an offline backup, then delete `key.pem`, `cert.pem` and the loose `.p12`.
 Lose them and the next release is signed with a new certificate, which costs every player
 one Screen Recording re-grant. The release workflow's Mac signing job fails until both
 secrets are set.

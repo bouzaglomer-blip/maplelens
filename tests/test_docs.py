@@ -38,8 +38,7 @@ def test_layout_lists_the_build_and_release_files():
         ".github/workflows",
     ]:
         assert path in named, path
-    for path in ["update_mac.py"]:
-        assert path in _layout(), path
     layout = _layout()
+    assert "update_mac.py" in layout
     for workflow in ["ci.yml", "release.yml", "prepare-release.yml"]:
         assert workflow in layout, workflow

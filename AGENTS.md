@@ -23,13 +23,14 @@ uv run pytest                                # tests
 uv run ruff check                            # lint
 uv run ruff format                           # format
 uv run python scripts/check_screen_only.py   # screen-only guard
-uv run --group build python scripts/build_installer.py   # Windows: dist\MapleLens-Setup-X.Y.Z.exe
-uv run --group build python scripts/build_installer.py   # Mac: dist/MapleLens-X.Y.Z.dmg (--freeze-only, --sign-only, --dmg-only)
+uv run --group build python scripts/build_installer.py   # Windows: dist\MapleLens-Setup-X.Y.Z.exe; Mac: dist/MapleLens-X.Y.Z.dmg
 ```
 
 The build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup --scope user`);
 `--freeze-only` stops at the app folder `dist\MapleLens\`.
-On the Mac the build signs with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
+
+On the Mac, `--freeze-only`, `--sign-only` and `--dmg-only` run one stage; the build signs
+with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
 
 ## Layout
 
@@ -48,7 +49,7 @@ On the Mac the build signs with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-ho
 - `scripts/grab.py` — save a cropped fixture screenshot of the game
 - `scripts/make_level_font.py` — build the level digit templates from `scripts/level_sprites/`
 - `scripts/make_icon.py` — draw the icon: `src/maplelens/data/icon.ico`, `packaging/mac/icon.icns` (the Mac app), `docs/icon.png` (README), `docs/social-preview.png` (uploaded by hand: repo Settings → Social preview)
-- `scripts/build_installer.py` — the Windows build (and the Mac stages: freeze, sign, dmg): freeze, check the bundle, `MapleLens.exe --self-check`, Inno Setup; run locally and by `release.yml`
+- `scripts/build_installer.py` — the Windows build (also the Mac freeze, sign and dmg stages): freeze, check the bundle, `MapleLens.exe --self-check`, Inno Setup; run locally and by `release.yml`
 - `packaging/mac/` — `maplelens.spec` (PyInstaller), `icon.icns`; the bundle id `io.github.or-keren.maplelens` never changes
 - `packaging/windows/` — `maplelens.spec` (PyInstaller), `maplelens.iss` (Inno Setup; its `AppId` never changes), `NOTICE.txt` and the license texts the build ships
 - `.github/workflows/` — `ci.yml` (the checks), `prepare-release.yml` (started by hand: bumps the version, opens the release PR), `release.yml` (on push to `main`: publishes a version that has no tag yet)
