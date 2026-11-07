@@ -36,11 +36,13 @@ The build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup --scope user`
   - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`); `read_all` in `__init__`); numbers via glyph templates, words (map, class) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`
   - `overlay.py` — the see-through `Layer` and draggable `Box`; `overlay_mac.py` — the macOS panels
   - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures
+  - `data/classes.json` — per-job advice (training maps, AP/SP plans, gear)
   - `store.py` — settings file and data folder
   - `update.py` — the update check's pure part: GitHub's latest-release reply → `Release`, version compare, digest check (`MAPLELENS_UPDATE_REPO` overrides the repo)
   - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`)
   - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`
   - `tools/path_arrow/` — the path arrow: `maps`, `route`, `camera`, `ui`
+  - `tools/class_helper/` — the class helper: `data`, `plan`
 - `scripts/check_screen_only.py` — the guard; banned lists live there, with reasons
 - `scripts/grab.py` — save a cropped fixture screenshot of the game
 - `scripts/make_level_font.py` — build the level digit templates from `scripts/level_sprites/`
@@ -50,7 +52,7 @@ The build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup --scope user`
 - `tests/` — pytest; `tests/fixtures/screens/` holds cropped PNG screenshots, `tests/fixtures/github/` saved `releases/latest` replies
 - `docs/superpowers/specs/`, `docs/superpowers/plans/` — designs and plans
 
-Planned, **not yet** created: `tools/<name>/` for the class helper and prices.
+Planned, **not yet** created: `tools/<name>/` for prices.
 
 ## Conventions
 

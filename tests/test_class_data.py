@@ -124,3 +124,14 @@ def test_reset_at_is_inside_the_record():
                 assert plan.from_level <= b.reset_at <= 200, (
                     f"{job}/{b.name}: reset_at {b.reset_at}"
                 )
+
+
+FIRST_AND_SECOND = [
+    "Beginner", "Warrior", "Magician", "Bowman", "Rogue", "Fighter", "Page",
+    "Spearman", "Wizard (Fire, Poison)", "Wizard (Ice, Lightning)", "Cleric", "Hunter",
+    "Crossbowman", "Assassin", "Bandit",
+]  # fmt: skip
+
+
+def test_every_first_and_second_job_has_a_plan():
+    assert [j for j in FIRST_AND_SECOND if load().plan(j) is None] == []

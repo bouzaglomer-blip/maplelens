@@ -4,12 +4,29 @@ An open-source overlay for **MapleStory Classic** that keeps you in the game.
 Instead of alt-tabbing to price sites, class guides and route finders, MapleLens
 reads what's on your screen and shows what you need on top of the game window.
 
-> **Status: Phase 2: path arrow.** The EXP meter (EXP/min, time to level, History window)
-> is built, and so is the path arrow: pick a destination on the Path tab and an arrow over
-> your character points the way, map by map.
+> **Status: Phase 3: class helper (in progress).** The EXP meter (EXP/min, time to level,
+> History window) and the path arrow are built. The class helper's data now covers every
+> 1st and 2nd job: gear, training maps, AP and SP plans.
 >
 > Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
 > Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
+>
+> Class plans adapted from the NiaDB class guides:
+>   [beginners-guide-first-steps-in-maple-world](https://meowdb.com/msclassic/guides/beginners-guide-first-steps-in-maple-world) ·
+>   [warrior-class-guide](https://meowdb.com/msclassic/guides/warrior-class-guide) ·
+>   [magician-class-guide](https://meowdb.com/msclassic/guides/magician-class-guide) ·
+>   [bowman-class-guide](https://meowdb.com/msclassic/guides/bowman-class-guide) ·
+>   [thief-class-guide](https://meowdb.com/msclassic/guides/thief-class-guide) ·
+>   [fighter-class-guide](https://meowdb.com/msclassic/guides/fighter-class-guide) ·
+>   [page-class-guide](https://meowdb.com/msclassic/guides/page-class-guide) ·
+>   [spearman-class-guide](https://meowdb.com/msclassic/guides/spearman-class-guide) ·
+>   [fp-wizard-class-guide](https://meowdb.com/msclassic/guides/fp-wizard-class-guide) ·
+>   [il-wizard-class-guide](https://meowdb.com/msclassic/guides/il-wizard-class-guide) ·
+>   [cleric-class-guide](https://meowdb.com/msclassic/guides/cleric-class-guide) ·
+>   [hunter-class-guide](https://meowdb.com/msclassic/guides/hunter-class-guide) ·
+>   [crossbowman-class-guide](https://meowdb.com/msclassic/guides/crossbowman-class-guide) ·
+>   [assassin-class-guide](https://meowdb.com/msclassic/guides/assassin-class-guide) ·
+>   [bandit-class-guide](https://meowdb.com/msclassic/guides/bandit-class-guide)
 
 ## The promise: screen-reading only
 
