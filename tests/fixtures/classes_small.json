@@ -1,0 +1,21 @@
+{
+  "skills": {"4000000": {"name": "Nimble Body", "job": "Rogue", "max": 20, "requires": {}}},
+  "items": {},
+  "jobs": [{
+    "job": "Rogue", "tier": 1, "from_level": 10,
+    "source": "https://example.invalid/rogue",
+    "advance": null,
+    "training": [
+      {"map_id": "000000001", "from_level": 10, "to_level": 15, "mobs": [8, 12]},
+      {"map_id": null, "name": "A map not in maps.json", "from_level": 15, "to_level": 21, "mobs": [15, 18]}
+    ],
+    "builds": [
+      {"name": "LUK", "reset_at": null,
+       "ap": [{"from": 10, "to": 200, "hold": {"DEX": 25}, "rest": "LUK"}],
+       "sp": [{"skill": 4000000, "up_to": 3}], "gear": []},
+      {"name": "Sindit", "reset_at": null,
+       "ap": [{"from": 10, "to": 200, "hold": {"DEX": {"base": 0, "per_level": 1}}, "rest": "LUK"}],
+       "sp": [], "gear": []}
+    ]
+  }]
+}

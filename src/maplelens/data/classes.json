@@ -1,0 +1,1472 @@
+{
+ "skills": {
+  "1000": {
+   "name": "Three Snails",
+   "job": "Beginner",
+   "max": 3,
+   "requires": {}
+  },
+  "1001": {
+   "name": "Recovery",
+   "job": "Beginner",
+   "max": 3,
+   "requires": {}
+  },
+  "1002": {
+   "name": "Nimble Feet",
+   "job": "Beginner",
+   "max": 3,
+   "requires": {}
+  },
+  "4000000": {
+   "name": "Nimble Body",
+   "job": "Rogue",
+   "max": 15,
+   "requires": {}
+  },
+  "4000001": {
+   "name": "Keen Eyes",
+   "job": "Rogue",
+   "max": 15,
+   "requires": {
+    "4000000": 3
+   }
+  },
+  "4001000": {
+   "name": "Disorder",
+   "job": "Rogue",
+   "max": 20,
+   "requires": {}
+  },
+  "4001001": {
+   "name": "Dark Sight",
+   "job": "Rogue",
+   "max": 20,
+   "requires": {
+    "4001000": 3
+   }
+  },
+  "4001002": {
+   "name": "Double Stab",
+   "job": "Rogue",
+   "max": 20,
+   "requires": {}
+  },
+  "4001003": {
+   "name": "Lucky Seven",
+   "job": "Rogue",
+   "max": 20,
+   "requires": {}
+  },
+  "4100000": {
+   "name": "Claw Mastery",
+   "job": "Assassin",
+   "max": 20,
+   "requires": {}
+  },
+  "4100001": {
+   "name": "Critical Throw",
+   "job": "Assassin",
+   "max": 30,
+   "requires": {
+    "4100000": 3
+   }
+  },
+  "4100002": {
+   "name": "Critical Recovery",
+   "job": "Assassin",
+   "max": 20,
+   "requires": {}
+  },
+  "4101000": {
+   "name": "Claw Booster",
+   "job": "Assassin",
+   "max": 20,
+   "requires": {
+    "4100000": 5
+   }
+  },
+  "4101001": {
+   "name": "Haste",
+   "job": "Assassin",
+   "max": 20,
+   "requires": {}
+  },
+  "4101002": {
+   "name": "Drain",
+   "job": "Assassin",
+   "max": 30,
+   "requires": {
+    "4100002": 3
+   }
+  },
+  "4200000": {
+   "name": "Dagger Mastery",
+   "job": "Bandit",
+   "max": 20,
+   "requires": {}
+  },
+  "4200001": {
+   "name": "Nimble Recovery",
+   "job": "Bandit",
+   "max": 20,
+   "requires": {}
+  },
+  "4201000": {
+   "name": "Dagger Booster",
+   "job": "Bandit",
+   "max": 20,
+   "requires": {
+    "4200000": 5
+   }
+  },
+  "4201001": {
+   "name": "Haste",
+   "job": "Bandit",
+   "max": 20,
+   "requires": {}
+  },
+  "4201002": {
+   "name": "Steal",
+   "job": "Bandit",
+   "max": 30,
+   "requires": {
+    "4201001": 5
+   }
+  },
+  "4201003": {
+   "name": "Savage Blow",
+   "job": "Bandit",
+   "max": 30,
+   "requires": {}
+  }
+ },
+ "items": {
+  "1472022": {
+   "name": "Beginner's Garnier",
+   "req": {
+    "level": 10,
+    "LUK": 25
+   }
+  },
+  "1472001": {
+   "name": "Steel Titans",
+   "req": {
+    "level": 15,
+    "DEX": 15,
+    "LUK": 35
+   }
+  },
+  "1472005": {
+   "name": "Steel Igor",
+   "req": {
+    "level": 20,
+    "DEX": 20,
+    "LUK": 45
+   }
+  },
+  "1472007": {
+   "name": "Meba",
+   "req": {
+    "level": 25,
+    "DEX": 25,
+    "LUK": 55
+   }
+  },
+  "1472008": {
+   "name": "Steel Guards",
+   "req": {
+    "level": 30,
+    "DEX": 30,
+    "LUK": 65
+   }
+  },
+  "1332010": {
+   "name": "Reef Claw",
+   "req": {
+    "level": 30,
+    "DEX": 25,
+    "LUK": 60
+   }
+  },
+  "1472011": {
+   "name": "Bronze Guardian",
+   "req": {
+    "level": 35,
+    "DEX": 35,
+    "LUK": 75
+   }
+  },
+  "1472018": {
+   "name": "Steel Slain",
+   "req": {
+    "level": 50,
+    "DEX": 50,
+    "LUK": 105
+   }
+  },
+  "1472030": {
+   "name": "Black Scarab",
+   "req": {
+    "level": 70,
+    "DEX": 70,
+    "LUK": 145
+   }
+  },
+  "1332011": {
+   "name": "Halfmoon Zamadar",
+   "req": {
+    "level": 35,
+    "DEX": 30,
+    "LUK": 70
+   }
+  },
+  "1332012": {
+   "name": "Gephart",
+   "req": {
+    "level": 40,
+    "DEX": 35,
+    "LUK": 80
+   }
+  },
+  "1332015": {
+   "name": "Shinkita",
+   "req": {
+    "level": 50,
+    "DEX": 45,
+    "LUK": 100
+   }
+  },
+  "1332020": {
+   "name": "Kandine",
+   "req": {
+    "level": 70,
+    "DEX": 65,
+    "LUK": 140
+   }
+  }
+ },
+ "jobs": [
+  {
+   "job": "Beginner",
+   "tier": 0,
+   "from_level": 1,
+   "source": "https://meowdb.com/msclassic/guides/beginners-guide-first-steps-in-maple-world",
+   "advance": null,
+   "training": [],
+   "builds": [
+    {
+     "name": "Warrior",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 1,
+       "to": 200,
+       "hold": {},
+       "rest": "STR"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 1000,
+       "up_to": 3
+      },
+      {
+       "skill": 1001,
+       "up_to": 3
+      },
+      {
+       "skill": 1002,
+       "up_to": 3
+      }
+     ],
+     "gear": [],
+     "advance": {
+      "level": 10,
+      "next_jobs": [
+       "Warrior"
+      ],
+      "npc": "Dances with Balrog",
+      "map_id": "010004003"
+     }
+    },
+    {
+     "name": "Magician",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 1,
+       "to": 200,
+       "hold": {},
+       "rest": "INT"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 1000,
+       "up_to": 3
+      },
+      {
+       "skill": 1001,
+       "up_to": 3
+      },
+      {
+       "skill": 1002,
+       "up_to": 3
+      }
+     ],
+     "gear": [],
+     "advance": {
+      "level": 10,
+      "next_jobs": [
+       "Magician"
+      ],
+      "npc": "Grendel the Really Old",
+      "map_id": "010002003"
+     }
+    },
+    {
+     "name": "Bowman",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 1,
+       "to": 200,
+       "hold": {},
+       "rest": "DEX"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 1000,
+       "up_to": 3
+      },
+      {
+       "skill": 1001,
+       "up_to": 3
+      },
+      {
+       "skill": 1002,
+       "up_to": 3
+      }
+     ],
+     "gear": [],
+     "advance": {
+      "level": 10,
+      "next_jobs": [
+       "Bowman"
+      ],
+      "npc": "Athena Pierce",
+      "map_id": "010001051"
+     }
+    },
+    {
+     "name": "Rogue",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 1,
+       "to": 200,
+       "hold": {},
+       "rest": "LUK"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 1000,
+       "up_to": 3
+      },
+      {
+       "skill": 1001,
+       "up_to": 3
+      },
+      {
+       "skill": 1002,
+       "up_to": 3
+      }
+     ],
+     "gear": [],
+     "advance": {
+      "level": 10,
+      "next_jobs": [
+       "Rogue"
+      ],
+      "npc": "Dark Lord",
+      "map_id": "010003003"
+     }
+    }
+   ]
+  },
+  {
+   "job": "Rogue",
+   "tier": 1,
+   "from_level": 10,
+   "source": "https://meowdb.com/msclassic/guides/thief-class-guide",
+   "advance": {
+    "level": 30,
+    "next_jobs": [
+     "Assassin",
+     "Bandit"
+    ],
+    "npc": "Dark Lord",
+    "map_id": "010003003"
+   },
+   "training": [
+    {
+     "map_id": "010001070",
+     "from_level": 10,
+     "to_level": 19,
+     "mobs": [
+      7,
+      10
+     ]
+    },
+    {
+     "map_id": "010002075",
+     "from_level": 10,
+     "to_level": 19,
+     "mobs": [
+      6,
+      14
+     ]
+    },
+    {
+     "map_id": "010002033",
+     "from_level": 10,
+     "to_level": 19,
+     "mobs": [
+      6,
+      14
+     ]
+    },
+    {
+     "map_id": "010003062",
+     "from_level": 20,
+     "to_level": 30,
+     "mobs": [
+      20,
+      20
+     ]
+    },
+    {
+     "map_id": "010005031",
+     "from_level": 20,
+     "to_level": 30,
+     "mobs": [
+      6,
+      21
+     ]
+    },
+    {
+     "map_id": "010005065",
+     "from_level": 20,
+     "to_level": 30,
+     "mobs": [
+      20,
+      24
+     ]
+    }
+   ],
+   "builds": [
+    {
+     "name": "Lucky Seven",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 10,
+       "to": 14,
+       "hold": {
+        "DEX": 5
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 14,
+       "to": 15,
+       "hold": {
+        "DEX": 10
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 15,
+       "to": 20,
+       "hold": {
+        "DEX": 15
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 20,
+       "to": 25,
+       "hold": {
+        "DEX": 20
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 25,
+       "to": 30,
+       "hold": {
+        "DEX": 25
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 30,
+       "to": 200,
+       "hold": {
+        "DEX": 30
+       },
+       "rest": "LUK"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 4001003,
+       "up_to": 1
+      },
+      {
+       "skill": 4000000,
+       "up_to": 3
+      },
+      {
+       "skill": 4000001,
+       "up_to": 1
+      },
+      {
+       "skill": 4001003,
+       "up_to": 3
+      },
+      {
+       "skill": 4001003,
+       "up_to": 18
+      },
+      {
+       "skill": 4001003,
+       "up_to": 20
+      },
+      {
+       "skill": 4000001,
+       "up_to": 2
+      },
+      {
+       "skill": 4000001,
+       "up_to": 14
+      },
+      {
+       "skill": 4000001,
+       "up_to": 15
+      },
+      {
+       "skill": 4000000,
+       "up_to": 5
+      },
+      {
+       "skill": 4000000,
+       "up_to": 14
+      },
+      {
+       "skill": 4000000,
+       "up_to": 15
+      },
+      {
+       "skill": 4001000,
+       "up_to": 2
+      },
+      {
+       "skill": 4001000,
+       "up_to": 3
+      },
+      {
+       "skill": 4001001,
+       "up_to": 2
+      },
+      {
+       "skill": 4001001,
+       "up_to": 8
+      }
+     ],
+     "gear": [
+      {
+       "item": 1472022,
+       "from_level": 10,
+       "map_id": null
+      },
+      {
+       "item": 1472001,
+       "from_level": 15,
+       "map_id": "010003001"
+      },
+      {
+       "item": 1472005,
+       "from_level": 20,
+       "map_id": "010003001"
+      },
+      {
+       "item": 1472007,
+       "from_level": 25,
+       "map_id": "010003001"
+      },
+      {
+       "item": 1472008,
+       "from_level": 30,
+       "map_id": null
+      }
+     ]
+    },
+    {
+     "name": "Double Stab",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 10,
+       "to": 14,
+       "hold": {
+        "DEX": 5
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 14,
+       "to": 15,
+       "hold": {
+        "DEX": 10
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 15,
+       "to": 20,
+       "hold": {
+        "DEX": 15
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 20,
+       "to": 25,
+       "hold": {
+        "DEX": 20
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 25,
+       "to": 30,
+       "hold": {
+        "DEX": 25
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 30,
+       "to": 200,
+       "hold": {
+        "DEX": 30
+       },
+       "rest": "LUK"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 4001002,
+       "up_to": 1
+      },
+      {
+       "skill": 4001002,
+       "up_to": 19
+      },
+      {
+       "skill": 4001002,
+       "up_to": 20
+      },
+      {
+       "skill": 4000000,
+       "up_to": 2
+      },
+      {
+       "skill": 4000000,
+       "up_to": 14
+      },
+      {
+       "skill": 4000000,
+       "up_to": 15
+      },
+      {
+       "skill": 4001000,
+       "up_to": 2
+      },
+      {
+       "skill": 4001000,
+       "up_to": 3
+      },
+      {
+       "skill": 4001001,
+       "up_to": 2
+      },
+      {
+       "skill": 4001001,
+       "up_to": 17
+      },
+      {
+       "skill": 4001001,
+       "up_to": 20
+      },
+      {
+       "skill": 4001000,
+       "up_to": 6
+      }
+     ],
+     "gear": [
+      {
+       "item": 1332010,
+       "from_level": 30,
+       "map_id": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "job": "Assassin",
+   "tier": 2,
+   "from_level": 30,
+   "source": "https://meowdb.com/msclassic/guides/assassin-class-guide",
+   "advance": null,
+   "training": [
+    {
+     "map_id": "010003062",
+     "from_level": 30,
+     "to_level": 39,
+     "mobs": [
+      20,
+      20
+     ]
+    },
+    {
+     "map_id": "010005065",
+     "from_level": 30,
+     "to_level": 39,
+     "mobs": [
+      20,
+      24
+     ]
+    },
+    {
+     "map_id": "010005061",
+     "from_level": 30,
+     "to_level": 39,
+     "mobs": [
+      22,
+      24
+     ]
+    },
+    {
+     "map_id": "010005070",
+     "from_level": 40,
+     "to_level": 49,
+     "mobs": [
+      22,
+      27
+     ]
+    },
+    {
+     "map_id": "010005067",
+     "from_level": 40,
+     "to_level": 49,
+     "mobs": [
+      22,
+      27
+     ]
+    },
+    {
+     "map_id": "010002083",
+     "from_level": 50,
+     "to_level": 59,
+     "mobs": [
+      33,
+      33
+     ]
+    },
+    {
+     "map_id": "010004114",
+     "from_level": 50,
+     "to_level": 59,
+     "mobs": [
+      23,
+      37
+     ]
+    },
+    {
+     "map_id": "010002023",
+     "from_level": 50,
+     "to_level": 59,
+     "mobs": [
+      37,
+      41
+     ]
+    },
+    {
+     "map_id": "010002023",
+     "from_level": 60,
+     "to_level": 70,
+     "mobs": [
+      37,
+      41
+     ]
+    },
+    {
+     "map_id": "010002024",
+     "from_level": 60,
+     "to_level": 70,
+     "mobs": [
+      33,
+      41
+     ]
+    },
+    {
+     "map_id": "010002026",
+     "from_level": 60,
+     "to_level": 70,
+     "mobs": [
+      41,
+      55
+     ]
+    }
+   ],
+   "builds": [
+    {
+     "name": "Claw",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 30,
+       "to": 35,
+       "hold": {
+        "DEX": 30
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 35,
+       "to": 49,
+       "hold": {
+        "DEX": 35
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 49,
+       "to": 50,
+       "hold": {
+        "DEX": 40
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 50,
+       "to": 66,
+       "hold": {
+        "DEX": 45
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 66,
+       "to": 67,
+       "hold": {
+        "DEX": 47
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 67,
+       "to": 68,
+       "hold": {
+        "DEX": 52
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 68,
+       "to": 69,
+       "hold": {
+        "DEX": 57
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 69,
+       "to": 70,
+       "hold": {
+        "DEX": 62
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 70,
+       "to": 200,
+       "hold": {
+        "DEX": 67
+       },
+       "rest": "LUK"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 4101001,
+       "up_to": 1
+      },
+      {
+       "skill": 4100000,
+       "up_to": 3
+      },
+      {
+       "skill": 4100000,
+       "up_to": 5
+      },
+      {
+       "skill": 4101000,
+       "up_to": 1
+      },
+      {
+       "skill": 4100000,
+       "up_to": 20
+      },
+      {
+       "skill": 4100001,
+       "up_to": 30
+      },
+      {
+       "skill": 4101001,
+       "up_to": 19
+      },
+      {
+       "skill": 4101001,
+       "up_to": 20
+      },
+      {
+       "skill": 4101000,
+       "up_to": 3
+      },
+      {
+       "skill": 4101000,
+       "up_to": 9
+      },
+      {
+       "skill": 4100002,
+       "up_to": 18
+      },
+      {
+       "skill": 4100002,
+       "up_to": 20
+      },
+      {
+       "skill": 4101000,
+       "up_to": 10
+      },
+      {
+       "skill": 4101000,
+       "up_to": 19
+      },
+      {
+       "skill": 4101000,
+       "up_to": 20
+      },
+      {
+       "skill": 4101002,
+       "up_to": 2
+      },
+      {
+       "skill": 4101002,
+       "up_to": 11
+      }
+     ],
+     "gear": [
+      {
+       "item": 1472008,
+       "from_level": 30,
+       "map_id": null
+      },
+      {
+       "item": 1472011,
+       "from_level": 35,
+       "map_id": null
+      },
+      {
+       "item": 1472018,
+       "from_level": 50,
+       "map_id": null
+      },
+      {
+       "item": 1472030,
+       "from_level": 70,
+       "map_id": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "job": "Bandit",
+   "tier": 2,
+   "from_level": 30,
+   "source": "https://meowdb.com/msclassic/guides/bandit-class-guide",
+   "advance": null,
+   "training": [
+    {
+     "map_id": "010003062",
+     "from_level": 30,
+     "to_level": 39,
+     "mobs": [
+      20,
+      20
+     ]
+    },
+    {
+     "map_id": "010005065",
+     "from_level": 30,
+     "to_level": 39,
+     "mobs": [
+      20,
+      24
+     ]
+    },
+    {
+     "map_id": "010005061",
+     "from_level": 30,
+     "to_level": 39,
+     "mobs": [
+      22,
+      24
+     ]
+    },
+    {
+     "map_id": "010005061",
+     "from_level": 40,
+     "to_level": 49,
+     "mobs": [
+      22,
+      24
+     ]
+    },
+    {
+     "map_id": "010004132",
+     "from_level": 40,
+     "to_level": 49,
+     "mobs": [
+      23,
+      24
+     ]
+    },
+    {
+     "map_id": "010004111",
+     "from_level": 40,
+     "to_level": 49,
+     "mobs": [
+      23,
+      32
+     ]
+    },
+    {
+     "map_id": "010002024",
+     "from_level": 50,
+     "to_level": 59,
+     "mobs": [
+      33,
+      41
+     ]
+    },
+    {
+     "map_id": "010002023",
+     "from_level": 50,
+     "to_level": 59,
+     "mobs": [
+      37,
+      41
+     ]
+    },
+    {
+     "map_id": "010002026",
+     "from_level": 60,
+     "to_level": 70,
+     "mobs": [
+      41,
+      55
+     ]
+    },
+    {
+     "map_id": "010004134",
+     "from_level": 60,
+     "to_level": 70,
+     "mobs": [
+      44,
+      47
+     ]
+    },
+    {
+     "map_id": "010003068",
+     "from_level": 60,
+     "to_level": 70,
+     "mobs": [
+      48,
+      48
+     ]
+    }
+   ],
+   "builds": [
+    {
+     "name": "Dagger",
+     "reset_at": null,
+     "ap": [
+      {
+       "from": 30,
+       "to": 40,
+       "hold": {
+        "DEX": 30
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 40,
+       "to": 50,
+       "hold": {
+        "DEX": 35
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 50,
+       "to": 66,
+       "hold": {
+        "DEX": 40
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 66,
+       "to": 67,
+       "hold": {
+        "DEX": 42
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 67,
+       "to": 68,
+       "hold": {
+        "DEX": 47
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 68,
+       "to": 69,
+       "hold": {
+        "DEX": 52
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 69,
+       "to": 70,
+       "hold": {
+        "DEX": 57
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 70,
+       "to": 200,
+       "hold": {
+        "DEX": 62
+       },
+       "rest": "LUK"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 4201001,
+       "up_to": 1
+      },
+      {
+       "skill": 4200000,
+       "up_to": 3
+      },
+      {
+       "skill": 4200000,
+       "up_to": 5
+      },
+      {
+       "skill": 4201000,
+       "up_to": 1
+      },
+      {
+       "skill": 4200000,
+       "up_to": 20
+      },
+      {
+       "skill": 4201003,
+       "up_to": 21
+      },
+      {
+       "skill": 4201003,
+       "up_to": 30
+      },
+      {
+       "skill": 4201001,
+       "up_to": 19
+      },
+      {
+       "skill": 4201001,
+       "up_to": 20
+      },
+      {
+       "skill": 4200001,
+       "up_to": 2
+      },
+      {
+       "skill": 4200001,
+       "up_to": 11
+      },
+      {
+       "skill": 4200001,
+       "up_to": 12
+      },
+      {
+       "skill": 4201002,
+       "up_to": 2
+      },
+      {
+       "skill": 4201002,
+       "up_to": 29
+      },
+      {
+       "skill": 4201002,
+       "up_to": 30
+      },
+      {
+       "skill": 4201000,
+       "up_to": 3
+      },
+      {
+       "skill": 4201000,
+       "up_to": 9
+      }
+     ],
+     "gear": [
+      {
+       "item": 1332010,
+       "from_level": 30,
+       "map_id": null
+      },
+      {
+       "item": 1332011,
+       "from_level": 35,
+       "map_id": null
+      },
+      {
+       "item": 1332012,
+       "from_level": 40,
+       "map_id": null
+      },
+      {
+       "item": 1332015,
+       "from_level": 50,
+       "map_id": null
+      },
+      {
+       "item": 1332020,
+       "from_level": 70,
+       "map_id": null
+      }
+     ]
+    },
+    {
+     "name": "Sindit",
+     "reset_at": 40,
+     "ap": [
+      {
+       "from": 30,
+       "to": 40,
+       "hold": {
+        "DEX": 30
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 40,
+       "to": 50,
+       "hold": {
+        "DEX": 35
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 50,
+       "to": 66,
+       "hold": {
+        "DEX": 40
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 66,
+       "to": 67,
+       "hold": {
+        "DEX": 42
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 67,
+       "to": 68,
+       "hold": {
+        "DEX": 47
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 68,
+       "to": 69,
+       "hold": {
+        "DEX": 52
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 69,
+       "to": 70,
+       "hold": {
+        "DEX": 57
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 70,
+       "to": 200,
+       "hold": {
+        "DEX": 62
+       },
+       "rest": "LUK"
+      }
+     ],
+     "sp": [
+      {
+       "skill": 4201001,
+       "up_to": 19
+      },
+      {
+       "skill": 4201001,
+       "up_to": 20
+      },
+      {
+       "skill": 4200001,
+       "up_to": 2
+      },
+      {
+       "skill": 4200001,
+       "up_to": 8
+      },
+      {
+       "skill": 4200000,
+       "up_to": 20
+      },
+      {
+       "skill": 4201000,
+       "up_to": 1
+      },
+      {
+       "skill": 4201003,
+       "up_to": 10
+      },
+      {
+       "skill": 4201003,
+       "up_to": 19
+      },
+      {
+       "skill": 4201003,
+       "up_to": 21
+      },
+      {
+       "skill": 4201001,
+       "up_to": 1
+      },
+      {
+       "skill": 4201003,
+       "up_to": 30
+      },
+      {
+       "skill": 4201001,
+       "up_to": 19
+      },
+      {
+       "skill": 4201001,
+       "up_to": 20
+      },
+      {
+       "skill": 4200001,
+       "up_to": 2
+      },
+      {
+       "skill": 4200001,
+       "up_to": 11
+      },
+      {
+       "skill": 4200001,
+       "up_to": 12
+      },
+      {
+       "skill": 4201002,
+       "up_to": 2
+      },
+      {
+       "skill": 4201002,
+       "up_to": 29
+      },
+      {
+       "skill": 4201002,
+       "up_to": 30
+      },
+      {
+       "skill": 4201000,
+       "up_to": 3
+      },
+      {
+       "skill": 4201000,
+       "up_to": 9
+      }
+     ],
+     "gear": [
+      {
+       "item": 1472008,
+       "from_level": 30,
+       "map_id": null
+      },
+      {
+       "item": 1332011,
+       "from_level": 35,
+       "map_id": null
+      },
+      {
+       "item": 1332012,
+       "from_level": 40,
+       "map_id": null
+      },
+      {
+       "item": 1332015,
+       "from_level": 50,
+       "map_id": null
+      },
+      {
+       "item": 1332020,
+       "from_level": 70,
+       "map_id": null
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
