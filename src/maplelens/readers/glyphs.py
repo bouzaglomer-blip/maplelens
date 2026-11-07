@@ -20,6 +20,10 @@ CHAR_NAMES = {
     "pct": "%",
     "lbr": "[",
     "rbr": "]",
+    "plus": "+",
+    "lpar": "(",
+    "rpar": ")",
+    "slash": "/",
 }
 
 Font = list[tuple[str, np.ndarray]]  # (char, ink mask) per template file

@@ -10,6 +10,7 @@ from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
+from maplelens.readers.stat_window import UNREADABLE, StatWindow, parse_stat, read_stat_window
 
 SCREENS = Path(__file__).parent / "fixtures" / "screens"
 
@@ -96,6 +97,26 @@ EXPECTED_POS = {
     "pos_nominimap_1920x1080_100.png": None,  # game scene, no minimap
 }
 
+# Stat window crops are native (not normalized): the window plus 3 px of margin. Level 28,
+# AP 5, STR 4 / DEX 25 / INT 4 / LUK 122 (+2 gear). `plus`: the single-arrow + button
+# centres in the normalized frame, measured at 768 and within 1 px at the other sizes.
+_STAT = {
+    "level": 28,
+    "ap": 5,
+    "base": {"STR": 4, "DEX": 25, "INT": 4, "LUK": 122},
+    "total": {"STR": 4, "DEX": 25, "INT": 4, "LUK": 124},
+}
+_PLUS = {"STR": (155, 184), "DEX": (155, 202), "INT": (155, 220), "LUK": (155, 238)}
+EXPECTED_STAT = {
+    "stat_a_1366x768_100.png": StatWindow(**_STAT, plus=_PLUS),
+    "stat_a_1920x1080_100.png": StatWindow(
+        **_STAT, plus={k: (x + 1, y) for k, (x, y) in _PLUS.items()}
+    ),
+    "stat_a_2560x1440_100.png": StatWindow(**_STAT, plus=_PLUS),
+    "stat_covered_1366x768_100.png": UNREADABLE,  # inventory over the left half of the rows
+    "stat_edge_1366x768_100.png": None,  # window mostly off the left edge: no anchor found
+}
+
 
 def screen(name: str):
     return cv2.imread(str(SCREENS / name), cv2.IMREAD_COLOR)
@@ -168,7 +189,9 @@ def test_level_reads_every_digit(d):
 
 
 def test_expected_matches_fixture_files():
-    assert set(EXPECTED) | set(EXPECTED_POS) == {p.name for p in SCREENS.glob("*.png")}
+    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) == {
+        p.name for p in SCREENS.glob("*.png")
+    }
 
 
 def test_exp_one_px_noise_is_never_another_value():
@@ -496,3 +519,92 @@ def test_mac_vision_request_failure_raises(monkeypatch):
     monkeypatch.setattr(vision, "VNImageRequestHandler", Failing)
     with pytest.raises(RuntimeError, match="boom"):
         ocr_mac.recognize(np.full((40, 40), 255, np.uint8))
+
+
+@pytest.mark.parametrize(
+    "text, want",
+    [
+        ("25", (25, 25)),
+        ("124(122+2)", (122, 124)),
+        ("4(4+0)", (4, 4)),
+        ("25(20+4)", None),
+        ("", None),
+        ("2a", None),
+        ("25(20+", None),
+    ],
+)
+def test_parse_stat(text, want):
+    assert parse_stat(text) == want
+
+
+def _window_args(name):
+    """(frame, native, scale) of a native stat crop: frame is the 768-scale resize."""
+    native = screen(name)
+    scale = int(name.split("_")[2].split("x")[1]) / 768
+    return _scaled(native, scale), native, scale
+
+
+def _scaled(native, scale):
+    if scale == 1:
+        return native
+    return cv2.resize(native, None, fx=1 / scale, fy=1 / scale, interpolation=cv2.INTER_AREA)
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("stat_*.png")))
+def test_read_stat_window(name):
+    got, want = read_stat_window(*_window_args(name)), EXPECTED_STAT[name]
+    if isinstance(want, StatWindow) and isinstance(got, StatWindow):
+        assert (got.level, got.ap, got.base, got.total) == (
+            want.level,
+            want.ap,
+            want.base,
+            want.total,
+        )
+        for k, (x, y) in want.plus.items():
+            assert abs(got.plus[k][0] - x) <= 1 and abs(got.plus[k][1] - y) <= 1, (k, got.plus)
+    else:
+        assert got == want
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("exp_a_*.png")))
+def test_no_stat_window_reads_none(name):
+    assert read_stat_window(*_window_args_any(name)) is None
+
+
+def _window_args_any(name):
+    native = screen(name)
+    scale = native.shape[0] / 768
+    return _scaled(native, scale), native, scale
+
+
+@pytest.mark.parametrize("k", range(0, 15, 2))
+def test_stat_reads_at_every_offset(k):
+    """Dropping native rows and columns moves the window to another sub-pixel offset."""
+    name = "stat_a_2560x1440_100.png"
+    native, scale = screen(name)[k:, k:], 1440 / 768
+    got = read_stat_window(_scaled(native, scale), native, scale)
+    want = EXPECTED_STAT[name]
+    assert isinstance(got, StatWindow)
+    assert (got.level, got.ap, got.base, got.total) == (
+        want.level,
+        want.ap,
+        want.base,
+        want.total,
+    )
+    for key, (x, y) in want.plus.items():
+        assert abs(got.plus[key][0] - (x - k / scale)) <= 1, (k, key, got.plus)
+        assert abs(got.plus[key][1] - (y - k / scale)) <= 1, (k, key, got.plus)
+
+
+def test_stat_ap_check(monkeypatch):
+    from maplelens.readers import stat_window
+
+    args = _window_args("stat_a_1366x768_100.png")
+    assert isinstance(read_stat_window(*args), StatWindow)
+    real = stat_window.window.read_number_text
+    monkeypatch.setattr(
+        stat_window.window,
+        "read_number_text",
+        lambda win, box: "7" if box[0] == stat_window.AP_X else real(win, box),
+    )
+    assert read_stat_window(*args) == UNREADABLE  # 4 + 25 + 4 + 122 + 7 > 25 + 5 * 27
