@@ -74,10 +74,8 @@ def read_stat_window(
     base = {k: p[0] for k, p in parsed.items()}
     if sum(base.values()) + ap > 25 + 5 * (level - 1):
         return UNREADABLE
-    return StatWindow(
-        level,
-        ap,
-        base,
-        {k: p[1] for k, p in parsed.items()},
-        {k: (wx + PLUS_DX, wy + ROW_Y[k]) for k in STATS},
-    )
+    plus = {k: (wx + PLUS_DX, wy + ROW_Y[k]) for k in STATS}
+    h, w = frame.shape[:2]
+    if not all(0 <= x < w and 0 <= y < h for x, y in plus.values()):
+        return UNREADABLE  # a ring must never point at an off-screen +
+    return StatWindow(level, ap, base, {k: p[1] for k, p in parsed.items()}, plus)

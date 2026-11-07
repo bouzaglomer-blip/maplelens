@@ -577,23 +577,30 @@ def _window_args_any(name):
     return _scaled(native, scale), native, scale
 
 
-@pytest.mark.parametrize("k", range(0, 15, 2))
-def test_stat_reads_at_every_offset(k):
+@pytest.mark.parametrize(
+    "name, ks",
+    [
+        ("stat_a_2560x1440_100.png", range(0, 15, 2)),
+        ("stat_a_1920x1080_100.png", range(0, 12, 2)),  # to ceil(2s) = 3 frame px
+    ],
+)
+def test_stat_reads_at_every_offset(name, ks):
     """Dropping native rows and columns moves the window to another sub-pixel offset."""
-    name = "stat_a_2560x1440_100.png"
-    native, scale = screen(name)[k:, k:], 1440 / 768
-    got = read_stat_window(_scaled(native, scale), native, scale)
+    scale = int(name.split("_")[2].split("x")[1]) / 768
     want = EXPECTED_STAT[name]
-    assert isinstance(got, StatWindow)
-    assert (got.level, got.ap, got.base, got.total) == (
-        want.level,
-        want.ap,
-        want.base,
-        want.total,
-    )
-    for key, (x, y) in want.plus.items():
-        assert abs(got.plus[key][0] - (x - k / scale)) <= 1, (k, key, got.plus)
-        assert abs(got.plus[key][1] - (y - k / scale)) <= 1, (k, key, got.plus)
+    for k in ks:
+        native = screen(name)[k:, k:]
+        got = read_stat_window(_scaled(native, scale), native, scale)
+        assert isinstance(got, StatWindow), k
+        assert (got.level, got.ap, got.base, got.total) == (
+            want.level,
+            want.ap,
+            want.base,
+            want.total,
+        )
+        for key, (x, y) in want.plus.items():
+            assert abs(got.plus[key][0] - (x - k / scale)) <= 1, (k, key, got.plus)
+            assert abs(got.plus[key][1] - (y - k / scale)) <= 1, (k, key, got.plus)
 
 
 def test_stat_ap_check(monkeypatch):
@@ -608,3 +615,32 @@ def test_stat_ap_check(monkeypatch):
         lambda win, box: "7" if box[0] == stat_window.AP_X else real(win, box),
     )
     assert read_stat_window(*args) == UNREADABLE  # 4 + 25 + 4 + 122 + 7 > 25 + 5 * 27
+
+
+def test_stat_light_overlay_over_a_tail_is_not_read():
+    """A light, borderless patch over "(122+2)" must not read as a plain "124" LUK."""
+    native = screen("stat_a_1366x768_100.png")
+    native[3 + 228 : 3 + 243, 3 + 90 : 3 + 140] = 222  # the LUK strip's tail, field grey
+    assert read_stat_window(native) == UNREADABLE
+
+
+def test_stat_plus_off_frame_is_unreadable():
+    """Fields all read, but the frame's right edge cuts through the + buttons."""
+    native = screen("stat_a_1366x768_100.png")[:, :155]
+    assert read_stat_window(native) == UNREADABLE
+
+
+def test_number_text_ambiguous_glyph_is_none(monkeypatch):
+    """Two chars that match a glyph about equally: no guess."""
+    from maplelens.readers import window
+
+    win = np.full((20, 40, 3), 222, np.uint8)
+    g = next(t for c, t in window._glyphs() if c == "8")
+    win[3:16, 5 : 5 + g.shape[1]] = g[..., None].astype(np.uint8)
+    box = (0, 0, 40, 20)
+    assert window.read_number_text(win, box) == "8"
+    # An "8" that is mostly a "0": blend the middle row in.
+    win[3 + 6, 5:12] = 222
+    assert window.read_number_text(win, box) in (None, "0")  # never a confident wrong read
+    monkeypatch.setattr(window, "_font", [("8", g), ("B", g)])
+    assert window.read_number_text(win, box) is None  # identical scores: no margin
