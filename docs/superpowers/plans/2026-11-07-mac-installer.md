@@ -211,6 +211,10 @@ def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
     assert "LSUIElement" in text
 ```
 
+  *(Superseded 2026-11-08: the user asked for a Dock icon; see the Mac installer
+  spec. The test is now `test_mac_spec_pins_the_bundle_id_and_keeps_the_dock_icon` and
+  asserts no `LSUIElement`.)*
+
   `mac_bundle_ok` is a fixture like `bundle_ok` that also points `MAC_LICENSES` at
   `tmp_path` and returns it.
 - [ ] **Step 3: Run them:** `uv run pytest tests/test_build_installer.py -v` → the new
@@ -224,6 +228,8 @@ def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
   bundle_identifier="io.github.or-keren.maplelens", version=<pyproject version, read
   with tomllib>, info_plist={"CFBundleShortVersionString": v, "CFBundleVersion": v,
   "LSUIElement": True, "LSMinimumSystemVersion": <what the wheels need>})`.
+  *(Superseded 2026-11-08: the user asked for a Dock icon; see the Mac installer
+  spec. No `LSUIElement`.)*
 - [ ] **Step 5: Make `packaging/mac/icon.icns`** from `packaging/windows/icon.ico` with
   `sips` (to PNG) and `iconutil` (from an `.iconset` of the standard sizes).
   *(Superseded 2026-11-08: main's `scripts/make_icon.py` draws the maple leaf
@@ -240,6 +246,8 @@ def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
   --freeze-only` → exits 0; confirm/adjust `MAC_BUNDLE_PKG` and `MAC_REQUIRED`; open
   `dist/MapleLens.app` with the game running: no Dock icon, box shows, EXP and path
   arrow read as from source. Record the `.app` size in the commit message.
+  *(Superseded 2026-11-08: the user asked for a Dock icon; see the Mac installer
+  spec. MapleLens now shows in the Dock.)*
 - [ ] **Step 9: Four checks, commit:** `feat(build): freeze MapleLens.app on the Mac`.
 
 ---

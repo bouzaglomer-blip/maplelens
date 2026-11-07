@@ -21,7 +21,8 @@ The screen-only rule in `AGENTS.md` holds for every part of this document, uncha
 
 - Mac support works from source: `capture_mac.py` (`CGWindowListCreateImage`, sRGB),
   `ocr_mac.py` (Vision), `overlay_mac.py` (non-activating panels; `make_accessory()`, no
-  Dock icon, until 2026-11-08, when the user asked for a Dock icon: now `make_regular()`). Runtime deps on the Mac: PySide6, numpy, opencv-python-headless and three
+  Dock icon, until 2026-11-08, when the user asked for a Dock icon: now `make_regular()`).
+  Runtime deps on the Mac: PySide6, numpy, opencv-python-headless and three
   `pyobjc-framework-*` packages (Cocoa, Quartz, Vision).
 - `capture_mac.ensure_access()` checks Screen Recording, asks macOS for it, **prints** a
   message and returns `False`, and `main()` exits. A windowed `.app` has no console, so
@@ -118,9 +119,9 @@ code-signing certificate** that never changes:
   asks macOS once (`CGRequestScreenCaptureAccess`, which shows the system prompt with its
   own "Open System Settings" button), **keeps running**, and the box's status line says so
   in plain words: "Allow, then reopen: click •••" (main's ••• menu button replaced the
-  right-click wording, 2026-11-08). The box's menu gets an
-  item that opens System Settings at Privacy & Security → Screen Recording (a URL opened
-  in System Settings, not driving its UI).
+  right-click wording, 2026-11-08). The box's menu gets an item that opens System
+  Settings at Privacy & Security → Screen Recording (a URL opened in System Settings, not
+  driving its UI).
 - Each tick re-checks; once allowed (and MapleLens reopened), the box moves on to
   "Looking for MapleStory…" and then the normal tools. macOS does **not** give a running app a
   grant made meanwhile (Checkpoint A, (c)), and offers no "Quit & Reopen". So the line

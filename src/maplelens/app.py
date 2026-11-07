@@ -569,6 +569,11 @@ def box_menu(box: Box) -> QMenu:
     return menu
 
 
+def dock_available() -> bool:
+    """A Dock icon with a menu: the Mac's."""
+    return sys.platform == "darwin"
+
+
 def make_dock(box: Box, *, available: bool, as_dock: Callable | None = None) -> QMenu | None:
     """The Dock icon's menu on the Mac: the box's menu, as the tray has it. None if not
     `available`. macOS adds its own items (Options, Quit…) under it.
@@ -609,18 +614,18 @@ class Shown:
 
 
 def add_hide(
-    box: Box, layer: Layer, tray: QSystemTrayIcon | None, qt: QApplication | None = None
+    box: Box, layer: Layer, tray: QSystemTrayIcon | None, dock: QApplication | None = None
 ) -> Shown:
     """Hide / Show: a menu item just before Quit, and a way back: a left click on the
-    tray icon (Windows), or on the Mac a click on the Dock icon.
+    tray icon (Windows), or a click on the Dock icon (Mac).
 
-    The Dock click reaches Qt as `qt` (the QApplication) becoming active, sent even when
-    it already is; so does Cmd-Tab. Either shows a hidden box; a shown one stays as it is.
-    With no way back there's no item: a hidden box would stay hidden.
+    `dock` is the QApplication where there's a Dock icon (make_dock made its menu), else
+    None. A Dock click reaches Qt as it becoming active, sent even when it already is; so
+    does Cmd-Tab. Either shows a hidden box; a shown one stays as it is. With no way back
+    there's no item: a hidden box would stay hidden.
     """
     shown = Shown(box, layer)
-    dock = sys.platform == "darwin" and qt is not None
-    if tray is None and not dock:
+    if tray is None and dock is None:
         return shown
 
     def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
@@ -634,8 +639,8 @@ def add_hide(
     shown.item = box.add_menu_item(HIDE, shown.toggle, at=-1)
     if tray is not None:
         tray.activated.connect(clicked)
-    if dock:
-        qt.applicationStateChanged.connect(activated)
+    if dock is not None:
+        dock.applicationStateChanged.connect(activated)
     return shown
 
 
@@ -773,8 +778,8 @@ def main() -> int:
     setup_screen_recording(box)
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
-    make_dock(box, available=sys.platform == "darwin")  # the box, its parent, holds it
-    shown = add_hide(box, layer, tray, app)
+    dock = make_dock(box, available=dock_available())  # the box, its parent, holds it
+    shown = add_hide(box, layer, tray, app if dock is not None else None)
     add_about(box, updates)  # after Hide: just before Quit
     tick = Tick(settings, save, box, layer, tool, path_tool, updates, seen, shown)
     timer = QTimer()

@@ -1064,7 +1064,7 @@ class _FakeQApp(QObject):
 
 
 @pytest.fixture
-def dock_hide(qt_box, monkeypatch):
+def dock_hide(qt_box):
     """hide's Mac version: no tray; the Dock click is the way back."""
     from maplelens.overlay import Layer
 
@@ -1072,7 +1072,6 @@ def dock_hide(qt_box, monkeypatch):
     qt_box.show()
     layer.show()
     qt = _FakeQApp()
-    monkeypatch.setattr(sys, "platform", "darwin")
     return qt_box, layer, qt, app.add_hide(qt_box, layer, None, qt)
 
 
@@ -1098,29 +1097,20 @@ def test_activation_while_shown_changes_nothing(dock_hide):
     assert not shown.on and not box.isVisible()
 
 
-def test_on_windows_activation_never_shows_the_box(qt_box, fake_tray, monkeypatch):
-    from maplelens.overlay import Layer
-
-    monkeypatch.setattr(sys, "platform", "win32")
-    box, layer, qt = qt_box, Layer(), _FakeQApp()
-    box.show()
-    tray = app.make_tray(box, app.ICON, available=True, tray_cls=fake_tray)
-    shown = app.add_hide(box, layer, tray, qt)
-    shown.toggle()
-    qt.applicationStateChanged.emit(Qt.ApplicationActive)
-    assert not shown.on and not box.isVisible()
-
-
-def test_on_linux_with_no_tray_there_is_still_no_hide_item(qt_box, monkeypatch):
-    from maplelens.overlay import Layer
-
-    monkeypatch.setattr(sys, "platform", "linux")
-    app.add_hide(qt_box, Layer(), None, _FakeQApp())
-    assert _menu(qt_box) == ["Quit MapleLens"]
+@pytest.mark.parametrize(
+    ("platform", "there"), [("darwin", True), ("win32", False), ("linux", False)]
+)
+def test_the_dock_is_mac_only(monkeypatch, platform, there):
+    """Off the Mac make_dock makes nothing, so add_hide gets no Dock: on Windows only the
+    tray brings the box back, and on Linux with no tray there's no Hide item."""
+    monkeypatch.setattr(sys, "platform", platform)
+    assert app.dock_available() is there
 
 
 @pytest.mark.parametrize("frozen", [False, True])
-def test_on_the_mac_maplelens_is_in_the_dock_with_the_maple_leaf(qt_box, monkeypatch, frozen):
+def test_on_the_mac_maplelens_is_in_the_dock_with_the_maple_leaf(
+    qt_box, monkeypatch, request, frozen
+):
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
@@ -1130,6 +1120,8 @@ def test_on_the_mac_maplelens_is_in_the_dock_with_the_maple_leaf(qt_box, monkeyp
     monkeypatch.setattr(maplelens, "overlay_mac", fake, raising=False)
     monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     qt = QApplication.instance()
+    before = qt.windowIcon()  # every test shares this QApplication: put its icon back
+    request.addfinalizer(lambda: qt.setWindowIcon(before))
     qt.setWindowIcon(QIcon())
     app.show_in_dock(qt)
     assert calls == ["regular"]
