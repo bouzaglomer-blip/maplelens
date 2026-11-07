@@ -21,7 +21,8 @@ from maplelens import capture, update
 from maplelens.overlay import Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
-from maplelens.tools.exp_meter.history import open_db
+from maplelens.tools.class_helper.ui import ClassHelperTool
+from maplelens.tools.exp_meter.history import best_rate, open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
 from maplelens.tools.path_arrow import maps
 from maplelens.tools.path_arrow.ui import PathArrowTool
@@ -121,11 +122,11 @@ def poll_updates(updates: "UpdateCheck | None", now: float, seen: set[str]) -> N
 
 
 def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bundle would hide them
-    box: Box, exp, path, reading, rect, now: float, seen: set[str]
+    box: Box, exp, path, cls, reading, rect, now: float, seen: set[str]
 ) -> None:
-    """Feed both tools the same reading; the Path tab shows a dot while a trip runs.
+    """Feed the tools the same reading; the Path tab shows a dot while a trip runs.
 
-    Each tool runs on its own: one raising doesn't stop the other.
+    Each tool runs on its own: one raising doesn't stop the others.
     """
     try:
         exp.update(reading, rect, now)
@@ -136,7 +137,13 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
     except Exception as e:
         report_once(e, seen)
         path.arrow.hide()  # never leave it pointing from a stale spot
-    box.set_tab_dot(1, path.running)  # the Path tab's index in build_box's tools list
+    try:
+        cls.update(reading, rect, now)
+    except Exception as e:
+        report_once(e, seen)
+    cls.hide_marks()
+    box.set_tab_dot(1, path.running)  # the tabs' indexes in build_box's tools list
+    box.set_tab_dot(2, cls.dot)
 
 
 def self_check() -> int:
@@ -443,7 +450,7 @@ def early_exit() -> int | None:
     return None
 
 
-def main() -> int:
+def main() -> int:  # noqa: PLR0915 - the wiring of every tool, in one place
     if (code := early_exit()) is not None:
         return code
     _prepare_process()
@@ -465,7 +472,8 @@ def main() -> int:
     def save() -> None:
         save_settings(path, settings)
 
-    tool = ExpMeterTool(settings, open_db(data_dir() / "maplelens.db"))
+    conn = open_db(data_dir() / "maplelens.db")
+    tool = ExpMeterTool(settings, conn)
     # the lambda defers the lookup: `box` is built from path_tool on the next line
     path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))  # noqa: PLW0108
     hwnd = None
@@ -476,7 +484,12 @@ def main() -> int:
         choose_window(settings, save, title)
         hwnd = None  # the next tick finds the chosen window
 
-    box = build_box(settings, save, [tool, path_tool], pick)
+    def go(map_id: str) -> None:
+        path_tool.go(map_id)
+        box.select(1)
+
+    cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t))
+    box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
     updates = update_check(box, settings, save, seen, time.time())
 
     def tick() -> None:
@@ -489,7 +502,7 @@ def main() -> int:
         if rect is None:
             hwnd = None  # gone or minimized: look again next tick
             layer.hide()
-            update_tools(box, tool, path_tool, None, None, now, seen)
+            update_tools(box, tool, path_tool, cls_tool, None, None, now, seen)
             return
         layer.follow(rect)
         layer.show()
@@ -498,7 +511,7 @@ def main() -> int:
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, seen)
             reading = None
-        update_tools(box, tool, path_tool, reading, rect, now, seen)
+        update_tools(box, tool, path_tool, cls_tool, reading, rect, now, seen)
         box.place(rect)
 
     timer = QTimer()

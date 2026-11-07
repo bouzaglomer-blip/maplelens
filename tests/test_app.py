@@ -116,8 +116,12 @@ class _Raises:
 
 class _Quiet:
     running = False
+    dot = False
 
     def update(self, *_):
+        pass
+
+    def hide_marks(self):
         pass
 
 
@@ -143,7 +147,7 @@ def test_a_tool_error_is_logged_once(log, monkeypatch):
     monkeypatch.setattr(sys, "stderr", None)  # a windowed exe has no console
     seen: set[str] = set()
     for _ in range(3):
-        app.update_tools(_Box(), _Raises(), _Quiet(), None, None, 0.0, seen)
+        app.update_tools(_Box(), _Raises(), _Quiet(), _Quiet(), None, None, 0.0, seen)
     text = log.read_text(encoding="utf-8")
     assert text.count("ValueError: bad frame") == 1
     assert "Traceback" in text

@@ -272,6 +272,25 @@ class PathArrowTool:
         self._set_typing(False)
         self._render()
 
+    def go(self, map_id: str) -> None:
+        """Fill the field with that map and start, as picking it and pressing Start do."""
+        m = self.maps[map_id]
+        self._search.setText(m.name)  # fills the match list
+        item = next(
+            (
+                i
+                for i in (self._matches.item(n) for n in range(self._matches.count()))
+                if i.data(Qt.UserRole) == map_id
+            ),
+            None,
+        )
+        if item is None:
+            item = QListWidgetItem(m.name)
+            item.setData(Qt.UserRole, map_id)
+            self._matches.addItem(item)
+        self._pick(item)
+        self._on_start()
+
     def _on_start(self) -> None:
         item = self._matches.currentItem()
         self._set_typing(False)

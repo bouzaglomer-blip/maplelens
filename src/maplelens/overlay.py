@@ -131,7 +131,7 @@ class Box(QWidget):
         button.setFocusPolicy(Qt.NoFocus)
         button.setCursor(Qt.PointingHandCursor)
         button.setFont(QFont(FONT, 10, QFont.Bold))
-        button.clicked.connect(lambda: self._select(i))
+        button.clicked.connect(lambda: self.select(i))
         dot = QLabel()
         dot.setFixedSize(6, 6)
         dot.setStyleSheet(f"background: {ACCENT}; border-radius: 3px;")
@@ -141,10 +141,10 @@ class Box(QWidget):
         at = self._strip.count() - 1  # before the trailing stretch
         self._strip.insertWidget(at, button)
         self._strip.insertWidget(at + 1, dot, 0, Qt.AlignVCenter)
-        self._select(self._pages.currentIndex())
+        self.select(self._pages.currentIndex())
         return i
 
-    def _select(self, index: int) -> None:
+    def select(self, index: int) -> None:
         self._pages.setCurrentIndex(index)
         for j, b in enumerate(self._tab_buttons):
             color, line = (VALUE_COLOR, ACCENT) if j == index else (LABEL_COLOR, "transparent")
