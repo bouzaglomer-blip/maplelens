@@ -211,8 +211,14 @@ class ClassHelperTool:
     def _remember(self, r: Reading | None) -> None:
         job = r.job if r else None
         level = r.level if r else None
-        if (job and self._job and job != self._job) or (
-            level is not None and self._level is not None and level < self._level
+        sk = r.skills if r else None
+        lower = isinstance(sk, SkillWindow) and any(
+            row.level < self.skills.get(sk.tab, {}).get(row.skill, 0) for row in sk.rows
+        )  # skill levels never fall within one character
+        if (
+            (job and self._job and job != self._job)
+            or (level is not None and self._level is not None and level < self._level)
+            or lower
         ):
             self._stats, self._content = None, None
             self.skills, self.sp = {}, {}
@@ -223,7 +229,6 @@ class ClassHelperTool:
         st = r.stats
         if isinstance(st, StatWindow) and (r.level is None or st.level == r.level):
             self._stats = (st, st.level)
-        sk = r.skills
         if isinstance(sk, SkillWindow) and self._level is not None:
             self.skills.setdefault(sk.tab, {}).update({row.skill: row.level for row in sk.rows})
             self.sp[sk.tab] = (sk.sp, self._level)

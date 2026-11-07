@@ -229,3 +229,28 @@ def test_tabs_are_remembered_apart(make):
     tool.update(R(level=32, job="Bandit", skills=KW(tab="Bandit", sp=0, rows=ALL_BANDIT)), RECT, 1)
     tool.update(R(level=32, job="Bandit"), RECT, 2)
     assert "1st job tab: 2 SP to place" in texts(tool)
+
+
+def test_lower_skill_level_means_another_character(make):
+    tool = make()
+    first = [SkillRow(NIMBLE, 5, (150, 120)), SkillRow(4000001, 3, (150, 160))]
+    tool.update(R(level=20, skills=KW(rows=first, sp=2)), RECT, 0)
+    tool.update(R(level=20, skills=KW(rows=[SkillRow(NIMBLE, 2, (150, 120))], sp=2)), RECT, 1)
+    assert tool.skills["Rogue"] == {NIMBLE: 2}
+
+
+def test_marks_scale_with_client_and_dpr(make, monkeypatch):
+    from maplelens.overlay import Layer, game_to_layer
+
+    monkeypatch.setattr(Layer, "devicePixelRatioF", lambda self: 2.0)
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5)), (0, 0, 2560, 1440), 0)
+    k = 1440 / 768
+    x, y = PLUS["LUK"]
+    assert tool.marks() == [("5 here", game_to_layer(x * k, y * k, 2.0))]
+
+
+def test_stat_window_of_another_level_gets_no_marks(make):
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=19, ap=5)), RECT, 0)
+    assert tool.marks() == []
