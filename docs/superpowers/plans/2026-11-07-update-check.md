@@ -99,8 +99,9 @@ U1 and U2 are independent. Daniel works alone, so they run in order, U2 right af
       setup ends with MapleLens N+1 running. No prompt is shown, the uninstall entry
       reads N+1, and `settings.json` and `maplelens.db` are unchanged apart from the
       saved session.
-- [ ] A hand-run N+1 setup over a running N still asks "MapleLens is running. Close it…?"
-      as today.
+- [x] A hand-run N+1 setup over a running N still asks "MapleLens is running. Close it…?"
+      as today. *(2026-11-07, Daniel: the 0.1.0 setup double-clicked over a running
+      0.1.1 asked; OK closed MapleLens and the wizard installed.)*
 - [x] Starting Setup from a folder with non-ASCII characters works.
 - [x] A unit test checks the command line `install_update` builds, and that it quits
       through `QApplication.quit`, not `sys.exit`.
@@ -127,6 +128,8 @@ U1 and U2 are independent. Daniel works alone, so they run in order, U2 right af
   the installed exe as N, which needs U4's menu item. It is re-checked in U7.
 - 2026-11-07, U7: criterion 1 passed with the installed 0.1.0 as N (U7 run notes). The
   hand-run prompt and the Sandbox run are still not done.
+- 2026-11-07, afterwards: the hand-run prompt passed (criterion 2 above). The Sandbox run
+  was dropped by Daniel's call: the PC runs cover the same path.
 
 **Verification:** build N and N+1 locally (version set temporarily, not committed), then
 try both paths on Daniel's PC and once in Windows Sandbox. `uv run pytest`, then the four
@@ -136,11 +139,12 @@ checks.
 `packaging/windows/maplelens.iss`, `tests/test_app.py`. **Scope:** M. **Risk:** highest.
 
 ### Checkpoint A: the handoff is real
-- [ ] U1–U2 done; four checks pass.
-- [ ] Silent upgrade and relaunch seen on Daniel's PC and in Sandbox. The hand-run setup
-      is unchanged.
-- [ ] Decide with Daniel: continue as is, or fall back to showing the normal wizard (the
-      spec's open question) if the silent path fought too hard.
+- [x] U1–U2 done; four checks pass.
+- [x] Silent upgrade and relaunch seen on Daniel's PC and in Sandbox. The hand-run setup
+      is unchanged. *(PC only; Sandbox dropped by Daniel's call.)*
+- [x] Decide with Daniel: continue as is, or fall back to showing the normal wizard (the
+      spec's open question) if the silent path fought too hard. *(Silent: no prompts, and
+      the game kept the keyboard; see U7's focus run.)*
 
 ## Phase 2: the feature
 
@@ -318,8 +322,9 @@ specs. **Scope:** S.
 **Acceptance criteria:**
 - [x] Criteria 1–7 seen by hand, with notes in this plan.
 - [x] The fork has no test tags or releases left.
-- [ ] PR #10 shows the new commits, its CI is green, and its description covers the
-      update check.
+- [x] PR #10 shows the new commits, its CI is green, and its description covers the
+      update check. *(Commits and description yes; upstream CI waits for the owner to
+      approve workflows for a first-time contributor. Fork CI is green.)*
 
 **Verification:** fork run notes; `gh release list --repo dbeilin/maplelens` is empty; PR
 checks.
@@ -368,9 +373,25 @@ checks.
 - Cleaned up: the fork has no releases or tags, and `MAPLELENS_UPDATE_REPO` is removed.
   Installed 0.1.1 was left on Daniel's PC.
 
+**Focus run (2026-11-07, Daniel's PC, game open):**
+- v0.1.1 published on the fork again by hand, the same setup as above (digest
+  `sha256:8c2aee9f…`). 0.1.0 reinstalled by hand over a running 0.1.1, which was the
+  hand-run prompt check.
+- With the game in focus, "Update to 0.1.1…" from the menu, then straight back into the
+  game. **The game kept the keyboard throughout** (Daniel). Setup installed 0.1.1 at
+  15:05:57, and MapleLens came back at 15:06:00.
+- The automatic check showed only the menu item, with no line: `update_dismissed` was
+  still `"0.1.1"` from criterion 7's run, and uninstalling keeps `%APPDATA%\MapleLens`.
+  That is the spec's behaviour.
+- An earlier try at 14:30 also updated 0.1.0 → 0.1.1 (about 12 s, no prompts), but
+  without watching focus.
+- Cleaned up: the fork's v0.1.1 release and tag were deleted again.
+
 ### Checkpoint C: done
-- [ ] All eight spec success criteria met; evidence in PR #10.
-- [ ] Daniel has seen the PR description before it's posted.
+- [x] All eight spec success criteria met; evidence in PR #10. *(3 and 6 by tests;
+      the N+2 part of 7 by test.)*
+- [x] Daniel has seen the PR description before it's posted. *(The update-check section
+      was posted from another chat; this chat's focus-run edit was shown to Daniel.)*
 
 ## Risks and mitigations
 
