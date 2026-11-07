@@ -317,7 +317,8 @@ or the install steps ("•••, then About MapleLens shows the version"). **Sc
 
 ### Checkpoint B2: About works from source
 
-- [ ] T7 committed, and `uv run pytest` and the four checks pass on Windows.
+- [x] T7 committed, and `uv run pytest` and the four checks pass on Windows.
+  *2026-11-07: `f241f57`, 515 tests, and CI green on Windows and macOS.*
 - [ ] Daniel has opened About from the ••• and the tray, and agrees with how it looks
       at 100% and 150%.
 
@@ -347,7 +348,9 @@ or the install steps ("•••, then About MapleLens shows the version"). **Sc
       from the tray all work. The hand-run Setup over a running MapleLens shows the new
       "still running" text. About shows the installed version and a real update
       status (spec Testing → by hand, step 8).
-- [ ] CI is green on the PR (Windows and macOS).
+- [x] CI is green on the PR (Windows and macOS).
+      *2026-11-07: or-keren/maplelens#12, both jobs green at `f241f57`
+      ([run](https://github.com/or-keren/maplelens/actions/runs/42411025054)).*
 
 **Verification:** the build, the installed run, and CI.
 
