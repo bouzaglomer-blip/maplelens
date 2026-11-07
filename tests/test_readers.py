@@ -4,12 +4,13 @@ import cv2
 import numpy as np
 import pytest
 
-from maplelens.readers import ExpValue, Reading, glyphs, job, map_name, ocr, read_all
+from maplelens.readers import ExpValue, Reading, glyphs, job, map_name, ocr, read_all, skill_window
 from maplelens.readers.exp import EXP_DX, EXP_DY, EXP_H, EXP_INK_HI, EXP_INK_LO, EXP_W, read_exp
 from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
+from maplelens.readers.skill_window import SkillRow, SkillWindow, read_skill_window
 from maplelens.readers.stat_window import UNREADABLE, StatWindow, parse_stat, read_stat_window
 
 SCREENS = Path(__file__).parent / "fixtures" / "screens"
@@ -117,6 +118,27 @@ EXPECTED_STAT = {
     "stat_edge_1366x768_100.png": None,  # window mostly off the left edge: no anchor found
 }
 
+# Skill window crops: native, window plus 3 px of margin. Rogue tab, 3 SP; `plus`: the
+# single-arrow + centres in the normalized frame (768 measured, within 1 px elsewhere).
+_SKILL_ROWS = (
+    (4000000, 15),
+    (4000001, 15),
+    (4001000, 2),
+    (4001001, 0),
+    (4001002, 0),
+    (4001003, 20),
+)
+_SKILL = SkillWindow(
+    "Rogue", 3, tuple(SkillRow(i, lv, (148, 125 + 40 * n)) for n, (i, lv) in enumerate(_SKILL_ROWS))
+)
+EXPECTED_SKILL = {
+    "skill_a_1366x768_100.png": _SKILL,
+    "skill_a_1920x1080_100.png": _SKILL,
+    "skill_a_2560x1440_100.png": _SKILL,
+    "skill_covered_2560x1440_100.png": UNREADABLE,  # title covered, SKILL POINT label visible
+    "skill_edge_2560x1440_100.png": None,  # window mostly off the left edge
+}
+
 
 def screen(name: str):
     return cv2.imread(str(SCREENS / name), cv2.IMREAD_COLOR)
@@ -189,7 +211,7 @@ def test_level_reads_every_digit(d):
 
 
 def test_expected_matches_fixture_files():
-    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) == {
+    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(EXPECTED_SKILL) == {
         p.name for p in SCREENS.glob("*.png")
     }
 
@@ -644,3 +666,69 @@ def test_number_text_ambiguous_glyph_is_none(monkeypatch):
     assert window.read_number_text(win, box) in (None, "0")  # never a confident wrong read
     monkeypatch.setattr(window, "_font", [("8", g), ("B", g)])
     assert window.read_number_text(win, box) is None  # identical scores: no margin
+
+
+def _same_skills(got, want, k=0, scale=1):
+    assert isinstance(got, SkillWindow), got
+    assert (got.tab, got.sp) == (want.tab, want.sp)
+    assert [(r.skill, r.level) for r in got.rows] == [(r.skill, r.level) for r in want.rows]
+    for g, w in zip(got.rows, want.rows, strict=True):
+        assert abs(g.plus[0] - (w.plus[0] - k / scale)) <= 1, (k, g)
+        assert abs(g.plus[1] - (w.plus[1] - k / scale)) <= 1, (k, g)
+
+
+@needs_ocr
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("skill_*.png")))
+def test_read_skill_window(name):
+    got, want = read_skill_window(*_window_args(name)), EXPECTED_SKILL[name]
+    if isinstance(want, SkillWindow):
+        _same_skills(got, want)
+    else:
+        assert got == want
+
+
+@needs_ocr
+def test_unknown_skill_name_is_unreadable(monkeypatch):
+    monkeypatch.setattr(skill_window, "known_skills", dict)
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+
+
+@needs_ocr
+def test_skill_level_over_max_is_unreadable(monkeypatch):
+    real = skill_window.known_skills()
+    monkeypatch.setattr(skill_window, "known_skills", lambda: real)
+    monkeypatch.setattr(skill_window, "_max", lambda skill: 14 if skill == 4000000 else 20)
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+
+
+@needs_ocr
+def test_skill_tab_is_the_job_every_row_shares(monkeypatch):
+    names = {"Nimble Body": [(1, "A")], "Keen Eyes": [(2, "B")]}
+    monkeypatch.setattr(skill_window, "known_skills", lambda: names)
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+
+
+@needs_ocr
+@pytest.mark.parametrize(
+    "name, ks",
+    [
+        ("skill_a_2560x1440_100.png", range(0, 15, 2)),
+        ("skill_a_1920x1080_100.png", range(0, 12, 2)),
+    ],
+)
+def test_skill_reads_at_every_offset(name, ks):
+    scale = int(name.split("_")[2].split("x")[1]) / 768
+    for k in ks:
+        native = screen(name)[k:, k:]
+        got = read_skill_window(_scaled(native, scale), native, scale)
+        _same_skills(got, EXPECTED_SKILL[name], k, scale)
+
+
+def test_skill_plus_off_frame_is_unreadable():
+    native = screen("skill_a_1366x768_100.png")[:, :140]
+    assert read_skill_window(native) == UNREADABLE
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("stat_a_*.png")))
+def test_no_skill_window_in_a_stat_window(name):
+    assert read_skill_window(*_window_args(name)) is None
