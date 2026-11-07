@@ -120,7 +120,7 @@ four checks, and the build above.
       fallback font drew it faint and 2 px taller. Opening twice caught a real bug:
       PySide's `QMenu.clear()` let Python delete the box's actions, so the fill removes
       them one by one instead.*
-- [ ] By hand, `uv run maplelens` on Windows: the ⋯ sits top-right at 100% and 150%
+- [x] By hand, `uv run maplelens` on Windows: the ⋯ sits top-right at 100% and 150%
       scaling, in both states. Its menu opens under it, and after picking an item or
       pressing Esc, the game still has the keyboard.
 
@@ -132,9 +132,9 @@ above.
 
 ### Checkpoint A: the foundations
 
-- [ ] T1 and T2 committed, and the four checks pass.
-- [ ] The frozen self-check proves the icon loads.
-- [ ] Daniel has seen the ⋯ on the box and agrees with the glyph and the place.
+- [x] T1 and T2 committed, and the four checks pass.
+- [x] The frozen self-check proves the icon loads.
+- [x] Daniel has seen the ⋯ on the box and agrees with the glyph and the place.
 
 ## Phase 2: the feature
 
@@ -159,7 +159,7 @@ above.
       *2026-11-07: finds nothing. The text says "•••" (T2's glyph). The `.iss` writes it
       as `#$2022` codes so the script stays ASCII; ISCC compiles it.*
 - [x] `test_notice_fits_the_tab_width_at_the_longest_version` passes with the new text.
-- [ ] By hand: the "Looking for…" state reads well next to the ⋯ at 100% and 150%.
+- [x] By hand: the "Looking for…" state reads well next to the ⋯ at 100% and 150%.
       *2026-11-07: first two lines (one made the box 395 px wide). Then Daniel cut it to
       "Looking for MapleStory…" alone, since the ••• beside it is hint enough. It's one
       line and 197 px wide. While the status shows, the button stays top-aligned, so a
@@ -190,7 +190,7 @@ above.
       `available=False` there's no tray.
       *2026-11-07: plus `tray_available()`: false off Windows, and on Windows without a
       notification area.*
-- [ ] By hand, `uv run maplelens` on Windows: the icon shows in the notification area
+- [x] By hand, `uv run maplelens` on Windows: the icon shows in the notification area
       (or its overflow) with the tooltip. Right-click shows the same menu as ⋯. Quit
       from it saves the session (it's in History after a restart). The game keeps the
       keyboard afterwards.
@@ -226,7 +226,7 @@ above.
       *2026-11-07: the tick is now `Tick` (a dataclass with `run(now)`), so tests drive
       it. Toggling back shows the box at once and the `Layer` on the next tick with the
       game, so an empty `Layer` never shows while the game is gone.*
-- [ ] By hand: left-clicking the tray icon hides the box and the arrow, and again brings
+- [x] By hand: left-clicking the tray icon hides the box and the arrow, and again brings
       them back. A double-click toggles once, not twice. While hidden for a minute of
       play, the EXP session keeps counting.
       *2026-11-07: a scripted run with the real tray: `Trigger` hides and shows, and
@@ -240,9 +240,15 @@ above.
 
 ### Checkpoint B: the feature works from source
 
-- [ ] T3–T5 committed, and `uv run pytest` and the four checks pass on Windows.
-- [ ] Spec Testing → by hand on Windows, steps 1–6, from `uv run maplelens`.
-- [ ] Daniel tries it in a real play session before Phase 3.
+- [x] T3–T5 committed, and `uv run pytest` and the four checks pass on Windows.
+- [x] Spec Testing → by hand on Windows, steps 1–6, from `uv run maplelens`.
+- [x] Daniel tries it in a real play session before Phase 3.
+  *2026-11-07: Daniel's play session, from `uv run maplelens` on Windows, passed
+  every item on the checklist: ••• placed right and its menu at 100% and 150%, the
+  game keeping the keyboard after the ••• and tray menus, the tray icon, tooltip and
+  menu, Hide / Show by left click (a double click toggles once), the EXP session
+  and the path arrow carrying on while hidden, and Quit from the tray saving the
+  session. 498 tests and the four checks pass.*
 
 ## Phase 3: ship it
 
