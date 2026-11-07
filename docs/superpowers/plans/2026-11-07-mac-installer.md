@@ -189,16 +189,21 @@ def test_mac_freeze_only_freezes_licenses_signs_adhoc_then_self_checks(mac_bundl
     assert check == [str(build_installer.MAC_EXE), "--self-check"]
     assert (mac_bundle_ok / "MapleLens-LICENSE.txt").is_file()  # copied before signing
 
-def test_check_bundle_needs_the_qt_cocoa_plugin(tmp_path): ...
+
+def test_check_bundle_needs_the_qt_cocoa_plugin(tmp_path):
+    ...
     # like test_check_bundle_needs_the_qt_windows_plugin, with required=MAC_REQUIRED
+
 
 def test_mac_licenses_ship_pyobjc_not_winrt():
     assert "pyobjc-LICENSE.txt" in build_installer.MAC_LICENSE_SOURCES
     assert "winrt-LICENSE.txt" not in build_installer.MAC_LICENSE_SOURCES
 
+
 def test_mac_spec_and_icon_exist():
     assert build_installer.MAC_SPEC.is_file()
     assert (ROOT / "packaging" / "mac" / "icon.icns").is_file()
+
 
 def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
     text = build_installer.MAC_SPEC.read_text()
@@ -259,12 +264,15 @@ def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def test_mac_full_build_freezes_signs_verifies_self_checks_and_makes_the_dmg(mac_bundle_ok, monkeypatch):
+def test_mac_full_build_freezes_signs_verifies_self_checks_and_makes_the_dmg(
+    mac_bundle_ok, monkeypatch
+):
     monkeypatch.setenv("MAPLELENS_SIGN_IDENTITY", "MapleLens Release")
     monkeypatch.setattr(build_installer, "make_dmg", lambda app, dmg, run: made.append(dmg))
     ...
     # calls: freeze, adhoc sign, self-check, sign "MapleLens Release", verify, self-check
     # made == [dmg_path(read_version())]
+
 
 def test_sign_only_without_identity_signs_adhoc_and_says_so(monkeypatch, capsys): ...
 def test_build_script_imports_only_the_standard_library_at_top_level():
@@ -272,12 +280,17 @@ def test_build_script_imports_only_the_standard_library_at_top_level():
     names = {a.name.split(".")[0] for n in tree.body if isinstance(n, ast.Import) for a in n.names}
     names |= {n.module.split(".")[0] for n in tree.body if isinstance(n, ast.ImportFrom)}
     assert names <= sys.stdlib_module_names | {"__future__"}
-def test_dmg_stage_has_the_app_and_an_applications_link(tmp_path, monkeypatch): ...
+
+
+def test_dmg_stage_has_the_app_and_an_applications_link(tmp_path, monkeypatch):
+    ...
     # make_dmg with a fake run: stage holds MapleLens.app and Applications -> /Applications,
     # last command is the hdiutil create above
 
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS tools")
-def test_make_dmg_really_builds_a_dmg(tmp_path): ...
+def test_make_dmg_really_builds_a_dmg(tmp_path):
+    ...
     # fake MapleLens.app folder with one file; real run; hdiutil imageinfo exits 0
 ```
 
@@ -360,6 +373,7 @@ def test_mac_picks_the_dmg_and_windows_the_exe():
     assert parse_latest(reply, "darwin").url.endswith("MapleLens-0.2.0.dmg")
     assert parse_latest(reply, "win32").url.endswith("MapleLens-Setup-0.2.0.exe")
 
+
 def test_a_release_without_the_dmg_is_no_update_on_the_mac():
     reply = _load("no_dmg.json")
     assert parse_latest(reply, "darwin") is None
@@ -423,26 +437,39 @@ open "$app"
 
 ```python
 def test_bundle_path():
-    assert update_mac.bundle_path("/Applications/MapleLens.app/Contents/MacOS/MapleLens") == Path("/Applications/MapleLens.app")
+    assert update_mac.bundle_path("/Applications/MapleLens.app/Contents/MacOS/MapleLens") == Path(
+        "/Applications/MapleLens.app"
+    )
     assert update_mac.bundle_path("/usr/bin/python3") is None
 
-@pytest.mark.parametrize("path, ok", [
-    ("/Volumes/MapleLens/MapleLens.app", False),
-    ("/private/var/folders/x/AppTranslocation/ABC/d/MapleLens.app", False),
-])
+
+@pytest.mark.parametrize(
+    "path, ok",
+    [
+        ("/Volumes/MapleLens/MapleLens.app", False),
+        ("/private/var/folders/x/AppTranslocation/ABC/d/MapleLens.app", False),
+    ],
+)
 def test_can_replace_refuses_the_dmg_and_translocation(path, ok): ...
 def test_can_replace_needs_a_writable_folder(tmp_path): ...  # chmod 0o555 parent -> False
 
+
 def test_helper_cmd_passes_paths_as_arguments(): ...  # paths not in cmd[2]
 
+
 def test_read_result_reads_once(tmp_path): ...
+
 
 # darwin-only, real hdiutil; a fake `open` on PATH records its argument
 def test_helper_swaps_the_app_and_reopens_it(tmp_path, fake_open, old_pid): ...
 def test_helper_waits_for_maplelens_to_exit(tmp_path, fake_open): ...  # sleep subprocess as pid
-def test_helper_keeps_the_old_app_when_the_copy_fails(tmp_path, fake_open, old_pid): ...
+def test_helper_keeps_the_old_app_when_the_copy_fails(tmp_path, fake_open, old_pid):
+    ...
     # corrupt dmg -> result "failed", old app untouched, reopened
-def test_helper_keeps_the_old_app_in_a_read_only_folder(tmp_path, fake_open, old_pid): ...
+
+
+def test_helper_keeps_the_old_app_in_a_read_only_folder(tmp_path, fake_open, old_pid):
+    ...
     # app's folder chmod 0o555 -> result "failed", old app untouched, no .new left, reopened
 ```
 
@@ -483,14 +510,26 @@ def test_helper_keeps_the_old_app_in_a_read_only_folder(tmp_path, fake_open, old
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def test_the_installed_mac_app_gets_an_update_check(qt_box, monkeypatch, tmp_path): ...
+def test_the_installed_mac_app_gets_an_update_check(qt_box, monkeypatch, tmp_path):
+    ...
     # frozen + darwin -> UpdateCheck with both menu items, like the Windows test
-def test_mac_downloads_the_dmg_checks_it_and_hands_over(qt_box, make_check, tmp_path): ...
+
+
+def test_mac_downloads_the_dmg_checks_it_and_hands_over(qt_box, make_check, tmp_path):
+    ...
     # make_check(platform="darwin"): downloaded file is MapleLens-0.2.0.dmg, install got it
-def test_mac_refuses_to_download_from_the_dmg(qt_box, make_check): ...
+
+
+def test_mac_refuses_to_download_from_the_dmg(qt_box, make_check):
+    ...
     # can_install returns MOVE_TO_APPLICATIONS -> notice shows it, download never called
-def test_a_blocked_update_asks_to_allow_it(qt_box, make_check): ...
+
+
+def test_a_blocked_update_asks_to_allow_it(qt_box, make_check):
+    ...
     # show_result("blocked") -> ALLOW_UPDATES line, ALLOW_UPDATES_ITEM in the menu
+
+
 def test_a_failed_mac_update_says_so_on_the_next_start(qt_box, make_check): ...
 def test_clear_updates_keeps_the_result(tmp_path): ...
 ```
@@ -532,8 +571,11 @@ def test_clear_updates_keeps_the_result(tmp_path): ...
 def test_mac_build_can_only_read_and_sees_no_secrets(): ...
 def test_only_mac_sign_sees_the_certificate(): ...  # "secrets." appears only in mac-sign
 def test_mac_sign_installs_no_packages(): ...  # no setup-uv, no "uv ", no "pip" in its steps
-def test_mac_sign_deletes_the_keychain_before_running_the_app(): ...
+def test_mac_sign_deletes_the_keychain_before_running_the_app():
+    ...
     # index(delete step) < index(--dmg-only step); delete step has if: always()
+
+
 def test_mac_sign_fails_without_the_certificate(): ...
 def test_publish_attaches_the_exe_and_the_dmg(): ...  # needs mac-sign; both file names
 ```
