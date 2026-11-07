@@ -1,8 +1,9 @@
 """AP plan: where unspent AP go, and how far each stat is over or behind the plan."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from maplelens.tools.class_helper.data import STATS, Band, Build
+from maplelens.tools.class_helper.data import STATS, Band, Build, Skill, SpStep
 
 
 @dataclass(frozen=True)
@@ -35,4 +36,51 @@ def ap_advice(band: Band, level: int, stats: dict[str, int], unspent: int) -> di
             over=max(0, stats[k] - expected[k]),
             behind=max(0, expected[k] - stats[k] - adds[k]),
         )
+    return advice
+
+
+def _walk(steps, levels, points, skills):  # -> dict | None (None: next point hits an unknown skill)
+    lv = dict(levels)
+    for _ in range(points):
+        step = next(
+            (
+                s
+                for s in steps
+                if lv.get(s.skill, -1) < s.up_to
+                and all(lv.get(r, 0) >= n for r, n in skills[s.skill].requires.items())
+            ),
+            None,
+        )
+        if step is None:
+            break
+        if step.skill not in lv:
+            return None
+        lv[step.skill] += 1
+    return lv
+
+
+def sp_advice(
+    steps: Sequence[SpStep],
+    levels: dict[int, int],
+    unspent: int,
+    skills: dict[int, Skill],
+    tab: str,
+) -> dict[int, Advice] | None:
+    after = _walk(steps, levels, unspent, skills)
+    if after is None:
+        return None
+    advice = {k: Advice(add=after[k] - v) for k, v in levels.items()}
+    tab_ids = [k for k, sk in skills.items() if sk.job == tab]
+    expected = None
+    if all(k in levels for k in tab_ids):
+        expected = _walk(steps, dict.fromkeys(tab_ids, 0), sum(levels.values()) + unspent, skills)
+    planned = {s.skill for s in steps}
+    for k, v in levels.items():
+        if k not in planned:
+            advice[k] = Advice(over=v)
+        elif expected is not None:
+            add = advice[k].add
+            advice[k] = Advice(
+                add=add, over=max(0, v - expected[k]), behind=max(0, expected[k] - v - add)
+            )
     return advice
