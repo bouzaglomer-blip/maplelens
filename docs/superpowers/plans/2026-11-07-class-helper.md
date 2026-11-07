@@ -120,14 +120,17 @@ def test_aliases_and_titles():
     row = d.plan("Rogue").training[0]
     assert row.place.title == "Maple Road / Mushroom Town - West Entrance"
 
+
 def test_missing_map_keeps_its_name_and_no_title():
     row = load(SMALL, MAPS).plan("Rogue").training[1]
     assert row.place == Place(None, "A map not in maps.json", None)
+
 
 def test_unknown_build_falls_back_to_main():
     p = load(SMALL, MAPS).plan("Rogue")
     assert p.build("Gone") is p.builds[0] and p.build(None) is p.builds[0]
     assert p.build("Sindit").name == "Sindit"
+
 
 def test_band_targets_grow_with_level():
     band = load(SMALL, MAPS).plan("Rogue").build("Sindit").ap[0]  # hold DEX base 0, per_level 1
@@ -169,17 +172,21 @@ def test_holds_fill_first_then_the_main_stat():
     assert a["DEX"] == Advice(add=5) and a["LUK"] == Advice(add=5)
     assert a["STR"] == a["INT"] == Advice()
 
+
 def test_over_a_hold_puts_the_main_stat_behind():
     a = ap_advice(B, 20, s(4, 35, 4, 20), 0)
     assert a["DEX"] == Advice(over=10) and a["LUK"] == Advice(behind=10)
+
 
 def test_short_points_still_go_to_the_hold_first():
     a = ap_advice(B, 20, s(4, 20, 4, 30), 3)
     assert a["DEX"] == Advice(add=3, behind=2) and a["LUK"] == Advice(over=2)
 
+
 def test_stats_outside_the_plan_never_get_points_or_tags():
     a = ap_advice(B, 20, s(4, 25, 9, 30), 5)  # INT rolled 9 at the start
     assert a["INT"] == Advice() and a["LUK"] == Advice(add=5)
+
 
 def test_growing_hold_and_band_lookup():
     grow = Band(1, 200, {"DEX": (0, 1.0)}, "LUK")
@@ -193,14 +200,16 @@ def test_growing_hold_and_band_lookup():
 
 ```python
 plan = [*band.hold, band.rest]
-budget = sum(stats[k] for k in plan) + unspent          # points the plan's stats share
+budget = sum(stats[k] for k in plan) + unspent  # points the plan's stats share
 expected, left = {}, budget
-for k, target in band.targets(level).items():           # holds in data order
-    expected[k] = min(target, left); left -= expected[k]
+for k, target in band.targets(level).items():  # holds in data order
+    expected[k] = min(target, left)
+    left -= expected[k]
 expected[band.rest] = left
 adds, left = {}, unspent
-for k in plan:                                          # holds first, the rest last
-    adds[k] = min(max(0, expected[k] - stats[k]), left); left -= adds[k]
+for k in plan:  # holds first, the rest last
+    adds[k] = min(max(0, expected[k] - stats[k]), left)
+    left -= adds[k]
 # over = max(0, stats - expected); behind = max(0, expected - stats - add); stats outside the plan: Advice()
 ```
 
@@ -228,21 +237,26 @@ def test_points_go_to_the_first_unmet_steps():
     a = sp_advice(STEPS, {1: 0, 2: 0, 3: 0}, 3, SK, "T")
     assert (a[1].add, a[2].add, a[3].add) == (1, 2, 0)
 
+
 def test_a_step_waits_for_its_prerequisite():
     a = sp_advice([SpStep(2, 2), SpStep(1, 1)], {1: 0, 2: 0, 3: 0}, 2, SK, "T")
     assert (a[1].add, a[2].add) == (1, 1)
+
 
 def test_off_plan_points_show_and_the_plan_falls_behind():
     sk = {**SK, 4: Skill(4, "D", "T", 5, {})}
     a = sp_advice(STEPS, {1: 0, 2: 0, 3: 0, 4: 2}, 0, sk, "T")
     assert a[4] == Advice(over=2) and a[1] == Advice(behind=1) and a[2] == Advice(behind=1)
 
+
 def test_unknown_earlier_skill_needs_a_scroll():
     assert sp_advice(STEPS, {2: 0, 3: 0}, 1, SK, "T") is None
+
 
 def test_unknown_later_skill_still_marks_without_tags():
     a = sp_advice(STEPS, {1: 0, 2: 0}, 3, SK, "T")
     assert (a[1], a[2]) == (Advice(add=1), Advice(add=2))
+
 
 def test_finished_plan_places_nothing():
     a = sp_advice(STEPS, {1: 3, 2: 2, 3: 1}, 2, SK, "T")
@@ -256,8 +270,15 @@ def test_finished_plan_places_nothing():
 def _walk(steps, levels, points, skills):  # -> dict | None (None: next point hits an unknown skill)
     lv = dict(levels)
     for _ in range(points):
-        step = next((s for s in steps if lv.get(s.skill, -1) < s.up_to
-                     and all(lv.get(r, 0) >= n for r, n in skills[s.skill].requires.items())), None)
+        step = next(
+            (
+                s
+                for s in steps
+                if lv.get(s.skill, -1) < s.up_to
+                and all(lv.get(r, 0) >= n for r, n in skills[s.skill].requires.items())
+            ),
+            None,
+        )
         if step is None:
             break
         if step.skill not in lv:
@@ -292,17 +313,21 @@ def test_up_to_three_maps_in_guide_order():
     rows = training(ROGUE, 12)
     assert len(rows) <= 3 and all(r.from_level <= 12 <= r.to_level for r in rows)
 
+
 def test_gear_now_next_and_shortfall():
     now, nxt = gear(ROGUE.build("LUK"), 12)
     assert (now.from_level, nxt.from_level) == (10, 15)
     assert short(nxt.item, {"STR": 4, "DEX": 25, "INT": 4, "LUK": 40}) == {"DEX": 5}
     assert short(nxt.item, None) == {}
 
+
 def test_advance_shows_two_levels_early():
     assert advance_due(ROGUE, ROGUE.builds[0], 27) is None
     assert advance_due(ROGUE, ROGUE.builds[0], 28).level == 30
     assert advance_text(advance_due(ROGUE, ROGUE.builds[0], 31)) == (
-        "At 30: become an Assassin or a Bandit")
+        "At 30: become an Assassin or a Bandit"
+    )
+
 
 def test_next_step_is_the_nearest_milestone():
     assert next_step(ROGUE, ROGUE.build("LUK"), 12) == "At 15: get Second Claw"
@@ -335,8 +360,10 @@ def test_next_step_is_the_nearest_milestone():
 - [ ] **Step 1: Write the failing tests.**
 
 ```python
-@pytest.mark.parametrize("text, base", [("25", 25), ("25 (20+5)", 20), ("4 (4+0)", 4),
-                                        ("", None), ("2a", None), ("25 (20+", None)])
+@pytest.mark.parametrize(
+    "text, base",
+    [("25", 25), ("25 (20+5)", 20), ("4 (4+0)", 4), ("", None), ("2a", None), ("25 (20+", None)],
+)
 def test_parse_stat(text, base):
     assert parse_stat(text) == base
 ```
@@ -400,45 +427,64 @@ def test_unknown_skill_name_is_unreadable(monkeypatch):
 
 ```python
 def test_unknown_class_says_so(make):
-    tool = make(); tool.update(R(job=None, level=None), RECT, 0)
+    tool = make()
+    tool.update(R(job=None, level=None), RECT, 0)
     assert NO_CLASS in texts(tool)
 
+
 def test_no_plan_for_job(make):
-    tool = make(); tool.update(R(job="Hermit", level=72), RECT, 0)
+    tool = make()
+    tool.update(R(job="Hermit", level=72), RECT, 0)
     assert NO_PLAN.format("Hermit") in texts(tool)
 
+
 def test_training_rows_go_and_best_rate(make):
-    tool = make(best_rate=lambda t: 1234.0); tool.update(R(level=12), RECT, 0)
+    tool = make(best_rate=lambda t: 1234.0)
+    tool.update(R(level=12), RECT, 0)
     assert any("best 1,234/min" in t for t in texts(tool))
-    go_buttons(tool)[0].click(); assert tool.gone == ["000000001"]
+    go_buttons(tool)[0].click()
+    assert tool.gone == ["000000001"]
+
 
 def test_stats_never_read_then_badge_until_level_changes(make):
-    tool = make(); tool.update(R(level=12), RECT, 0)
+    tool = make()
+    tool.update(R(level=12), RECT, 0)
     assert OPEN_STATS in texts(tool)
     tool.update(R(level=12, stats=SW(level=12, ap=3)), RECT, 1)
     assert "3 AP to spend" in texts(tool)
     tool.update(R(level=13), RECT, 2)
     assert not any("AP to spend" in t for t in texts(tool))
 
+
 def test_build_picker_saved(make):
-    saved = []; tool = make(on_changed=lambda: saved.append(1))
-    tool.update(R(level=12), RECT, 0); tool._builds.setCurrentText("Sindit")
+    saved = []
+    tool = make(on_changed=lambda: saved.append(1))
+    tool.update(R(level=12), RECT, 0)
+    tool._builds.setCurrentText("Sindit")
     assert tool._settings["class_builds"] == {"Rogue": "Sindit"} and saved
 
+
 def test_job_flicker_keeps_tab(make):
-    tool = make(); tool.update(R(level=12), RECT, 0); tool.update(R(job=None, level=12), RECT, 1)
+    tool = make()
+    tool.update(R(level=12), RECT, 0)
+    tool.update(R(job=None, level=12), RECT, 1)
     assert NO_CLASS not in texts(tool) and not tool.dot
 
+
 def test_character_switch_forgets(make):
-    tool = make(); tool.update(R(level=25, stats=SW(level=25, ap=0)), RECT, 0)
+    tool = make()
+    tool.update(R(level=25, stats=SW(level=25, ap=0)), RECT, 0)
     tool.update(R(job="Magician", level=20), RECT, 1)
     assert OPEN_STATS in texts(tool)
 
+
 def test_level_up_dot_until_opened(make):
-    tool = make(); tool.update(R(level=14), RECT, 0)   # tab not shown
-    tool.update(R(level=15), RECT, 1)                   # a new map or gear at 15
+    tool = make()
+    tool.update(R(level=14), RECT, 0)  # tab not shown
+    tool.update(R(level=15), RECT, 1)  # a new map or gear at 15
     assert tool.dot
-    tool.tab.show(); tool.update(R(level=15), RECT, 2)
+    tool.tab.show()
+    tool.update(R(level=15), RECT, 2)
     assert not tool.dot
 ```
 
@@ -460,9 +506,13 @@ def test_level_up_dot_until_opened(make):
 conn = open_db(data_dir() / "maplelens.db")
 tool = ExpMeterTool(settings, conn)
 ...
+
+
 def go(map_id: str) -> None:
     path_tool.go(map_id)
     box.select(1)
+
+
 cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t))
 box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
 ```
@@ -487,28 +537,38 @@ box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
 
 ```python
 def test_rings_on_the_plus_buttons(make):
-    tool = make(); tool.update(R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30))), RECT, 0)
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30))), RECT, 0)
     assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
 
+
 def test_marks_follow_and_hide(make):
-    tool = make(); tool.update(R(level=20, stats=SW(level=20, ap=5)), RECT, 0)
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5)), RECT, 0)
     moved = SW(level=20, ap=5, plus={k: (x + 40, y) for k, (x, y) in PLUS.items()})
     tool.update(R(level=20, stats=moved), RECT, 1)
     assert [p for _, p in tool.marks()] == [pos(PLUS["LUK"][0] + 40, PLUS["LUK"][1])]
     tool.update(R(level=20), RECT, 2)
     assert tool.marks() == []
 
+
 def test_unreadable_window_hides_marks_and_says_why(make):
-    tool = make(); tool.update(R(level=20, stats=UNREADABLE), RECT, 0)
+    tool = make()
+    tool.update(R(level=20, stats=UNREADABLE), RECT, 0)
     assert tool.marks() == [] and STAT_UNREAD in texts(tool)
 
+
 def test_over_and_behind_tags(make):
-    tool = make(); tool.update(R(level=20, stats=SW(level=20, ap=0, base=s(4, 35, 4, 20))), RECT, 0)
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=0, base=s(4, 35, 4, 20))), RECT, 0)
     assert {t for t, _ in tool.marks()} == {"DEX 10 over plan", "LUK 10 behind plan"}
 
+
 def test_scroll_the_list_once(make):
-    tool = make(); tool.update(R(level=20, skills=KW(rows=LATER_ROWS_ONLY, sp=2)), RECT, 0)
+    tool = make()
+    tool.update(R(level=20, skills=KW(rows=LATER_ROWS_ONLY, sp=2)), RECT, 0)
     assert [t for t, _ in tool.marks()] == [SCROLL]
+
 
 def test_tabs_are_remembered_apart(make):
     tool = make()
