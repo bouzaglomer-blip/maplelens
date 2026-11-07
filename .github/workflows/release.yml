@@ -102,7 +102,7 @@ jobs:
       - run: uv run python scripts/check_screen_only.py
       - run: uv run pytest
       - run: uv run --group build python scripts/build_installer.py --freeze-only
-      # ditto keeps symlinks, permissions and the signature, which upload-artifact's zip doesn't
+      # ditto keeps symlinks and permissions, which upload-artifact's zip doesn't
       - run: ditto -c -k --keepParent dist/MapleLens.app dist/MapleLens-app.zip
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -156,8 +156,7 @@ jobs:
           keychain="$RUNNER_TEMP/maplelens-sign.keychain-db"
           p12="$RUNNER_TEMP/sign.p12"
           pem="$RUNNER_TEMP/sign.pem"
-          kcpass=$(openssl rand -hex 16)
-          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          kcpass=$(head -c 16 /dev/urandom | xxd -p)
           printf '%s' "$P12_BASE64" | base64 --decode > "$p12"
           security create-keychain -p "$kcpass" "$keychain"
           security set-keychain-settings -lut 3600 "$keychain"
@@ -165,8 +164,8 @@ jobs:
           security import "$p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpass" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          openssl pkcs12 -in "$p12" -clcerts -nokeys -passin env:P12_PASSWORD -out "$pem"
-          security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$pem"
+          security find-certificate -c "MapleLens Release" -p "$keychain" > "$pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k "$keychain" "$pem"
           rm -f "$p12" "$pem"
       - run: python3 scripts/build_installer.py --sign-only
         env:
@@ -174,7 +173,11 @@ jobs:
       - name: Delete the keychain
         if: always()
         # deleting it also takes it off the search list
-        run: security delete-keychain "$RUNNER_TEMP/maplelens-sign.keychain-db" || true
+        # (also removes the decoded key files if the import step died half way)
+        run: |
+          k="$RUNNER_TEMP/maplelens-sign.keychain-db"
+          rm -f "$RUNNER_TEMP/sign.p12" "$RUNNER_TEMP/sign.pem"
+          [ ! -e "$k" ] || security delete-keychain "$k"
       - run: python3 scripts/build_installer.py --dmg-only
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

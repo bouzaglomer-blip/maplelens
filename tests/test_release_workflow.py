@@ -188,7 +188,7 @@ def test_mac_sign_makes_the_identity_usable_and_cleans_up_the_key_files():
     assert "set-key-partition-list" in imp
     assert "-T /usr/bin/codesign" in imp
     assert "list-keychains -d user -s" in imp  # on the search list, keeping the others
-    assert "add-trusted-cert -r trustRoot -p codeSign" in imp
+    assert "add-trusted-cert -d -r trustRoot -p codeSign" in imp
     assert "rm -f" in imp
     assert "ditto -x -k" in steps[_step_index(steps, "ditto -x -k")]
 
@@ -210,3 +210,14 @@ def test_publish_attaches_the_exe_and_the_dmg():
     cmd = publish.split("gh release create", 1)[1]
     assert "MapleLens-Setup-$VERSION.exe" in cmd
     assert "MapleLens-$VERSION.dmg" in cmd
+
+
+def test_mac_sign_uses_only_apple_tools_and_a_failed_delete_fails_the_job():
+    steps = _steps(_job(_release(), "mac-sign"))
+    assert "openssl" not in "".join(steps)
+    imp = steps[_step_index(steps, "security import")]
+    assert "security find-certificate -c" in imp
+    assert "sudo security add-trusted-cert -d -r trustRoot -p codeSign" in imp
+    delete = steps[_step_index(steps, "security delete-keychain")]
+    assert "|| true" not in delete
+    assert "rm -f" in delete
