@@ -183,13 +183,19 @@ above.
   today.
 
 **Acceptance criteria:**
-- [ ] Tests with a fake tray class: the tooltip is "MapleLens", the icon isn't null, and
+- [x] Tests with a fake tray class: the tooltip is "MapleLens", the icon isn't null, and
       the menu lists `box.actions()`, including an update item added afterwards. With
       `available=False` there's no tray.
+      *2026-11-07: plus `tray_available()`: false off Windows, and on Windows without a
+      notification area.*
 - [ ] By hand, `uv run maplelens` on Windows: the icon shows in the notification area
       (or its overflow) with the tooltip. Right-click shows the same menu as ⋯. Quit
       from it saves the session (it's in History after a restart). The game keeps the
       keyboard afterwards.
+      *2026-11-07: a scripted run with the real `QSystemTrayIcon` found the tray
+      available and the icon visible, with the "MapleLens" tooltip, all six icon sizes
+      and the box's menu. The clicks, Quit's save and the focus check are still to do by
+      hand.*
 
 **Verification:** `uv run pytest tests/test_app.py`, the four checks, and the run above.
 

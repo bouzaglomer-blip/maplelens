@@ -15,8 +15,8 @@ from importlib.metadata import version
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon, QImage
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import maplelens
 from maplelens import capture, update
@@ -429,11 +429,48 @@ def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests
     return check
 
 
-def _prepare_process() -> None:
-    """Process-wide setup that must happen before Qt starts."""
+def tray_available() -> bool:
+    """A tray icon on Windows, when there's a notification area to put it in.
+
+    Not on the Mac (Windows only for now), and with no tray the box's ••• still works.
+    """
+    return sys.platform == "win32" and QSystemTrayIcon.isSystemTrayAvailable()
+
+
+def make_tray(
+    box: Box, icon: Path, *, available: bool, tray_cls: type = QSystemTrayIcon
+) -> QSystemTrayIcon | None:
+    """MapleLens's tray icon, shown, with the box's menu on right-click; None if not
+    `available`.
+
+    The menu is the box's own items, read again each time it opens. Quit is the box's
+    Quit, so the session is saved as it is from the box. Keep the result: an icon
+    nothing holds is collected, and leaves the tray.
+    """
+    if not available:
+        return None
+    tray = tray_cls(QIcon(str(icon)), box)
+    tray.setToolTip(APP_NAME)
+    menu = QMenu(box)
+    box.attach_menu(menu)
+    tray.setContextMenu(menu)
+    tray.show()
+    return tray
+
+
+def _start_qt() -> QApplication:
+    """The QApplication, started so that it never takes the front from the game."""
     if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
         os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
+    app = QApplication(sys.argv)
+    app.setApplicationName(APP_NAME)
+    if sys.platform == "darwin":
+        from maplelens import overlay_mac
+
+        overlay_mac.make_accessory()
+        app.processEvents()  # finish launching first: a window shown before that activates us
+    return app
 
 
 def early_exit() -> int | None:
@@ -456,14 +493,7 @@ def early_exit() -> int | None:
 def main() -> int:
     if (code := early_exit()) is not None:
         return code
-    _prepare_process()
-    app = QApplication(sys.argv)
-    app.setApplicationName(APP_NAME)
-    if sys.platform == "darwin":
-        from maplelens import overlay_mac
-
-        overlay_mac.make_accessory()
-        app.processEvents()  # finish launching first: a window shown before that activates us
+    app = _start_qt()
     capture.set_dpi_aware()
     if not capture.ensure_access():
         return 1
@@ -488,6 +518,7 @@ def main() -> int:
 
     box = build_box(settings, save, [tool, path_tool], pick)
     updates = update_check(box, settings, save, seen, time.time())
+    tray = make_tray(box, ICON, available=tray_available())  # noqa: F841 - held, or it vanishes
 
     def tick() -> None:
         nonlocal hwnd

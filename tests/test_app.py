@@ -1,6 +1,7 @@
 import hashlib
 import re
 import sys
+from typing import ClassVar
 
 import pytest
 
@@ -796,3 +797,78 @@ def test_the_box_text_points_at_the_menu_button():
     assert app.UPDATE_FAILED == f"Update failed: click {MENU_MARK}"
     for text in (app.LOOKING, app.update_notice("1.2.3"), app.UPDATE_FAILED):
         assert "right" not in text.lower()
+
+
+class _FakeTray:
+    """Stands in for QSystemTrayIcon, which needs a real notification area."""
+
+    made: ClassVar[list["_FakeTray"]] = []
+
+    def __init__(self, icon, parent=None):
+        self._icon, self.parent, self.shown = icon, parent, False
+        self._tip = self._menu = None
+        _FakeTray.made.append(self)
+
+    def icon(self):
+        return self._icon
+
+    def setToolTip(self, tip):
+        self._tip = tip
+
+    def toolTip(self):
+        return self._tip
+
+    def setContextMenu(self, menu):
+        self._menu = menu
+
+    def contextMenu(self):
+        return self._menu
+
+    def show(self):
+        self.shown = True
+
+
+@pytest.fixture
+def fake_tray():
+    _FakeTray.made = []
+    return _FakeTray
+
+
+def test_the_tray_shows_the_app_icon_and_name(qt_box, fake_tray):
+    tray = app.make_tray(qt_box, app.ICON, available=True, tray_cls=fake_tray)
+    assert tray is fake_tray.made[0] and tray.shown
+    assert tray.toolTip() == "MapleLens"
+    assert not tray.icon().isNull()
+    assert tray.parent is qt_box  # lives as long as the box
+
+
+def test_the_tray_menu_is_the_box_menu_with_items_added_later(qt_box, fake_tray):
+    tray = app.make_tray(qt_box, app.ICON, available=True, tray_cls=fake_tray)
+    qt_box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)  # the update check, later
+    menu = tray.contextMenu()
+    menu.aboutToShow.emit()  # what Qt does as the menu opens
+    assert menu.actions() == qt_box.actions()
+    assert [a.text() for a in menu.actions()] == ["Update to 0.2.0…", "Quit MapleLens"]
+
+
+def test_no_tray_where_there_is_none(qt_box, fake_tray):
+    assert app.make_tray(qt_box, app.ICON, available=False, tray_cls=fake_tray) is None
+    assert fake_tray.made == []
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_the_tray_is_windows_only(monkeypatch, platform):
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: True))
+    assert not app.tray_available()
+
+
+@pytest.mark.parametrize("there", [True, False])
+def test_on_windows_the_tray_needs_a_notification_area(monkeypatch, there):
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: there))
+    assert app.tray_available() is there
