@@ -1,4 +1,4 @@
-# MapleLens
+# <img src="docs/icon.png" alt="" width="40" align="center"> MapleLens
 
 An open-source overlay for **MapleStory Classic** that keeps you in the game.
 Instead of alt-tabbing to price sites, class guides and route finders, MapleLens
