@@ -25,6 +25,9 @@ LABEL_PT, LABEL_COLOR = 9, "#9fb0c8"
 VALUE_PT, VALUE_COLOR = 12, "#ffffff"
 ACCENT = "#ffcc33"
 TAB_W = 186  # every tab's width: the box is 210 px wide, less its 12 px side margins
+# The box's menu button: three bullets. The midline ellipsis isn't in Segoe UI, and
+# the font Qt falls back to draws it faint and makes the box taller.
+MENU_MARK = "•••"
 
 
 def text_label(text: str, pt: int, color: str, *, bold: bool = False) -> QLabel:
@@ -32,6 +35,18 @@ def text_label(text: str, pt: int, color: str, *, bold: bool = False) -> QLabel:
     label.setFont(QFont(FONT, pt, QFont.Bold if bold else QFont.Normal))
     label.setStyleSheet(f"color: {color};")
     return label
+
+
+def mark_button(text: str, pt: int, on_click: Callable[[], None]) -> QPushButton:
+    """A flat grey mark that acts on a click and never takes the game's keyboard."""
+    button = QPushButton(text)
+    button.setFlat(True)
+    button.setFocusPolicy(Qt.NoFocus)
+    button.setCursor(Qt.PointingHandCursor)
+    button.setFont(QFont(FONT, pt))
+    button.setStyleSheet(f"color: {LABEL_COLOR}; border: 0; padding: 0;")
+    button.clicked.connect(on_click)
+    return button
 
 
 def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
@@ -98,15 +113,18 @@ class Box(QWidget):
         self._status.setFont(QFont(FONT, 10))
         self._status.setStyleSheet(f"color: {VALUE_COLOR};")
         self._status.hide()
+        self._menu = QMenu(self)
+        self.attach_menu(self._menu)
+        self._menu_button = mark_button(MENU_MARK, 10, self._open_menu)  # the tabs' size
+        top = QHBoxLayout()  # the strip or the status line, then the menu button
+        top.setSpacing(10)
+        top.addWidget(self._strip_row, 1)
+        top.addWidget(self._status, 1)
+        top.addWidget(self._menu_button, 0, Qt.AlignVCenter | Qt.AlignRight)
         self._notice = QWidget()  # a line of its own, so it shows with the tabs or the status
         self._notice_text = text_label("", LABEL_PT, ACCENT)
-        self._notice_close = QPushButton("\u00d7")  # a multiplication sign, the close mark
-        self._notice_close.setFlat(True)
-        self._notice_close.setFocusPolicy(Qt.NoFocus)
-        self._notice_close.setCursor(Qt.PointingHandCursor)
-        self._notice_close.setFont(QFont(FONT, LABEL_PT))
-        self._notice_close.setStyleSheet(f"color: {LABEL_COLOR}; border: 0; padding: 0;")
-        self._notice_close.clicked.connect(self._dismiss_notice)
+        # a multiplication sign, the close mark
+        self._notice_close = mark_button("\u00d7", LABEL_PT, self._dismiss_notice)
         self._on_dismiss: Callable[[], None] | None = None
         row = QHBoxLayout(self._notice)
         row.setContentsMargins(0, 4, 0, 0)
@@ -118,9 +136,8 @@ class Box(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 10)
         layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
-        layout.addWidget(self._strip_row)
+        layout.addLayout(top)
         layout.addWidget(self._pages)
-        layout.addWidget(self._status)
         layout.addWidget(self._notice)
 
     def add_tab(self, title: str, widget: QWidget) -> int:
@@ -157,7 +174,10 @@ class Box(QWidget):
             self._pages.widget(j).setSizePolicy(policy, policy)
 
     def set_status(self, text: str | None) -> None:
-        """Show one line of `text` in place of the tabs; None brings the tabs back."""
+        """Show one line of `text` in place of the tabs; None brings the tabs back.
+
+        The menu button stays in both.
+        """
         self._status.setText(text or "")
         self._status.setVisible(text is not None)
         self._strip_row.setVisible(text is None)
@@ -190,10 +210,31 @@ class Box(QWidget):
 
             overlay_mac.release_keyboard()
 
+    def attach_menu(self, menu: QMenu) -> None:
+        """Make `menu` list the box's menu items, read again each time it opens.
+
+        The menu button's menu and the tray's both use it, so neither keeps a list of its
+        own. The items stay the box's, alive however often the menu opens.
+        """
+        menu.aboutToShow.connect(lambda: self._fill(menu))
+
+    def _fill(self, menu: QMenu) -> None:
+        # Not menu.clear(): PySide hands the cleared actions to Python, which then deletes
+        # the box's own (nothing in Python holds them).
+        for action in menu.actions():
+            menu.removeAction(action)
+        menu.addActions(self.actions())
+
+    def _open_menu(self) -> None:
+        """The menu, just under the button, with their right edges lined up."""
+        self._fill(self._menu)  # now, so the width is known before it opens
+        corner = self._menu_button.mapToGlobal(self._menu_button.rect().bottomRight())
+        self._menu.popup(corner - QPoint(self._menu.sizeHint().width() - 1, -1))
+
     def add_menu_item(
         self, label: str, callback: Callable[[], None], *, at: int | None = None
     ) -> QAction:
-        """An item in the box's right-click menu; returns it, so its label can change.
+        """An item in the box's menu; returns it, so its label can change.
 
         At the end, or before the item now at index `at` (as list.insert: -1 is before
         the last one).
@@ -206,7 +247,7 @@ class Box(QWidget):
     def add_toggle(
         self, label: str, checked: bool, on_change: Callable[[bool], None], *, at: int | None = None
     ) -> QAction:
-        """A checkable item in the right-click menu; `on_change` gets its new state."""
+        """A checkable item in the box's menu; `on_change` gets its new state."""
         action = QAction(label, self)
         action.setCheckable(True)
         action.setChecked(checked)
@@ -222,7 +263,7 @@ class Box(QWidget):
     def add_submenu(
         self, label: str, choices: Callable[[], list[str]], on_pick: Callable[[str], None]
     ) -> None:
-        """A right-click submenu listing `choices()`, read again each time it opens."""
+        """A submenu in the box's menu listing `choices()`, read again each time it opens."""
         menu = QMenu(label, self)
 
         def fill() -> None:

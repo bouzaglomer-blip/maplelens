@@ -111,11 +111,15 @@ four checks, and the build above.
 - Docstrings drop "right-click" ("the box's menu").
 
 **Acceptance criteria:**
-- [ ] Offscreen tests: the ⋯ is visible with tabs and while `set_status("Looking…")`
+- [x] Offscreen tests: the ⋯ is visible with tabs and while `set_status("Looking…")`
       shows. Its menu lists `box.actions()` in order, including an item added with
       `at=0` after the menu was attached. Opening it twice leaves every action alive and
       working. The button has `Qt.NoFocus`, and pressing it leaves `_drag_from` at
       `None`. `contextMenuPolicy()` is still `Qt.ActionsContextMenu`.
+      *2026-11-07: glyph is "•••" (U+2022 ×3) at 10 pt. Segoe UI has no U+22EF, and the
+      fallback font drew it faint and 2 px taller. Opening twice caught a real bug:
+      PySide's `QMenu.clear()` let Python delete the box's actions, so the fill removes
+      them one by one instead.*
 - [ ] By hand, `uv run maplelens` on Windows: the ⋯ sits top-right at 100% and 150%
       scaling, in both states. Its menu opens under it, and after picking an item or
       pressing Esc, the game still has the keyboard.

@@ -217,3 +217,114 @@ def test_toggle_shows_its_state_and_reports_changes(monkeypatch):
     toggle.trigger()
     assert changes == [False, True]
     assert not box.add_toggle("Off", False, changes.append).isChecked()
+
+
+def test_menu_button_shows_with_the_tabs_and_with_the_status_line(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    assert box._menu_button.isVisibleTo(box)
+    box.set_status("Looking for the game")
+    assert box._menu_button.isVisibleTo(box)
+    box.set_status(None)
+    assert box._menu_button.isVisibleTo(box)
+
+
+def test_menu_button_sits_right_of_the_tabs_and_the_status(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.show()
+    button = box._menu_button.geometry()
+    assert button.left() >= box._strip_row.geometry().right()
+    box.set_status("Looking for the game")
+    box.adjustSize()
+    assert box._menu_button.geometry().left() >= box._status.geometry().right()
+    assert box._menu_button.geometry().top() <= box._status.geometry().top() + 4
+
+
+def _menu_texts(menu):
+    menu.aboutToShow.emit()  # what Qt does as the menu opens
+    return [a.text() for a in menu.actions()]
+
+
+def test_attached_menu_lists_the_box_actions_when_it_opens(monkeypatch):
+    from PySide6.QtWidgets import QMenu
+
+    box = _box(monkeypatch)
+    box.add_submenu("Pick game window…", lambda: ["A"], lambda t: None)
+    box.add_menu_item("Quit", lambda: None)
+    menu = QMenu()
+    box.attach_menu(menu)
+    assert _menu_texts(menu) == ["Pick game window…", "Quit"]
+    box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)  # the update check, later on
+    assert _menu_texts(menu) == ["Update to 0.2.0…", "Pick game window…", "Quit"]
+    assert menu.actions() == box.actions()
+
+
+def test_opening_an_attached_menu_twice_keeps_every_action_working(monkeypatch):
+    from PySide6.QtWidgets import QMenu
+
+    box = _box(monkeypatch)
+    picked, quit_ = [], []
+    box.add_submenu("Pick", lambda: ["A"], picked.append)
+    box.add_menu_item("Quit", lambda: quit_.append(1))
+    menu = QMenu()
+    box.attach_menu(menu)
+    _menu_texts(menu)
+    _menu_texts(menu)
+    pick, quit_action = box.actions()  # still the box's, not deleted by clear()
+    assert [a.text() for a in box.actions()] == ["Pick", "Quit"]
+    quit_action.trigger()
+    sub = pick.menu()
+    sub.aboutToShow.emit()
+    sub.actions()[0].trigger()
+    assert quit_ == [1] and picked == ["A"]
+
+
+def test_menu_button_opens_the_box_menu(monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.add_menu_item("Quit", lambda: None)
+    box.show()
+    box.move(400, 300)  # off the screen's edges, which Qt keeps the menu inside
+    QTest.mouseClick(box._menu_button, Qt.LeftButton)
+    try:
+        assert box._menu.isVisible()
+        assert [a.text() for a in box._menu.actions()] == ["Quit"]
+        # just under the button, right edges lined up: the box sits at the game's right
+        button_bottom_right = box._menu_button.mapToGlobal(box._menu_button.rect().bottomRight())
+        assert box._menu.geometry().top() >= button_bottom_right.y()
+        assert abs(box._menu.geometry().right() - button_bottom_right.x()) <= 1
+    finally:
+        box._menu.hide()
+
+
+def test_menu_button_never_takes_focus_or_starts_a_drag(monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.show()
+    assert box._menu_button.focusPolicy() == Qt.NoFocus
+    QTest.mousePress(box._menu_button, Qt.LeftButton)
+    assert box._drag_from is None
+    QTest.mouseRelease(box._menu_button, Qt.LeftButton)
+    box._menu.hide()
+    assert box._drag_from is None
+
+
+def test_right_click_still_opens_the_box_menu(monkeypatch):
+    from PySide6.QtCore import Qt
+
+    box = _box(monkeypatch)
+    box.add_menu_item("Quit", lambda: None)
+    assert box.contextMenuPolicy() == Qt.ActionsContextMenu
