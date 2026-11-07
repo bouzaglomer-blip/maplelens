@@ -3,8 +3,8 @@
 import sys
 from collections.abc import Callable
 
-from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QAction, QColor, QFont, QGuiApplication, QPainter
+from PySide6.QtCore import QPoint, QRect, Qt, QUrl
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QPainter
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -28,6 +28,7 @@ TAB_W = 186  # every tab's width: the box is 210 px wide, less its 12 px side ma
 # The box's menu button: three bullets. The midline ellipsis isn't in Segoe UI, and
 # the font Qt falls back to draws it faint and makes the box taller.
 MENU_MARK = "•••"
+ABOUT = "About MapleLens"  # the About view's title, and its menu item
 
 
 def text_label(text: str, pt: int, color: str, *, bold: bool = False) -> QLabel:
@@ -37,14 +38,17 @@ def text_label(text: str, pt: int, color: str, *, bold: bool = False) -> QLabel:
     return label
 
 
-def mark_button(text: str, pt: int, on_click: Callable[[], None]) -> QPushButton:
-    """A flat grey mark that acts on a click and never takes the game's keyboard."""
+def mark_button(
+    text: str, pt: int, on_click: Callable[[], None], *, color: str = LABEL_COLOR
+) -> QPushButton:
+    """A flat mark (grey unless `color`) that acts on a click and never takes the game's
+    keyboard."""
     button = QPushButton(text)
     button.setFlat(True)
     button.setFocusPolicy(Qt.NoFocus)
     button.setCursor(Qt.PointingHandCursor)
     button.setFont(QFont(FONT, pt))
-    button.setStyleSheet(f"color: {LABEL_COLOR}; border: 0; padding: 0;")
+    button.setStyleSheet(f"color: {color}; border: 0; padding: 0; text-align: left;")
     button.clicked.connect(on_click)
     return button
 
@@ -113,13 +117,19 @@ class Box(QWidget):
         self._status.setFont(QFont(FONT, 10))
         self._status.setStyleSheet(f"color: {VALUE_COLOR};")
         self._status.hide()
+        self._status_text: str | None = None  # the last set_status, shown once About closes
+        self._about_open = False
+        self._about_url = ""
+        self._build_about()
         self._menu = QMenu(self)
         self.attach_menu(self._menu)
         self._menu_button = mark_button(MENU_MARK, 10, self._open_menu)  # the tabs' size
-        self._top = QHBoxLayout()  # the strip or the status line, then the menu button
+        # the strip, the status line or About's title and close mark; then the menu button
+        self._top = QHBoxLayout()
         self._top.setSpacing(10)
-        self._top.addWidget(self._strip_row, 1)
-        self._top.addWidget(self._status, 1)
+        for part in (self._strip_row, self._status, self._about_title):
+            self._top.addWidget(part, 1)
+        self._top.addWidget(self._about_close, 0, Qt.AlignVCenter)
         self._top.addWidget(self._menu_button, 0, Qt.AlignVCenter | Qt.AlignRight)
         self._notice = QWidget()  # a line of its own, so it shows with the tabs or the status
         self._notice_text = text_label("", LABEL_PT, ACCENT)
@@ -138,7 +148,28 @@ class Box(QWidget):
         layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
         layout.addLayout(self._top)
         layout.addWidget(self._pages)
+        layout.addWidget(self._about)
         layout.addWidget(self._notice)
+
+    def _build_about(self) -> None:
+        """The About view: a title and a close mark for the top row, and the panel under it."""
+        self._about_title = text_label(ABOUT, 10, VALUE_COLOR, bold=True)  # the tabs' size
+        self._about_close = mark_button("\u00d7", 10, self.close_about)
+        self._about = QWidget()
+        self._about.setFixedWidth(TAB_W)  # the tabs' width: opening About keeps the box's
+        self._about_version = text_label("", 10, VALUE_COLOR)
+        self._about_updates = text_label("", 10, VALUE_COLOR)
+        self._about_link = mark_button("GitHub page \u2197", 10, self._open_link, color=ACCENT)
+        column = QVBoxLayout(self._about)
+        column.setContentsMargins(0, 6, 0, 0)
+        column.setSpacing(2)
+        for name, value in (("Version", self._about_version), ("Updates", self._about_updates)):
+            column.addWidget(text_label(name, LABEL_PT, LABEL_COLOR))
+            column.addWidget(value)
+        column.addSpacing(4)
+        column.addWidget(self._about_link, 0, Qt.AlignLeft)
+        for part in (self._about_title, self._about_close, self._about):
+            part.hide()
 
     def add_tab(self, title: str, widget: QWidget) -> int:
         """Add a tab; the first one added is shown. Returns its index."""
@@ -177,13 +208,50 @@ class Box(QWidget):
         """Show `text` in place of the tabs; None brings the tabs back.
 
         The menu button stays in both: level with the tab titles, or with the status's
-        first line.
+        first line. While About is open, the text is kept for when it closes.
         """
+        self._status_text = text
+        self._show_current()
+
+    @property
+    def about_open(self) -> bool:
+        return self._about_open
+
+    def show_about(self, version: str, updates: str, url: str, *, accent: bool = False) -> None:
+        """Show About in place of the tabs or the status line, until its close mark closes it.
+
+        `updates` is a line about updates, in the accent colour if `accent`; `url` is what
+        the "GitHub page" link opens. The box knows nothing more about either.
+        """
+        self._about_version.setText(version)
+        self.set_about_updates(updates, accent=accent)
+        self._about_url = url
+        self._about_open = True
+        self._show_current()
+
+    def set_about_updates(self, text: str, *, accent: bool = False) -> None:
+        self._about_updates.setText(text)
+        self._about_updates.setStyleSheet(f"color: {ACCENT if accent else VALUE_COLOR};")
+
+    def close_about(self) -> None:
+        """Back to the tabs, or the status line if one was set meanwhile."""
+        self._about_open = False
+        self._show_current()
+
+    def _open_link(self) -> None:
+        QDesktopServices.openUrl(QUrl(self._about_url))  # the player's own click
+
+    def _show_current(self) -> None:
+        """About while it's open; else the status line if one is set, else the tabs."""
+        about, text = self._about_open, self._status_text
+        for part in (self._about_title, self._about_close, self._about):
+            part.setVisible(about)
+        status = not about and text is not None
         self._status.setText(text or "")
-        self._status.setVisible(text is not None)
-        self._strip_row.setVisible(text is None)
-        self._pages.setVisible(text is None)
-        row = Qt.AlignVCenter if text is None else Qt.AlignTop
+        self._status.setVisible(status)
+        self._strip_row.setVisible(not about and text is None)
+        self._pages.setVisible(not about and text is None)
+        row = Qt.AlignTop if status else Qt.AlignVCenter
         self._top.setAlignment(self._menu_button, row | Qt.AlignRight)
 
     def set_notice(self, text: str | None, on_dismiss: Callable[[], None] | None = None) -> None:

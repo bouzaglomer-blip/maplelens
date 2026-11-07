@@ -1,6 +1,7 @@
 import hashlib
 import re
 import sys
+import threading
 from typing import ClassVar
 
 import pytest
@@ -956,7 +957,7 @@ def game_found(monkeypatch):
 READING = object()
 
 
-def _tick(box, layer, shown):
+def _tick(box, layer, shown, updates=None):
     from PySide6.QtWidgets import QLabel
 
     for title in ("EXP", "Path"):  # the tick sets the Path tab's dot
@@ -969,7 +970,7 @@ def _tick(box, layer, shown):
         layer=layer,
         exp=exp,
         path=path,
-        updates=None,
+        updates=updates,
         seen=set(),
         shown=shown,
     )
@@ -1005,3 +1006,110 @@ def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypa
     assert not layer.isVisible()
     assert box._status.text() == app.LOOKING
     assert exp.updates == [(None, None, 5.0)]
+
+
+class _Gate:
+    """A fetch that waits until opened, so a check can be caught running."""
+
+    def __init__(self, reply):
+        self.reply, self.open = reply, threading.Event()
+
+    def __call__(self):
+        self.open.wait(5)
+        return self.reply
+
+
+def test_update_status_while_a_check_runs_then_with_a_newer_release(make_check):
+    fetch = _Gate(NEWER)
+    check = make_check(fetch)
+    check.poll(5.0)  # the first check starts
+    assert check.status() == "Checking…"
+    fetch.open.set()
+    check._thread.join(5)
+    check.poll(5.0)
+    assert check.status() == "Update to 0.2.0 available"
+
+
+def test_update_status_keeps_a_dismissed_update(make_check):
+    settings = {"update_dismissed": "0.2.0"}  # its line is hidden, the update isn't
+    check = make_check(_Fetch(NEWER), settings)
+    _run(check, 5.0)
+    assert check.status() == "Update to 0.2.0 available"
+
+
+def test_update_status_with_nothing_newer(make_check):
+    check = make_check(_Fetch(_latest("0.1.0")))
+    _run(check, 5.0)
+    assert check.status() == "Up to date"
+
+
+def test_update_status_after_a_failed_check(make_check, log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+    check = make_check(_Fetch(error=OSError("offline")))
+    _run(check, 5.0)
+    assert check.status() == "Couldn't check"
+
+
+def test_update_status_before_the_first_check(make_check):
+    assert make_check(_Fetch(NEWER)).status() == "Not checked yet"
+
+
+def test_update_status_with_automatic_checks_off(make_check):
+    settings = {"update_check": False, "update_dismissed": None}
+    check = make_check(_Fetch(_latest("0.1.0")), settings)
+    _run(check, 5.0)  # off: no check starts
+    assert check.status() == "Automatic checks off"
+    check.check_now()
+    _run(check, 6.0)
+    assert check.status() == "Up to date"  # a check since starting answers instead
+
+
+def test_about_line_from_source_and_with_an_update(make_check):
+    assert app.about_line(None) == ("Running from source", False)
+    check = make_check(_Fetch(NEWER))
+    assert app.about_line(check) == ("Not checked yet", False)
+    _run(check, 5.0)
+    assert app.about_line(check) == ("Update to 0.2.0 available", True)
+
+
+def test_about_sits_just_before_quit(qt_box):
+    app.add_about(qt_box, None)
+    assert _menu(qt_box) == ["About MapleLens", "Quit MapleLens"]
+
+
+def test_about_comes_after_hide_with_a_tray(hide):
+    box, *_ = hide
+    app.add_about(box, None)
+    assert _menu(box) == ["Hide MapleLens", "About MapleLens", "Quit MapleLens"]
+
+
+def test_the_about_item_opens_the_view_with_the_version_and_the_repo(qt_box, monkeypatch):
+    monkeypatch.setattr(app, "version", lambda name: "0.1.0")
+    monkeypatch.setattr(app.update, "REPO", "someone/fork")  # MAPLELENS_UPDATE_REPO
+    opened = []
+    monkeypatch.setattr(qt_box, "show_about", lambda *a, **kw: opened.append((a, kw)))
+    app.add_about(qt_box, None)
+    qt_box.actions()[0].trigger()
+    url = "https://github.com/someone/fork"
+    assert opened == [(("0.1.0", "Running from source", url), {"accent": False})]
+
+
+def test_the_about_line_follows_a_check_on_each_tick(qt_box, make_check, monkeypatch):
+    from maplelens.overlay import Layer
+
+    monkeypatch.setattr(app, "find_game", lambda settings, save: None)
+    monkeypatch.setattr(app, "version", lambda name: "0.1.0")
+    fetch = _Gate(NEWER)
+    check = make_check(fetch)
+    app.add_about(qt_box, check)
+    qt_box.actions()[-2].trigger()  # About, just before Quit
+    assert qt_box._about_updates.text() == "Not checked yet"
+    layer = Layer()
+    tick, _ = _tick(qt_box, layer, app.Shown(qt_box, layer), updates=check)
+    tick.run(5.0)  # the first check starts
+    assert qt_box._about_updates.text() == "Checking…"
+    fetch.open.set()
+    check._thread.join(5)
+    tick.run(6.0)
+    assert qt_box._about_updates.text() == "Update to 0.2.0 available"
+    assert qt_box.about_open  # still open: the line changed in place

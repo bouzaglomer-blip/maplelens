@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import maplelens
 from maplelens import capture, update
-from maplelens.overlay import MENU_MARK, Box, Layer
+from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.exp_meter.history import open_db
@@ -216,6 +216,17 @@ def downloading_notice(new: str) -> str:
 UPDATE_FAILED = f"Update failed: click {MENU_MARK}"  # the menu item tries again
 UP_TO_DATE = "MapleLens is up to date"  # "Check for updates now" replies
 COULDNT_CHECK = "Couldn't check for updates"
+# About's updates line (UpdateCheck.status, about_line)
+CHECKING = "Checking…"
+CURRENT = "Up to date"
+FAILED_CHECK = "Couldn't check"
+CHECKS_OFF = "Automatic checks off"
+NOT_CHECKED = "Not checked yet"
+FROM_SOURCE = "Running from source"  # no update check: uv run maplelens, or the Mac
+
+
+def update_available(new: str) -> str:
+    return f"Update to {new} available"
 
 
 def _user_agent() -> dict[str, str]:
@@ -285,6 +296,7 @@ class UpdateCheck:
         self._manual = False  # the request running answers "Check for updates now"
         self._quiet_at: float | None = None  # when the line showing now hides itself
         self.release: update.Release | None = None
+        self._last: str | None = None  # the last check's outcome, for status()
 
     def poll(self, now: float) -> None:
         if self._quiet_at is not None and now >= self._quiet_at:
@@ -298,6 +310,7 @@ class UpdateCheck:
             manual, self._manual = self._manual, False
             if error is not None:
                 report_once(error, self._seen)
+                self._last = FAILED_CHECK
                 if manual:
                     self._reply(COULDNT_CHECK, now)
             else:
@@ -306,6 +319,16 @@ class UpdateCheck:
         if self._thread is None and now >= self._due and automatic:
             self._due = now + self.EVERY_S
             self._start()
+
+    def status(self) -> str:
+        """About's updates line: what the check is doing, or what it last found."""
+        if self._thread is not None:
+            return CHECKING
+        if self.release is not None:  # dismissed or not: the menu item still updates
+            return update_available(self.release.version)
+        if self._last is not None:
+            return self._last
+        return NOT_CHECKED if self._settings.get("update_check", True) else CHECKS_OFF
 
     def check_now(self) -> None:
         """The "Check for updates now" item: one request whatever the toggle, with a reply."""
@@ -345,6 +368,7 @@ class UpdateCheck:
 
     def _found(self, release: update.Release | None, manual: bool, now: float) -> None:
         if release is None or not update.is_newer(release, self._running):
+            self._last = CURRENT
             if manual:
                 self._reply(UP_TO_DATE, now)
             return
@@ -502,6 +526,29 @@ def add_hide(box: Box, layer: Layer, tray: QSystemTrayIcon | None) -> Shown:
     return shown
 
 
+def about_line(updates: "UpdateCheck | None") -> tuple[str, bool]:
+    """About's updates line, and whether it's an update to light up."""
+    if updates is None:
+        return FROM_SOURCE, False
+    text = updates.status()
+    release = updates.release
+    return text, release is not None and text == update_available(release.version)
+
+
+def add_about(box: Box, updates: "UpdateCheck | None") -> None:
+    """The About item, just before Quit: the version, updates and the GitHub page.
+
+    Added after add_hide, so it comes after Hide where there's one.
+    """
+
+    def show() -> None:
+        text, accent = about_line(updates)
+        url = f"https://github.com/{update.REPO}"  # the repo the update check asks
+        box.show_about(version("maplelens"), text, url, accent=accent)
+
+    box.add_menu_item(ABOUT, show, at=-1)
+
+
 @dataclass
 class Tick:
     """What MapleLens does every _TICK_MS: find the game, read it, feed the tools.
@@ -522,6 +569,9 @@ class Tick:
 
     def run(self, now: float) -> None:
         poll_updates(self.updates, now, self.seen)  # before the game lookup: shows with no game
+        if self.box.about_open:  # its updates line follows the check
+            text, accent = about_line(self.updates)
+            self.box.set_about_updates(text, accent=accent)
         self.hwnd = self.hwnd or find_game(self.settings, self.save)
         self.box.set_status(None if self.hwnd else LOOKING)  # a minimized game isn't "looking"
         rect = capture.client_rect(self.hwnd) if self.hwnd else None
@@ -602,6 +652,7 @@ def main() -> int:
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     shown = add_hide(box, layer, tray)
+    add_about(box, updates)  # after Hide: just before Quit
     tick = Tick(settings, save, box, layer, tool, path_tool, updates, seen, shown)
     timer = QTimer()
     timer.timeout.connect(lambda: tick.run(time.time()))

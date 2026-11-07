@@ -290,17 +290,23 @@ line don't fight")
 - The update line is coloured with `ACCENT` only for "Update to … available".
 
 **Acceptance criteria:**
-- [ ] Offscreen tests for every point under spec Testing → About: the view replaces the
+- [x] Offscreen tests for every point under spec Testing → About: the view replaces the
       strip, pages and status. × restores tabs or "Looking…", whichever was set last.
       The status line covers each `UpdateCheck` state, "Running from source" shows with
       no check, and the line refreshes on a tick while open. The link URL follows
       `MAPLELENS_UPDATE_REPO`. The view at 10.10.10 is no wider than `TAB_W`. The item
       sits just before Quit, after Hide when there's a tray.
+      *2026-11-07: 17 new tests, 515 in all. Names: `Box.show_about(version, updates,
+      url, *, accent)`, `set_about_updates(text, *, accent)`, `close_about()`,
+      `about_open`. In `app.py`: `UpdateCheck.status()`, `about_line(updates)` (the text,
+      and whether to use `ACCENT`), and `add_about(box, updates)`. The panel is fixed at
+      `TAB_W`, so the box stays 210 px with About open, even at 10.10.10 (offscreen
+      renders at 100% and 150%). The installer build and `--self-check` pass.*
 - [ ] By hand, `uv run maplelens` on Windows: About from •••, the tray menu and
       right-click shows "Running from source" and the right version. × brings back the
       tabs. With the game closed, it brings back "Looking for MapleStory…". The game
       keeps the keyboard after × and after the ••• menu. The box doesn't change width.
-- [ ] `git grep -i "right-click\|right click" -- src README.md packaging` is still empty.
+- [x] `git grep -i "right-click\|right click" -- src README.md packaging` is still empty.
 
 **Verification:** `uv run pytest tests/test_overlay.py tests/test_app.py`, then
 `uv run pytest` and the four checks, and the run above.

@@ -48,6 +48,9 @@ is what matters, and pull requests that break it are not accepted.
 (or under its ^). Click it to hide MapleLens, and again to show it: it keeps recording
 while hidden. Its menu is the same as **•••** on the box.
 
+**Which version:** click **•••**, then **About MapleLens**. The box shows the version, whether
+an update is out, and a link to the GitHub page. **×** brings the tabs back.
+
 **Updating:** when a new version is out, the box says "Update to X.Y.Z: click •••".
 Click **•••** on the box and choose **Update to X.Y.Z…**. MapleLens downloads the setup,
 checks it against the SHA-256 checksum GitHub publishes for it, saves your session and

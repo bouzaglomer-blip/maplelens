@@ -353,3 +353,87 @@ def test_allow_typing_leaves_a_hidden_box_hidden(monkeypatch, on):
     box.hide()  # the player hid MapleLens
     box.allow_typing(on)
     assert not box.isVisible()
+
+
+URL = "https://github.com/someone/maplelens"
+
+
+def _tabbed_box(monkeypatch):
+    from PySide6.QtWidgets import QWidget
+
+    box = _box(monkeypatch)
+    page = QWidget()
+    page.setFixedSize(overlay.TAB_W, 40)  # as wide as the real tabs
+    box.add_tab("A", page)
+    return box, page
+
+
+def test_about_replaces_the_tabs_and_x_brings_them_back(monkeypatch):
+    box, page = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Up to date", URL)
+    assert box.about_open
+    assert not box._strip_row.isVisibleTo(box) and not page.isVisibleTo(box)
+    assert not box._status.isVisibleTo(box)
+    for part in (box._about_title, box._about_close, box._menu_button, box._about):
+        assert part.isVisibleTo(box)
+    assert box._about_title.text() == "About MapleLens"
+    assert box._about_version.text() == "0.1.0"
+    assert box._about_updates.text() == "Up to date"
+    box._about_close.click()
+    assert not box.about_open
+    assert box._strip_row.isVisibleTo(box) and page.isVisibleTo(box)
+    assert not box._about.isVisibleTo(box) and not box._about_title.isVisibleTo(box)
+
+
+def test_a_status_set_while_about_is_open_shows_once_it_closes(monkeypatch):
+    box, page = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Up to date", URL)
+    box.set_status("Looking for the game")  # the tick, every 500 ms
+    assert not box._status.isVisibleTo(box) and box._about.isVisibleTo(box)
+    box.close_about()
+    assert box._status.isVisibleTo(box) and box._status.text() == "Looking for the game"
+    assert not page.isVisibleTo(box)
+    box.set_status(None)
+    assert page.isVisibleTo(box) and not box._status.isVisibleTo(box)
+
+
+def test_the_about_updates_line_changes_and_lights_up_for_an_update(monkeypatch):
+    box, _ = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Checking…", URL)
+    assert overlay.ACCENT not in box._about_updates.styleSheet()
+    box.set_about_updates("Update to 0.2.0 available", accent=True)
+    assert box._about_updates.text() == "Update to 0.2.0 available"
+    assert overlay.ACCENT in box._about_updates.styleSheet()
+    box.set_about_updates("Up to date")
+    assert overlay.ACCENT not in box._about_updates.styleSheet()
+
+
+def test_the_github_link_opens_the_url(monkeypatch):
+    from PySide6.QtCore import QUrl
+
+    opened = []
+    monkeypatch.setattr(overlay.QDesktopServices, "openUrl", opened.append)
+    box, _ = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Up to date", URL)
+    assert box._about_link.text() == "GitHub page ↗"
+    box._about_link.click()
+    assert opened == [QUrl(URL)]
+
+
+def test_about_never_takes_focus(monkeypatch):
+    from PySide6.QtCore import Qt
+
+    box, _ = _tabbed_box(monkeypatch)
+    assert box._about_close.focusPolicy() == Qt.NoFocus
+    assert box._about_link.focusPolicy() == Qt.NoFocus
+
+
+def test_about_at_the_longest_version_keeps_the_box_width(monkeypatch):
+    box, _ = _tabbed_box(monkeypatch)
+    box.show()
+    width = box.width()
+    box.show_about("10.10.10", "Update to 10.10.10 available", URL)
+    box.set_about_updates("Update to 10.10.10 available", accent=True)
+    box.adjustSize()
+    assert box._about.sizeHint().width() <= overlay.TAB_W
+    assert box.width() == width
