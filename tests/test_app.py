@@ -1249,7 +1249,14 @@ def test_permission_line_fits_the_box(qt_box):
     assert "right" not in app.NEEDS_SCREEN_RECORDING.lower()  # the ••• is the way in
 
 
-def test_the_mac_box_has_the_screen_recording_item(qt_box, monkeypatch):
+@pytest.fixture
+def no_prompt(monkeypatch):
+    """Screen Recording already allowed: the real calls could show the system prompt."""
+    monkeypatch.setattr(app.capture, "has_access", lambda: True)
+    monkeypatch.setattr(app.capture, "request_access", lambda: pytest.fail("prompted"))
+
+
+def test_the_mac_box_has_the_screen_recording_item(qt_box, monkeypatch, no_prompt):
     monkeypatch.setattr(sys, "platform", "darwin")
     opened = []
     monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
@@ -1259,7 +1266,7 @@ def test_the_mac_box_has_the_screen_recording_item(qt_box, monkeypatch):
     assert opened == [app.SCREEN_RECORDING_URL]
 
 
-def test_windows_box_has_no_screen_recording_item(qt_box, monkeypatch):
+def test_windows_box_has_no_screen_recording_item(qt_box, monkeypatch, no_prompt):
     monkeypatch.setattr(sys, "platform", "win32")
     app.setup_screen_recording(qt_box)
     assert _menu(qt_box) == ["Quit MapleLens"]

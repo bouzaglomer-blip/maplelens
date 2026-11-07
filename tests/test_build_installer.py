@@ -354,6 +354,7 @@ def _fake_app(root):
     return app
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS tools")
 def test_dmg_stage_has_the_app_and_an_applications_link(tmp_path, monkeypatch):
     monkeypatch.setattr(build_installer, "DIST", tmp_path / "dist")
     app, dmg, calls = _fake_app(tmp_path), tmp_path / "out.dmg", []

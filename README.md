@@ -97,7 +97,9 @@ says "Allow updates: click •••", click **•••** and choose **Allow Ma
 update…**, then accept the macOS prompt.
 
 **Removing:** drag MapleLens from Applications to the Trash. Your settings and history stay
-in `~/Library/Application Support/MapleLens`; delete that folder to remove them too.
+in `~/Library/Application Support/MapleLens`; delete that folder to remove them too. If
+something goes wrong, attach `~/Library/Application Support/MapleLens/maplelens.log` to a
+bug report.
 
 ## Roadmap
 

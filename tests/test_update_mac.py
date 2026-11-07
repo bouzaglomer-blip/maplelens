@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import plistlib
 import shutil
@@ -13,6 +14,13 @@ from maplelens import update_mac
 
 mac_tools = pytest.mark.skipif(sys.platform != "darwin", reason="macOS tools")
 
+ROOT = Path(__file__).parent.parent
+_spec = importlib.util.spec_from_file_location(
+    "build_installer", ROOT / "scripts" / "build_installer.py"
+)
+build_installer = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(build_installer)
+
 
 def test_bundle_path():
     assert update_mac.bundle_path("/Applications/MapleLens.app/Contents/MacOS/MapleLens") == Path(
@@ -21,6 +29,7 @@ def test_bundle_path():
     assert update_mac.bundle_path("/usr/bin/python3") is None
 
 
+@mac_tools
 @pytest.mark.parametrize(
     "path",
     [
@@ -28,10 +37,12 @@ def test_bundle_path():
         "/private/var/folders/x/AppTranslocation/ABC/d/MapleLens.app",
     ],
 )
-def test_can_replace_refuses_the_dmg_and_translocation(path):
+def test_can_replace_refuses_the_dmg_and_translocation(path, monkeypatch):
+    monkeypatch.setattr(update_mac.os, "access", lambda *a: True)  # only the path refuses
     assert not update_mac.can_replace(Path(path))
 
 
+@mac_tools
 def test_can_replace_needs_a_writable_folder(tmp_path):
     apps = tmp_path / "apps"
     apps.mkdir()
@@ -125,27 +136,13 @@ def make_app(folder: Path, version: str) -> Path:
 
 
 def make_dmg_with(tmp_path: Path, version: str) -> Path:
-    """A dmg holding MapleLens.app/version.txt, in tmp_path/updates."""
-    src = tmp_path / "dmg-src"
-    make_app(src, version)
-    updates = tmp_path / "updates"
-    updates.mkdir()
-    dmg = updates / f"MapleLens-{version}.dmg"
-    subprocess.run(
-        [
-            "hdiutil",
-            "create",
-            "-quiet",
-            "-volname",
-            "MapleLens",
-            "-srcfolder",
-            src,
-            "-format",
-            "UDRO",
-            dmg,
-        ],
-        check=True,
-    )
+    """A dmg holding MapleLens.app/version.txt, made by the release build's make_dmg so
+    a change to its layout breaks these tests."""
+    app = make_app(tmp_path / "dmg-src", version)
+    dmg = tmp_path / f"MapleLens-{version}.dmg"
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(build_installer, "DIST", tmp_path / "dist")  # its staging folder
+        build_installer.make_dmg(app, dmg)
     return dmg
 
 
@@ -181,12 +178,12 @@ def dmg(tmp_path, built_dmg):
 
 @pytest.fixture
 def fake_open(tmp_path):
-    """Env for the helper with an `open` that records its argument; .opened reads them."""
+    """Env for the helper with an `open` that records its arguments; .opened reads them."""
     bin_ = tmp_path / "bin"
     bin_.mkdir()
     log = tmp_path / "opened.txt"
     script = bin_ / "open"
-    script.write_text(f'#!/bin/sh\necho "$1" >> "{log}"\n')
+    script.write_text(f'#!/bin/sh\necho "$*" >> "{log}"\n')
     script.chmod(0o755)
 
     return SimpleNamespace(
@@ -216,7 +213,7 @@ def test_helper_swaps_the_app_and_reopens_it(tmp_path, fake_open, old_pid, dmg):
     assert sorted(p.name for p in app.parent.iterdir()) == ["MapleLens.app"]  # no .new/.old
     assert not dmg.exists()
     assert update_mac.read_result(dmg.parent) is None
-    assert fake_open.opened() == [str(app)]
+    assert fake_open.opened() == [f"-g {app}"]
 
 
 @mac_tools
@@ -232,7 +229,7 @@ def test_helper_waits_for_maplelens_to_exit(tmp_path, fake_open, dmg):
     maplelens.wait()  # reaped: until then the PID is a zombie that still answers kill -0
     assert helper.wait(timeout=30) == 0
     assert (app / "version.txt").read_text() == "0.2.0"
-    assert fake_open.opened() == [str(app)]
+    assert fake_open.opened() == [f"-g {app}"]
 
 
 @mac_tools
@@ -246,7 +243,7 @@ def test_helper_keeps_the_old_app_when_the_copy_fails(tmp_path, fake_open, old_p
     assert update_mac.read_result(updates) == "failed"
     assert (app / "version.txt").read_text() == "0.1.0"
     assert sorted(p.name for p in app.parent.iterdir()) == ["MapleLens.app"]
-    assert fake_open.opened() == [str(app)]
+    assert fake_open.opened() == [f"-g {app}"]
 
 
 @mac_tools
@@ -258,7 +255,7 @@ def test_helper_keeps_the_old_app_in_a_read_only_folder(tmp_path, fake_open, old
         assert update_mac.read_result(dmg.parent) == "failed"
         assert (app / "version.txt").read_text() == "0.1.0"
         assert sorted(p.name for p in app.parent.iterdir()) == ["MapleLens.app"]
-        assert fake_open.opened() == [str(app)]
+        assert fake_open.opened() == [f"-g {app}"]
     finally:
         app.parent.chmod(0o755)
 
@@ -287,4 +284,33 @@ def test_helper_reopens_the_old_app_when_it_cant_make_a_mount_point(tmp_path, fa
     assert helper.wait(timeout=30) != 0
     assert update_mac.read_result(updates) == "failed"
     assert (app / "version.txt").read_text() == "0.1.0"
-    assert fake_open.opened() == [str(app)]
+    assert fake_open.opened() == [f"-g {app}"]
+
+
+@mac_tools
+def test_helper_reports_blocked_when_macos_refuses_the_rename(tmp_path, fake_open, old_pid, dmg):
+    app = make_app(tmp_path / "Applications", "0.1.0")
+    subprocess.run(["chflags", "uchg", app], check=True)  # mv: "Operation not permitted"
+    try:
+        assert run_helper(old_pid, dmg, app, fake_open.env).wait(timeout=30) != 0
+        assert update_mac.read_result(dmg.parent) == "blocked"
+        assert (app / "version.txt").read_text() == "0.1.0"
+        assert sorted(p.name for p in app.parent.iterdir()) == ["MapleLens.app"]
+        assert fake_open.opened() == [f"-g {app}"]
+    finally:
+        subprocess.run(["chflags", "nouchg", app], check=True)
+
+
+@mac_tools
+def test_helper_puts_the_old_app_back_when_the_new_one_wont_move_in(
+    tmp_path, fake_open, old_pid, dmg
+):
+    app = make_app(tmp_path / "Applications", "0.1.0")
+    mv = tmp_path / "bin" / "mv"  # refuses only the second rename, the new app's
+    mv.write_text('#!/bin/sh\ncase $1 in *.new) exit 1 ;; esac\nexec /bin/mv "$@"\n')
+    mv.chmod(0o755)
+    assert run_helper(old_pid, dmg, app, fake_open.env).wait(timeout=30) != 0
+    assert update_mac.read_result(dmg.parent) == "failed"
+    assert (app / "version.txt").read_text() == "0.1.0"
+    assert sorted(p.name for p in app.parent.iterdir()) == ["MapleLens.app"]
+    assert fake_open.opened() == [f"-g {app}"]

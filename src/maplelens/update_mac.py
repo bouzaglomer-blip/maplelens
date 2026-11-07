@@ -2,8 +2,9 @@
 
 The app hands over to HELPER, a detached /bin/sh script, and quits. The helper waits
 for MapleLens to exit, copies the new bundle next to the old one, swaps them with
-renames (so a failure leaves the old app at its path), and reopens MapleLens. It only
-touches MapleLens's bundle, the dmg and the updates folder.
+renames (so a failure leaves the old app at its path), and reopens MapleLens in the
+background (`open -g`, so the game keeps focus). It only touches MapleLens's bundle, the
+dmg and the updates folder.
 """
 
 import os
@@ -28,7 +29,7 @@ fail() {
   hdiutil detach -quiet "$mnt" 2>/dev/null
   rmdir "$mnt" 2>/dev/null
   rm -rf "$app.new"
-  open "$app"
+  open -g "$app"
   exit 1
 }
 mnt=$(mktemp -d) || fail failed
@@ -41,7 +42,7 @@ if ! err=$(mv "$app" "$app.old" 2>&1); then
 fi
 mv "$app.new" "$app" || { mv "$app.old" "$app"; fail failed; }
 rm -rf "$app.old" "$dmg"
-open "$app"
+open -g "$app"
 """
 
 

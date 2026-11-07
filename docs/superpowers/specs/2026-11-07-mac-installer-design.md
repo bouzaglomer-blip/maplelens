@@ -75,8 +75,9 @@ code-signing certificate** that never changes:
 - **This is unverified.** Checkpoint A (Testing) proves it on a real Mac with two builds
   before anything else depends on it. If it fails, ad-hoc signing stays, and an update
   asks for Screen Recording again, which the permission screen (below) already handles.
-- Without the secrets (a fork, a local build) the build falls back to ad-hoc signing and
-  says so, rather than failing.
+- Without a signing identity, a local build falls back to ad-hoc signing and says so,
+  rather than failing. The CI sign job always requires the secrets, so a fork's test run
+  uses throwaway ones.
 - If the certificate is ever lost or replaced, players allow Screen Recording once more.
   Nothing else breaks.
 
@@ -149,9 +150,11 @@ the same quiet failures. What differs is what happens after the click:
      symlinks and permissions; Python's `zipfile`/`shutil` don't reliably), unmounts;
    - swaps old for new with renames, so a failure at any point leaves a working app at
      the original path, never a half-copied one;
-   - starts the new version with `/usr/bin/open` on the app's path, which opens
-     MapleLens only, never the game, and never activates another app;
-   - logs to `maplelens.log`.
+   - starts the new version with `open -g` (found through `PATH`) on the app's path,
+     which opens MapleLens only, in the background, never the game, and never activates
+     another app;
+   - reports a failed or blocked swap in a result file in the updates folder; the next
+     launch reads it and logs it to `maplelens.log` (the helper doesn't write the log).
 4. **Where the app lives.** The updater replaces the bundle at its own path (from
    `sys.executable`). Before downloading, MapleLens checks that it can: the bundle's
    folder is writable, and the app isn't running from the mounted dmg or a translocated
@@ -190,9 +193,9 @@ the same quiet failures. What differs is what happens after the click:
   `.p12` into a temporary keychain, sign the app, verify the signature, build the dmg,
   run `--self-check` again on the signed app, upload the dmg. *(My call: keeps the
   signing key away from third-party code, like `publish` keeps the write token away.)*
-- **In the main repo the sign job fails when the certificate secrets are missing**; the
-  ad-hoc fallback is for forks and local builds only *(my call)*. So a public dmg can't
-  ship with a signature that loses Screen Recording on every update.
+- **The sign job fails when the certificate secrets are missing**; the ad-hoc fallback
+  is for local builds only *(my call)*. So a public dmg can't ship with a signature that
+  loses Screen Recording on every update.
 - **This PR merges only once the owner's inputs exist** *(my call)*: the confirmed
   `CFBundleIdentifier`, the certificate secrets, the icon, and a passed Checkpoint A.
   The next release after the merge is the first with a dmg; there's no switch to ship
