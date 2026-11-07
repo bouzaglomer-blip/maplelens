@@ -440,7 +440,7 @@ def tray_available() -> bool:
 def make_tray(
     box: Box, icon: Path, *, available: bool, tray_cls: type = QSystemTrayIcon
 ) -> QSystemTrayIcon | None:
-    """MapleLens's tray icon, shown, with the box's menu on right-click; None if not
+    """MapleLens's tray icon, shown, with the box's menu as its context menu; None if not
     `available`.
 
     The menu is the box's own items, read again each time it opens. Quit is the box's

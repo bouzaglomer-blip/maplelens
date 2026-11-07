@@ -44,6 +44,10 @@ is what matters, and pull requests that break it are not accepted.
    MapleStory…", click **•••** on the box, choose **Pick game window…** and pick the game.
 5. Drag the box where you want it. History opens the per-map table.
 
+**Tray icon:** while MapleLens runs, its icon sits in the taskbar's notification area
+(or under its ^). Click it to hide MapleLens, and again to show it: it keeps recording
+while hidden. Its menu is the same as **•••** on the box.
+
 **Updating:** when a new version is out, the box says "Update to X.Y.Z: click •••".
 Click **•••** on the box and choose **Update to X.Y.Z…**. MapleLens downloads the setup,
 checks it against the SHA-256 checksum GitHub publishes for it, saves your session and

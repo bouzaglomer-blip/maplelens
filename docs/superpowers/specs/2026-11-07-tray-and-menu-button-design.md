@@ -1,6 +1,7 @@
 # MapleLens — tray icon and menu button design
 
-Date: 2026-11-07. Status: decisions made by Daniel (contributor) 2026-11-07. The owner
+Date: 2026-11-07. Status: decisions made by Daniel (contributor) 2026-11-07; built
+2026-11-07 (`docs/superpowers/plans/2026-11-07-tray-and-menu-button.md`). The owner
 (or-keren) reviews it with the PR.
 
 ## Intent
