@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from shiboken6 import delete
 
 from maplelens.overlay import ACCENT, LABEL_COLOR, LABEL_PT, TAB_W, VALUE_COLOR, Layer, text_label
 from maplelens.readers import Reading
@@ -90,7 +91,7 @@ class ClassHelperTool:
     def _on_build(self, name: str) -> None:
         if self._plan_job is None or not name:
             return
-        self._settings["class_builds"][self._plan_job] = name
+        self._choices()[self._plan_job] = name
         self._changed()
         self._render_last()
 
@@ -156,6 +157,7 @@ class ClassHelperTool:
         self._plan_job = plan.job if plan else None
         if plan is None:
             out.append((("label", NO_PLAN.format(job), ACCENT), None))
+            self._builds.hide()
         else:
             more, extra = self._plan_items(plan, level)
             out += more
@@ -166,7 +168,7 @@ class ClassHelperTool:
     def _plan_items(self, plan, level: int):  # -> (items, dot key parts)
         out = []
         self._fill_builds(plan)
-        build = plan.build(self._settings["class_builds"].get(plan.job))
+        build = plan.build(self._choices().get(plan.job))
         ap, sp = self._points()
         if ap or sp:
             halves = [f"{n} {w}" for n, w in ((ap, "AP"), (sp, "SP")) if n]
@@ -231,10 +233,16 @@ class ClassHelperTool:
             out.append(SKILL_UNREAD)
         return out
 
+    def _choices(self) -> dict:
+        """The saved build per job; a hand-edited non-dict value is replaced by an empty one."""
+        if not isinstance(self._settings.get("class_builds"), dict):
+            self._settings["class_builds"] = {}
+        return self._settings["class_builds"]
+
     def _fill_builds(self, plan) -> None:
         names = [b.name for b in plan.builds]
         have = [self._builds.itemText(i) for i in range(self._builds.count())]
-        want = plan.build(self._settings["class_builds"].get(plan.job)).name
+        want = plan.build(self._choices().get(plan.job)).name
         if have != names:
             self._builds.blockSignals(True)
             self._builds.clear()
@@ -262,7 +270,9 @@ class ClassHelperTool:
             if map_id is None:
                 col.addWidget(label)
                 continue
-            row = QHBoxLayout()
+            line = QWidget()
+            row = QHBoxLayout(line)
+            row.setContentsMargins(0, 0, 0, 0)
             row.setSpacing(6)
             row.addWidget(label, 1)
             button = QPushButton("Go")
@@ -270,8 +280,8 @@ class ClassHelperTool:
             button.setFocusPolicy(Qt.NoFocus)
             button.clicked.connect(lambda _=False, m=map_id: self._go(m))
             row.addWidget(button)
-            col.addLayout(row)
+            col.addWidget(line)
         parent = self.tab.layout()
-        parent.replaceWidget(old, self._body)
-        old.setParent(None)
-        old.deleteLater()
+        parent.removeWidget(old)
+        parent.addWidget(self._body)
+        delete(old)  # at once: a widget left to deleteLater still shows in the tab's children

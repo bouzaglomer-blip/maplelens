@@ -136,3 +136,18 @@ def test_level_up_dot_until_opened(make):
     tool.tab.show()
     tool.update(R(level=15), RECT, 2)
     assert not tool.dot
+
+
+def test_planless_job_hides_the_picker(make):
+    tool = make()
+    tool.update(R(level=12), RECT, 0)
+    assert not tool._builds.isHidden()
+    tool.update(R(job="Hermit", level=72), RECT, 1)
+    assert tool._builds.isHidden()
+
+
+def test_bad_class_builds_setting_is_reset(make):
+    tool = make()
+    tool._settings["class_builds"] = "oops"
+    tool.update(R(level=12), RECT, 0)
+    assert tool._settings["class_builds"] == {}
