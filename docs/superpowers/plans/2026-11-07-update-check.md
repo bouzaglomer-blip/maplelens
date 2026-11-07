@@ -370,6 +370,8 @@ checks.
 - **Found:** MapleLens lets a second copy start while one runs. Each copy keeps its own
   settings and rewrites the whole file when it saves, so one copy silently undid
   Daniel's untick in the other. This is outside the update check, so it's a follow-up.
+  *(2026-11-07: fixed in this PR after all, by Daniel's call. A second copy now exits
+  before Qt starts when `MapleLensRunning` already exists. Windows only.)*
 - Cleaned up: the fork has no releases or tags, and `MAPLELENS_UPDATE_REPO` is removed.
   Installed 0.1.1 was left on Daniel's PC.
 
