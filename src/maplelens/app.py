@@ -40,7 +40,8 @@ ICON = Path(maplelens.__file__).parent / "data" / "icon.ico"
 DEFAULT_TITLE = "MapleStory"
 _log_path: Path | None = None  # where report_once also writes; set by start_log
 LOOKING = f"Looking for {DEFAULT_TITLE}…"  # the box's ••• beside it has the window picker
-NEEDS_SCREEN_RECORDING = f"Screen Recording: click {MENU_MARK}"  # the menu item opens the page
+# Allow it (the menu item opens the page), then reopen: macOS grants a running app nothing.
+NEEDS_SCREEN_RECORDING = f"Allow, then reopen: click {MENU_MARK}"
 SCREEN_RECORDING_URL = (
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
 )

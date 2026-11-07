@@ -72,9 +72,9 @@ code-signing certificate** that never changes:
   base64 and its password). Never committed.
 - Gatekeeper still blocks the first install (it isn't Apple's certificate); this only
   aims to keep the permission across updates.
-- **This is unverified.** Checkpoint A (Testing) proves it on a real Mac with two builds
-  before anything else depends on it. If it fails, ad-hoc signing stays, and an update
-  asks for Screen Recording again, which the permission screen (below) already handles.
+- **Verified at Checkpoint A (2026-11-08):** with the same certificate on both builds the
+  permission survives an update; with ad-hoc signing it is lost (the designated
+  requirement is the cdhash). See "Checkpoint A results".
 - Without a signing identity, a local build falls back to ad-hoc signing and says so,
   rather than failing. The CI sign job always requires the secrets, so a fork's test run
   uses throwaway ones.
@@ -115,13 +115,14 @@ code-signing certificate** that never changes:
 - The Screen Recording check no longer exits. When the permission is missing, MapleLens
   asks macOS once (`CGRequestScreenCaptureAccess`, which shows the system prompt with its
   own "Open System Settings" button), **keeps running**, and the box's status line says so
-  in plain words, e.g. "Allow Screen Recording: right-click". The right-click menu gets an
+  in plain words: "Allow, then reopen: click •••" (main's ••• menu button replaced the
+  right-click wording, 2026-11-08). The box's menu gets an
   item that opens System Settings at Privacy & Security → Screen Recording (a URL opened
   in System Settings, not driving its UI).
-- Each tick re-checks; once allowed, the box moves on to "Looking for MapleStory…" and
-  then the normal tools, with no restart if macOS allows it. If macOS only grants it after
-  a restart (it does on some versions), the line says "Quit and reopen MapleLens"
-  *(builder: find out which, on Checkpoint A's Mac)*.
+- Each tick re-checks; once allowed (and MapleLens reopened), the box moves on to
+  "Looking for MapleStory…" and then the normal tools. macOS does **not** give a running app a
+  grant made meanwhile (Checkpoint A, (c)), and offers no "Quit & Reopen". So the line
+  tells the player to allow it and then reopen MapleLens, and the README says the same.
 - From source (`uv run maplelens`) this behaves the same way, which replaces today's
   printed message and exit. `grab.py` keeps its printed message (it's a terminal tool).
 - Never a silent quit, a black frame or a crash loop.
@@ -161,15 +162,15 @@ the same quiet failures. What differs is what happens after the click:
    read-only path (macOS runs a quarantined app that was never moved from read-only
    storage). If it can't, the menu item still shows, and clicking it shows a line like "Move to Applications to update" in the notice line
    instead of downloading (exact copy: whatever fits the 186 px tab width).
-5. **No second Gatekeeper prompt** *(to verify at Checkpoint A)*: a file Python downloads
+5. **No second Gatekeeper prompt** *(verified, Checkpoint A (b))*: a file Python downloads
    itself doesn't get macOS's quarantine flag, so the new version opens without "Open
    Anyway". If it turns out it is flagged, the helper doesn't remove the flag (that would
    be working around Gatekeeper); the README covers the extra click instead.
 6. Settings and history survive, as on Windows: they live outside the app bundle.
-7. **If macOS's App Management protection blocks the swap** (Checkpoint A, (d)), the
+7. **If macOS's App Management protection blocks the swap** (Checkpoint A, (d): not triggered on macOS 26, kept as a fallback), the
    fallback is to **ask the player to allow it** (user, 2026-11-07), never to work
    around it. The old version stays in place and running (the helper relaunches it), the
-   box's notice line says something like "Allow updates: right-click" (fits 186 px), and the menu gets an
+   box's notice line says "Allow updates: click •••" (fits 186 px), and the menu gets an
    item that opens System Settings at Privacy & Security → App Management (a URL, not
    driving its UI). Once the player has allowed it, "Update to X.Y.Z…" works as above.
    The README's Mac section has this step. If macOS shows its own prompt instead of
@@ -310,8 +311,27 @@ tests/                             update asset per platform; can_update; helper
    build or the signing fails, nothing is published and no tag is made.
 6. Windows players see no change; all checks pass on Windows and macOS CI.
 
+## Checkpoint A results (2026-11-08)
+
+Run on a Mac (macOS 26, Apple silicon): throwaway PyInstaller app installed from a
+Safari-downloaded dmg, updating itself with a urllib download and the same
+`hdiutil`/`ditto`/`mv` helper.
+
+- (a) **Screen Recording across an update:** kept when both builds share the self-signed
+  certificate; lost with ad-hoc signing (macOS asked again). System Settings then shows
+  one enabled-looking row that doesn't cover the new build; the player must add it with "+".
+- (b) **Quarantine:** the urllib-downloaded dmg and the swapped-in app have no
+  `com.apple.quarantine` (only `com.apple.provenance`); no Gatekeeper prompt.
+- (c) **Fresh grant:** does not reach the running app (`CGPreflightScreenCaptureAccess`
+  stayed false until reopened); no "Quit & Reopen" offered.
+- (d) **App Management:** renaming `/Applications/<app>.app` worked with no prompt or
+  block on macOS 26. The blocked fallback stays as designed; a blocked `mv` prints
+  "Operation not permitted" (checked with `chflags uchg`).
+- Both settings URLs open the right pane: `Privacy_ScreenCapture` (Screen & System Audio
+  Recording) and `Privacy_AppBundles` (App Management).
+- Signing on a developer Mac needs the certificate trusted for code signing and its
+  keychain on the search list; otherwise codesign says "no identity found".
+
 ## Open questions
 
-- Checkpoint A's four answers (permission across updates, quarantine on self-download,
-  restart after grant, App Management).
 - The owner: `CFBundleIdentifier`, the certificate, the icon.

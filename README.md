@@ -82,9 +82,11 @@ Apple silicon (M1 or newer) only.
 3. Open MapleLens from Applications. It isn't notarized by Apple, so macOS refuses the
    first time. Open **System Settings → Privacy & Security**, scroll down and click
    **Open Anyway** next to MapleLens, then confirm. You only do this once.
-4. MapleLens needs Screen Recording to see the game. If the box says "Screen Recording:
-   click •••", click **•••** on the box, choose **Open Screen Recording settings…**, tick
-   MapleLens, and reopen MapleLens if macOS asks.
+4. MapleLens needs Screen Recording to see the game. If the box says "Allow, then
+   reopen: click •••", click **•••** on the box, choose **Open Screen Recording
+   settings…** and tick MapleLens. Then quit and reopen MapleLens: macOS doesn't give a
+   running app the permission, and it doesn't offer to restart it. If MapleLens is
+   already listed but not working, remove it with "−" and add it again with "+".
 5. Start MapleStory Classic **windowed** (the Mac launcher's fullscreen hides overlays),
    then use the box as on Windows. If it says "Looking for MapleStory…", click **•••** on
    the box and choose **Pick game window…**. There's no tray icon on the Mac.
@@ -92,9 +94,9 @@ Apple silicon (M1 or newer) only.
 **Updating:** same as Windows: click **•••** on the box and choose **Update to X.Y.Z…**.
 MapleLens downloads the new dmg, checks its SHA-256 checksum, and swaps itself in. You
 keep Screen Recording and don't see Open Anyway again. If the box says "Move to
-Applications to update", drag MapleLens into Applications and open it from there. If it
-says "Allow updates: click •••", click **•••** and choose **Allow MapleLens to
-update…**, then accept the macOS prompt.
+Applications to update", drag MapleLens into Applications and open it from there. Rarely,
+macOS blocks the swap and the box says "Allow updates: click •••"; then click **•••**,
+choose **Allow MapleLens to update…** and accept the macOS prompt.
 
 **Removing:** drag MapleLens from Applications to the Trash. Your settings and history stay
 in `~/Library/Application Support/MapleLens`; delete that folder to remove them too. If
