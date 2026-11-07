@@ -13,6 +13,10 @@ left-clicking it hides or shows everything MapleLens draws. On every platform, t
 gets a ⋯ button in its top-right corner that opens the same menu. Right-clicking the box
 still works too. Every "right-click" in the app, README and installer becomes "⋯".
 
+Added after T1–T5 were built (T7): an "About MapleLens" menu item opens an About view
+inside the box. It shows the version, a line on update status, and a link to the GitHub
+page.
+
 ## Architecture decisions
 
 - **One list, filled on open.** The box's own `actions()` stay the menu. A helper on
@@ -51,8 +55,12 @@ T1 icon as package data, loads in the frozen app      T2 ⋯ button + attach_men
                           │
                           T5 Hide / Show (tray left-click + menu item)
                           │
+                          T7 About view in the box (added 2026-11-07)
+                          │
                           T6 docs, installed-build run, PR
 ```
+
+T7 came after T6's docs and build were done, so T6's installed run now covers About too.
 
 T1 and T2 are independent, as are T3 and T4. Daniel works alone, so they run in order.
 
@@ -250,6 +258,63 @@ above.
   and the path arrow carrying on while hidden, and Quit from the tray saving the
   session. 498 tests and the four checks pass.*
 
+## Phase 2b: About (added 2026-11-07)
+
+### Task T7: the About view in the box
+
+**Description:** (spec Goals → About, Constraints → About and "The view and the status
+line don't fight")
+- `overlay.py`, on `Box`:
+  - an About view: the top row shows "About MapleLens" and a × (`mark_button`, like the
+    notice's) before the •••, and the pages area shows Version / version, Updates /
+    line, and "GitHub page ↗" in `ACCENT`
+  - `show_about(version, updates, url)`, `set_about_updates(text)`, `close_about()`, and
+    an `about_open` property (names are the builder's call)
+  - `set_status` records the text while About is open, without showing it. `close_about`
+    shows what was recorded last: the tabs, or the status line.
+  - the link opens `url` with `QDesktopServices.openUrl`
+- `app.py`:
+  - `UpdateCheck.status() -> str`: "Checking…" while `_thread` runs, "Update to X.Y.Z
+    available" while `release` is set, "Up to date" or "Couldn't check" from the last
+    check's outcome (new: `_last`, set in `poll` where the result is collected),
+    "Automatic checks off" with the toggle off and nothing checked yet, else "Not
+    checked yet".
+  - `ABOUT = "About MapleLens"` added at `at=-1` *after* `add_hide`, so it lands between
+    Hide and Quit (between "Check for updates automatically" and Quit with no tray).
+  - Its callback opens the view with `version("maplelens")`, the status (or "Running
+    from source" when `updates is None`) and `https://github.com/{update.REPO}`.
+  - `Tick.run`: while `box.about_open`, `box.set_about_updates(...)` with the current
+    status, after `poll_updates`.
+- Lands on or-keren/maplelens#12, which is already open from this branch. The PR body
+  gets an About line.
+- The update line is coloured with `ACCENT` only for "Update to … available".
+
+**Acceptance criteria:**
+- [ ] Offscreen tests for every point under spec Testing → About: the view replaces the
+      strip, pages and status. × restores tabs or "Looking…", whichever was set last.
+      The status line covers each `UpdateCheck` state, "Running from source" shows with
+      no check, and the line refreshes on a tick while open. The link URL follows
+      `MAPLELENS_UPDATE_REPO`. The view at 10.10.10 is no wider than `TAB_W`. The item
+      sits just before Quit, after Hide when there's a tray.
+- [ ] By hand, `uv run maplelens` on Windows: About from •••, the tray menu and
+      right-click shows "Running from source" and the right version. × brings back the
+      tabs. With the game closed, it brings back "Looking for MapleStory…". The game
+      keeps the keyboard after × and after the ••• menu. The box doesn't change width.
+- [ ] `git grep -i "right-click\|right click" -- src README.md packaging` is still empty.
+
+**Verification:** `uv run pytest tests/test_overlay.py tests/test_app.py`, then
+`uv run pytest` and the four checks, and the run above.
+
+**Dependencies:** T2, T5. **Files:** `src/maplelens/overlay.py`, `src/maplelens/app.py`,
+`tests/test_overlay.py`, `tests/test_app.py`. README: one line in T6's tray paragraph
+or the install steps ("•••, then About MapleLens shows the version"). **Scope:** M.
+
+### Checkpoint B2: About works from source
+
+- [ ] T7 committed, and `uv run pytest` and the four checks pass on Windows.
+- [ ] Daniel has opened About from the ••• and the tray, and agrees with how it looks
+      at 100% and 150%.
+
 ## Phase 3: ship it
 
 ### Task T6: docs, the installed build, then the PR
@@ -274,12 +339,14 @@ above.
       say whether a Mac or only CI checked them.
 - [ ] The installed build: tray icon with the right icon, ⋯ menu, Hide/Show, and Quit
       from the tray all work. The hand-run Setup over a running MapleLens shows the new
-      "still running" text.
+      "still running" text. About shows the installed version and a real update
+      status (spec Testing → by hand, step 8).
 - [ ] CI is green on the PR (Windows and macOS).
 
 **Verification:** the build, the installed run, and CI.
 
-**Dependencies:** T1–T5. **Files:** `README.md`, `AGENTS.md`, the spec, this plan.
+**Dependencies:** T1–T5, and T7 for the installed run. **Files:** `README.md`,
+`AGENTS.md`, the spec, this plan.
 **Scope:** S.
 
 **Run notes (2026-11-07):**
@@ -311,6 +378,8 @@ above.
 | "⋯" renders as a box or off-centre in Segoe UI | Low | T2 falls back to "•••" or painted dots, and T3's text follows. |
 | On the Mac, the ⋯ menu opens under the panel | Low: the panel sits at `NSPopUpMenuWindowLevel - 1` | Spec Testing → by hand on a Mac, if a Mac is at hand. Otherwise the PR says it's unchecked. |
 | The tray is collected because nothing holds it | Low | `main()` keeps the reference. The T4 by-hand run would show it at once. |
+| The tick's `set_status` every 500 ms knocks the About view away, or × brings back stale tabs while the game is gone | Med: About flickers or lies | `set_status` only records while About is open, and × shows the recorded state. A test calls `set_status` both ways while open. |
+| The About updates line disagrees with the menu (says "Up to date" while "Update to X…" is in the menu) | Med | One source: `UpdateCheck.status()` reads `release` first. A test for a dismissed update. |
 
 ## Open questions
 

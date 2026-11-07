@@ -1,7 +1,8 @@
 # MapleLens — tray icon and menu button design
 
 Date: 2026-11-07. Status: decisions made by Daniel (contributor) 2026-11-07; built
-2026-11-07 (`docs/superpowers/plans/2026-11-07-tray-and-menu-button.md`). The owner
+2026-11-07 (`docs/superpowers/plans/2026-11-07-tray-and-menu-button.md`), except About
+(Goals → About, plan task T7), added the same day and not built yet. The owner
 (or-keren) reviews it with the PR.
 
 ## Intent
@@ -17,6 +18,13 @@ Two problems with how players reach MapleLens's menu today:
 
 This work adds a **tray icon on Windows**, plus a visible **⋯ button** on the box. Both
 open the same menu the box's right-click opens today.
+
+3. **No way to tell which version is running** (Daniel, 2026-11-07, after T1–T5 were
+   built). The version is read at runtime for the update check and the User-Agent, but
+   nothing shows it. Installed players can find it in Settings → Apps, but nobody looks
+   there. An **About view** inside the box fixes this (see Goals → About).
+
+The glyph ended up as "•••" (T2). Where this spec says "⋯", the app shows "•••".
 
 The screen-only rule in `AGENTS.md` holds unchanged. The tray icon and the button belong
 to MapleLens's own windows. They never touch the game's window, process, files or
@@ -100,6 +108,48 @@ traffic, and they send no input to it.
 - **The notice line still fits** the 186 px `TAB_W` at version 10.10.10, with its ×.
   The existing `test_notice_fits_the_tab_width_at_the_longest_version` covers the new
   text.
+- **About** (Daniel, 2026-11-07: "an About panel", inside the box, after mockups of a menu
+  header, a footer, the tray tooltip and a panel beside the box):
+  - A menu item **"About MapleLens"**, just before Quit (after Hide on Windows). It
+    shows in all three menus, because it's one of the box's actions.
+  - It opens an **About view inside the box**, in place of the tabs. It works the way
+    the "Looking for…" line does, so there's no second window over the game and nothing
+    to position:
+
+    ```
+    ┌──────────────────────────┐
+    │ About MapleLens   ×  ••• │
+    │ Version                  │
+    │ 0.1.0                    │
+    │ Updates                  │
+    │ Up to date               │
+    │ GitHub page ↗            │
+    └──────────────────────────┘
+    ```
+  - **Top row:** "About MapleLens" in place of the tab strip or the status line, then
+    a × (styled like the notice line's ×), then the •••, which still opens the menu.
+    × brings back whatever the box would show now: the tabs, or "Looking for
+    MapleStory…" if the game went away while About was open.
+  - **Version:** `version("maplelens")`, in the box's grey label and white value style.
+  - **Updates:** one line from the update check, read again each tick while the view is
+    open, so "Checking…" turns into the answer without reopening:
+    - "Checking…" while a check runs
+    - "Update to X.Y.Z available" (in `ACCENT`) once one is known, dismissed or not. The
+      menu's "Update to X.Y.Z…" item is still how the player updates.
+    - "Up to date" after the last check found nothing newer
+    - "Couldn't check" after the last check failed
+    - "Not checked yet" before the first check, with automatic checks on
+    - "Automatic checks off" with the toggle off and no check run since starting
+    - "Running from source" where there's no update check: `uv run maplelens`, and the
+      Mac.
+  - **GitHub page ↗:** a link in `ACCENT` that opens `https://github.com/<update.REPO>`
+    in the player's browser (`QDesktopServices.openUrl`). So it follows
+    `MAPLELENS_UPDATE_REPO` like the update check. The browser taking focus is the
+    player's own click, not a focus steal.
+  - The view fits the 186 px `TAB_W` at version 10.10.10, so opening About never widens
+    the box. The longest line is "Update to 10.10.10 available".
+  - Not saved: About is closed at every start. Hide / Show leaves it as it was.
+  - Opening it never takes keyboard focus from the game, the same as the •••.
 
 ## Non-goals
 
@@ -113,7 +163,13 @@ traffic, and they send no input to it.
   listens to the game's keyboard.
 - **Minimize-to-tray, close-to-tray, or "start with Windows".** The box has no close
   button, and the installer spec already rejected autostart.
-- **A new menu layout.** The items and their order stay as they are, plus Hide/Show.
+- **A new menu layout.** The items and their order stay as they are, plus Hide/Show and
+  About.
+- **More in About** (Daniel): no release-notes link, no licences or credits, no "reads
+  the screen only" line, and no update button (the menu item does that). The tray
+  tooltip stays "MapleLens", without the version.
+- **A separate About window or dialog** (Daniel): it would be a second window over the
+  game. A modal dialog would also take focus.
 
 ## Anti-goals
 
@@ -149,6 +205,14 @@ traffic, and they send no input to it.
 - **No banned names** in code or comments under `src/` or `scripts/`.
 - **Tools stay apart:** the tray icon and Hide live in `overlay.py` and `app.py`, not in
   a tool.
+- **About is split the same way:** `overlay.py` draws the view and knows nothing about
+  updates. It takes the version, an "updates" text and the URL. `app.py` supplies them.
+  `UpdateCheck` gets one method for its status line, based on state it already keeps
+  (the running thread, `release`, the toggle), plus the last check's outcome, which is
+  the one new piece of state. Exact names are the builder's call.
+- **The view and the status line don't fight:** the tick calls `set_status` every
+  500 ms. While About is open, that call records the state but shows nothing, and × shows
+  whatever was recorded last.
 
 ## Commands
 
@@ -164,9 +228,11 @@ uv run --group build python scripts/build_installer.py   # icon path, frozen tra
 ## Project structure
 
 - `src/maplelens/overlay.py`: the ⋯ button and the shared top row, and the menu helper.
-  Docstrings drop "right-click".
+  Docstrings drop "right-click". The About view and its ×.
 - `src/maplelens/app.py`: the tray icon and its left/right click, Hide/Show (box +
-  `Layer`, kept hidden across ticks and `allow_typing`), and the new text.
+  `Layer`, kept hidden across ticks and `allow_typing`), and the new text. The "About
+  MapleLens" item, its updates line (`UpdateCheck`'s status, or "Running from source"),
+  and refreshing that line each tick while About is open.
 - `src/maplelens/data/icon.ico`: moved from `packaging/windows/icon.ico`.
 - `packaging/windows/maplelens.spec`, `maplelens.iss`: the icon path, and the
   "still running" message.
@@ -192,6 +258,22 @@ uv run --group build python scripts/build_installer.py   # icon path, frozen tra
   - With no tray available (offscreen), there's no Hide item and no tray is created.
 - **`tests/test_build_installer.py`:** the icon is at its new path, and the frozen bundle
   contains `maplelens/data/icon.ico`.
+- **About** (`tests/test_overlay.py`, `tests/test_app.py`, offscreen):
+  - Opening About hides the strip, the pages and the status line. It shows the title,
+    the ×, the •••, the version and the updates line. × brings the tabs back.
+  - `set_status("Looking…")` while About is open shows nothing new. × then shows
+    "Looking…", not the tabs, and `set_status(None)` after × shows the tabs.
+  - `UpdateCheck`'s status line, for each state: a check running, a newer release, no
+    newer release, a failed check, none run yet, and the toggle off. A dismissed update
+    still says "Update to X.Y.Z available". With no `UpdateCheck` the line is "Running
+    from source".
+  - The updates line changes while About stays open, once a check finishes and the tick
+    runs.
+  - The link opens `https://github.com/` + `update.REPO` (with `openUrl` monkeypatched),
+    and follows `MAPLELENS_UPDATE_REPO`.
+  - The view at version 10.10.10, with "Update to 10.10.10 available", is no wider than
+    `TAB_W`.
+  - "About MapleLens" is just before Quit, and after Hide when there's a tray.
 - **By hand on Windows**, installed build and `uv run maplelens`:
   1. The tray icon shows with the MapleLens icon and the "MapleLens" tooltip.
   2. Right-clicking the tray icon and clicking ⋯ both show the same menu, including
@@ -203,6 +285,11 @@ uv run --group build python scripts/build_installer.py   # icon path, frozen tra
      the keyboard after the menu closes.
   6. "Looking for MapleStory…" shows the ⋯, and "Pick game window…" works from it.
   7. Running a hand-started Setup while MapleLens runs shows the new "still running" text.
+  8. About from •••, from the tray menu and from right-click shows the right version.
+     On the installed app it shows a real update status: "Up to date" against the
+     owner's repo, "Update to … available" against a fork with a newer release. From
+     source it says "Running from source". × brings back the tabs. "GitHub page ↗" opens
+     the repo, and the game still has the keyboard after × (before the link is used).
 - **By hand on a Mac** (`uv run maplelens`): the ⋯ menu opens above the box, the game
   keeps the keyboard, and there's no tray icon and no Hide item.
 
@@ -211,7 +298,7 @@ uv run --group build python scripts/build_installer.py   # icon path, frozen tra
 - **Always:** keep one menu, built from the box's actions. Run the four checks before
   each commit.
 - **Ask first:** any new dependency. Any change to the menu's items or order beyond
-  Hide/Show. A tray icon on the Mac.
+  Hide/Show and About. A tray icon on the Mac. Anything more in About.
 - **Never:** a pop-up, a focus steal, a global hotkey, or touching the game in any way.
 
 ## Success criteria
@@ -229,6 +316,10 @@ uv run --group build python scripts/build_installer.py   # icon path, frozen tra
    button and the text.
 8. `uv run pytest`, `ruff check`, `ruff format --check` and the guard pass on Windows and
    macOS CI. The installer build passes its bundle check and `--self-check`.
+9. "About MapleLens", in every menu, shows the running version and a true updates line
+   inside the box, with no second window, no focus taken, and no change in the box's
+   width. × brings back the tabs or "Looking for…", whichever is current.
+10. "GitHub page ↗" opens the repo the update check uses.
 
 ## Open questions
 
