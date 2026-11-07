@@ -95,7 +95,7 @@ U1 and U2 are independent. Daniel works alone, so they run in order, U2 right af
   which may hold non-ASCII characters.
 
 **Acceptance criteria:**
-- [ ] With N installed and running, running the update path with a locally built N+1
+- [x] With N installed and running, running the update path with a locally built N+1
       setup ends with MapleLens N+1 running. No prompt is shown, the uninstall entry
       reads N+1, and `settings.json` and `maplelens.db` are unchanged apart from the
       saved session.
@@ -125,6 +125,8 @@ U1 and U2 are independent. Daniel works alone, so they run in order, U2 right af
   - Cleaned up afterwards: uninstalled, data folder intact.
 - Still to do: the hand-run prompt (criterion 2), the Sandbox run, and criterion 1 with
   the installed exe as N, which needs U4's menu item. It is re-checked in U7.
+- 2026-11-07, U7: criterion 1 passed with the installed 0.1.0 as N (U7 run notes). The
+  hand-run prompt and the Sandbox run are still not done.
 
 **Verification:** build N and N+1 locally (version set temporarily, not committed), then
 try both paths on Daniel's PC and once in Windows Sandbox. `uv run pytest`, then the four
@@ -314,8 +316,8 @@ specs. **Scope:** S.
    - the spec link
 
 **Acceptance criteria:**
-- [ ] Criteria 1–7 seen by hand, with notes in this plan.
-- [ ] The fork has no test tags or releases left.
+- [x] Criteria 1–7 seen by hand, with notes in this plan.
+- [x] The fork has no test tags or releases left.
 - [ ] PR #10 shows the new commits, its CI is green, and its description covers the
       update check.
 
@@ -323,6 +325,48 @@ specs. **Scope:** S.
 checks.
 
 **Dependencies:** U6. **Files:** this plan (notes); PR description. **Scope:** S.
+
+**Run notes (2026-11-07, Daniel's PC):**
+- Built 0.1.0 and 0.1.1 from `e674bc6`. 0.1.1 had its version bumped only for the build;
+  `pyproject.toml` and `uv.lock` were restored. Published v0.1.1 on `dbeilin/maplelens`
+  by hand, tagged at `update-check-spec`. GitHub's asset digest matched the local build's
+  SHA-256 (`8c2aee9f…`).
+- Installed 0.1.0, with `MAPLELENS_UPDATE_REPO=dbeilin/maplelens` set for the user.
+- **Testing gotcha:** Claude Code's sandboxed shell writes to its own copy of
+  `%APPDATA%` and of the uninstall registry key. An install run from it put its files on
+  disk but no Settings → Apps entry, and the app's settings and log looked unchanged from
+  there. Install and read the data folder from a real terminal.
+- Criteria:
+  1. Pass. Started like a Start-menu launch, the box showed "Update to 0.1.1:
+     right-click" with its × on one line under "Looking for MapleStory…". The game wasn't
+     open, so the tabs were hidden by that status line, not by the notice.
+  2. Pass. 0.1.0 was reinstalled from a real terminal first, so it had its uninstall
+     entry. "Check for updates now", then "Update to 0.1.1…": the download ran, Setup
+     ran with no questions, and MapleLens came back by itself. Afterwards:
+     - one uninstall entry, at 0.1.1; `maplelens-0.1.1.dist-info` installed
+     - `settings.json` byte-identical; `maplelens.db` the same time and size (it was
+       locked by the running app, so no hash)
+     - the setup in `updates\` was deleted by the new version at startup
+     - the log was empty: no errors
+     - Not observed: the game keeping the keyboard, since the game wasn't open.
+  3. By tests only (U4): wrong bytes, no digest, a non-SHA-256 digest, a failed
+     download, and a Setup that won't start.
+  4. Pass. Offline (the HTTPS proxy pointed at a dead local port): one `URLError` entry
+     and no download. With no release on the fork: one `HTTPError 404`.
+  5. Pass. Unticking saved `update_check: false` at once, and it survived a restart.
+     Offline with the toggle off, the log stayed empty for over 20 s, so no request was
+     made. "Check for updates now" logged one `URLError` and showed "Couldn't check for
+     updates", which hid itself.
+  6. By tests and the gate (`can_update`). `--self-check` returns before any window or
+     check is made.
+  7. Pass. × hid the line and saved `update_dismissed: "0.1.1"`; after a restart there
+     was no line, and "Update to 0.1.1…" was still in the menu. The N+2 part is by test
+     only.
+- **Found:** MapleLens lets a second copy start while one runs. Each copy keeps its own
+  settings and rewrites the whole file when it saves, so one copy silently undid
+  Daniel's untick in the other. This is outside the update check, so it's a follow-up.
+- Cleaned up: the fork has no releases or tags, and `MAPLELENS_UPDATE_REPO` is removed.
+  Installed 0.1.1 was left on Daniel's PC.
 
 ### Checkpoint C: done
 - [ ] All eight spec success criteria met; evidence in PR #10.
