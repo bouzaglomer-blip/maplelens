@@ -257,8 +257,11 @@ checks.
 `tests/test_overlay.py`, `tests/test_app.py`. **Scope:** S.
 
 ### Checkpoint B: the feature works from source
-- [ ] U3–U5 done; four checks pass; fork CI green on Windows and macOS.
-- [ ] macOS CI shows no request and no new menu items there (gate tests).
+- [x] U3–U5 done; four checks pass; fork CI green on Windows and macOS.
+- [x] macOS CI shows no request and no new menu items there (gate tests).
+- *(2026-11-07: green on the fork's draft PR dbeilin/maplelens#5, run 42352630963 at
+  `e9f72c2`: Windows 456 passed, 5 skipped; macOS 454 passed, 16 skipped, all of them
+  Windows-only tests. The gate tests aren't skipped on either.)*
 
 ## Phase 3: ship it in PR #10
 
