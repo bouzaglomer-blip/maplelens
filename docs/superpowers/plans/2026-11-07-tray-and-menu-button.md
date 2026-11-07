@@ -302,10 +302,13 @@ line don't fight")
       and whether to use `ACCENT`), and `add_about(box, updates)`. The panel is fixed at
       `TAB_W`, so the box stays 210 px with About open, even at 10.10.10 (offscreen
       renders at 100% and 150%). The installer build and `--self-check` pass.*
-- [ ] By hand, `uv run maplelens` on Windows: About from •••, the tray menu and
+- [x] By hand, `uv run maplelens` on Windows: About from •••, the tray menu and
       right-click shows "Running from source" and the right version. × brings back the
       tabs. With the game closed, it brings back "Looking for MapleStory…". The game
       keeps the keyboard after × and after the ••• menu. The box doesn't change width.
+      *2026-11-07: Daniel tried it from `uv run maplelens`: "looks good". His only
+      question was the missing update items, which a source run never has (see the
+      update-check spec). They show in the frozen build.*
 - [x] `git grep -i "right-click\|right click" -- src README.md packaging` is still empty.
 
 **Verification:** `uv run pytest tests/test_overlay.py tests/test_app.py`, then
@@ -319,8 +322,9 @@ or the install steps ("•••, then About MapleLens shows the version"). **Sc
 
 - [x] T7 committed, and `uv run pytest` and the four checks pass on Windows.
   *2026-11-07: `f241f57`, 515 tests, and CI green on Windows and macOS.*
-- [ ] Daniel has opened About from the ••• and the tray, and agrees with how it looks
+- [x] Daniel has opened About from the ••• and the tray, and agrees with how it looks
       at 100% and 150%.
+      *2026-11-07: Daniel's run, as in T7 above.*
 
 ## Phase 3: ship it
 
