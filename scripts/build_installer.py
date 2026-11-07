@@ -57,8 +57,12 @@ MAC_APP = DIST / "MapleLens.app"
 MAC_EXE = MAC_APP / "Contents/MacOS/MapleLens"
 MAC_BUNDLE_PKG = MAC_APP / "Contents/Resources/maplelens"
 MAC_LICENSES = MAC_APP / "Contents/Resources/licenses"
-# Qt's Cocoa platform plugin: without it the app can't show its box.
-MAC_REQUIRED = ["Contents/Frameworks/PySide6/Qt/plugins/platforms/libqcocoa.dylib"]
+# Qt's Cocoa platform plugin: without it the app can't show its box. The icon, as on
+# Windows: the self-check loads it, and this names the missing file.
+MAC_REQUIRED = [
+    "Contents/Frameworks/PySide6/Qt/plugins/platforms/libqcocoa.dylib",
+    "Contents/Resources/maplelens/data/icon.ico",
+]
 # Where Inno Setup 6 installs ISCC.exe: for all users, and per user (winget --scope user).
 ISCC_PLACES = [
     Path(folder) / "Inno Setup 6" / "ISCC.exe"

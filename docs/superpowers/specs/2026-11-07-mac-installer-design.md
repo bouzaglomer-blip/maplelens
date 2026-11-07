@@ -95,8 +95,9 @@ code-signing certificate** that never changes:
   - `LSUIElement` = true, so there's no Dock icon even for the moment before
     `make_accessory()` runs *(my call)*.
   - Minimum macOS: whatever PySide6 and the wheels need; the builder writes it down.
-- Icon: `packaging/mac/icon.icns`, made from the existing Windows icon (`sips` +
-  `iconutil`, no new dependency).
+- Icon: `packaging/mac/icon.icns`, main's maple leaf, drawn by `scripts/make_icon.py`
+  with the Windows `src/maplelens/data/icon.ico`. The bundle also ships that `.ico` as
+  package data, which the self-check loads, as on Windows.
 - Same bundled data as Windows (`maps.json`, every template, every minimap picture) at
   the same module-relative paths; same "fewer PNGs than `src/` fails the build" check;
   required file on the Mac: Qt's Cocoa platform plugin (`libqcocoa.dylib`).
@@ -242,7 +243,7 @@ the same quiet failures. What differs is what happens after the click:
 ## Files (expected)
 
 ```
-packaging/mac/icon.icns            app icon, from the Windows one
+packaging/mac/icon.icns            app icon (main's maple leaf, scripts/make_icon.py)
 packaging/windows/maplelens.spec   gains the Mac BUNDLE (or packaging/mac/maplelens.spec: builder's call)
 scripts/build_installer.py         Mac path: freeze, check, self-check, sign, dmg
 .github/workflows/release.yml      Mac build + sign jobs; publish attaches the dmg

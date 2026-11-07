@@ -272,6 +272,10 @@ def test_check_bundle_needs_the_qt_cocoa_plugin(tmp_path):
         build_installer.check_bundle(src, bundle, app, req)
 
 
+def test_the_mac_bundle_needs_the_packaged_icon():
+    assert "Contents/Resources/maplelens/data/icon.ico" in build_installer.MAC_REQUIRED
+
+
 def test_mac_licenses_ship_pyobjc_not_winrt():
     assert "pyobjc-LICENSE.txt" in build_installer.MAC_LICENSE_SOURCES
     assert "winrt-LICENSE.txt" not in build_installer.MAC_LICENSE_SOURCES

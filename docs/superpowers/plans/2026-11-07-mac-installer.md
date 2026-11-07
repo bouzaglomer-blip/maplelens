@@ -69,7 +69,7 @@ this plan points at its sections instead of repeating them.
 
 ```
 packaging/mac/maplelens.spec       new: PyInstaller Analysis + BUNDLE for the Mac
-packaging/mac/icon.icns            new: from packaging/windows/icon.ico
+packaging/mac/icon.icns            main's maple leaf (scripts/make_icon.py); see Step 5
 scripts/build_installer.py         Mac stages: --freeze-only / --sign-only / --dmg-only / all
 src/maplelens/capture_mac.py       has_access(), request_access(); ensure_access stays for grab.py
 src/maplelens/capture_win.py       has_access() -> True, request_access() no-op
@@ -226,6 +226,9 @@ def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
   "LSUIElement": True, "LSMinimumSystemVersion": <what the wheels need>})`.
 - [ ] **Step 5: Make `packaging/mac/icon.icns`** from `packaging/windows/icon.ico` with
   `sips` (to PNG) and `iconutil` (from an `.iconset` of the standard sizes).
+  *(Superseded 2026-11-08: main's `scripts/make_icon.py` draws the maple leaf
+  `packaging/mac/icon.icns` alongside `src/maplelens/data/icon.ico`; the rebase kept
+  main's.)*
 - [ ] **Step 6: Implement the Mac freeze stage in `build_installer.py`.** On `darwin`,
   `--freeze-only` runs: `freeze_cmd(MAC_SPEC)` → `copy_licenses(MAC_LICENSES,
   MAC_LICENSE_SOURCES)` → `sign_cmd(MAC_APP, "-")` (licenses invalidate PyInstaller's
