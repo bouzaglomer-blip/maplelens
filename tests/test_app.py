@@ -7,7 +7,7 @@ from typing import ClassVar
 import pytest
 from PySide6.QtCore import QObject, Signal
 
-from maplelens import app
+from maplelens import app, overlay
 from maplelens.readers import glyphs, ocr
 from maplelens.tools.path_arrow import maps
 
@@ -324,6 +324,7 @@ class _Fetch:
 def _windows(monkeypatch):
     """The update tests use the Windows release fixtures; a later task passes the platform in."""
     monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(app.capture, "has_access", lambda: True)  # as on Windows, always
 
 
 @pytest.fixture
@@ -1009,6 +1010,19 @@ def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypa
     assert exp.updates == [(None, None, 5.0)]
 
 
+def test_a_tick_without_screen_recording_asks_for_it_and_never_looks(hide, game_found, monkeypatch):
+    box, layer, _, shown = hide
+    monkeypatch.setattr(app.capture, "has_access", lambda: False)
+    monkeypatch.setattr(app, "find_game", lambda settings, save: pytest.fail("looked"))
+    tick, exp = _tick(box, layer, shown)
+    tick.hwnd = 42  # found before the permission was revoked
+    tick.run(5.0)
+    assert not layer.isVisible()
+    assert box._status.text() == app.NEEDS_SCREEN_RECORDING
+    assert exp.updates == [(None, None, 5.0)]
+    assert tick.hwnd is None
+
+
 class _Gate:
     """A fetch that waits until opened, so a check can be caught running."""
 
@@ -1114,3 +1128,59 @@ def test_the_about_line_follows_a_check_on_each_tick(qt_box, make_check, monkeyp
     tick.run(6.0)
     assert qt_box._about_updates.text() == "Update to 0.2.0 available"
     assert qt_box.about_open  # still open: the line changed in place
+
+
+def test_screen_status_asks_for_the_permission_before_looking():
+    assert app.screen_status(False, None) == app.NEEDS_SCREEN_RECORDING
+    assert app.screen_status(False, 42) == app.NEEDS_SCREEN_RECORDING  # revoked mid-run
+    assert app.screen_status(True, None) == app.LOOKING
+    assert app.screen_status(True, 42) is None
+
+
+def test_permission_line_fits_the_box(qt_box):
+    qt_box.set_status(app.NEEDS_SCREEN_RECORDING)
+    assert qt_box._status.sizeHint().width() <= overlay.TAB_W
+    assert "right" not in app.NEEDS_SCREEN_RECORDING.lower()  # the ••• is the way in
+
+
+def test_the_mac_box_has_the_screen_recording_item(qt_box, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    opened = []
+    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    app.setup_screen_recording(qt_box)
+    assert _menu(qt_box) == ["Open Screen Recording settings…", "Quit MapleLens"]
+    qt_box.actions()[0].trigger()
+    assert opened == [app.SCREEN_RECORDING_URL]
+
+
+def test_windows_box_has_no_screen_recording_item(qt_box):
+    app.setup_screen_recording(qt_box)  # the autouse fixture says win32
+    assert _menu(qt_box) == ["Quit MapleLens"]
+
+
+def test_main_no_longer_exits_without_screen_recording(monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QApplication
+
+    real = QApplication.instance() or QApplication([])
+
+    class Proxy:  # the one QApplication a process allows, with exec() ending at once
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def exec(self):
+            return 0
+
+    fake = lambda argv: Proxy()  # noqa: E731
+    fake.quit = QApplication.quit
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setattr(sys, "argv", ["maplelens"])
+    monkeypatch.setattr(app, "QApplication", fake)
+    monkeypatch.setattr(app, "mark_running", lambda: True)
+    monkeypatch.setattr(app, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(app, "update_check", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_log_path", None)
+    requests = []
+    monkeypatch.setattr(app.capture, "has_access", lambda: False)
+    monkeypatch.setattr(app.capture, "request_access", lambda: requests.append(1))
+    assert app.main() == 0
+    assert requests == [1]

@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QAction, QIcon, QImage
+from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtGui import QAction, QDesktopServices, QIcon, QImage
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import maplelens
@@ -40,6 +40,10 @@ ICON = Path(maplelens.__file__).parent / "data" / "icon.ico"
 DEFAULT_TITLE = "MapleStory"
 _log_path: Path | None = None  # where report_once also writes; set by start_log
 LOOKING = f"Looking for {DEFAULT_TITLE}…"  # the box's ••• beside it has the window picker
+NEEDS_SCREEN_RECORDING = f"Screen Recording: click {MENU_MARK}"  # the menu item opens the page
+SCREEN_RECORDING_URL = (
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+)
 # Held while MapleLens runs. The Windows installer and uninstaller look for it (AppMutex in
 # packaging/windows/maplelens.iss) and ask the player to close MapleLens first.
 APP_MUTEX = "MapleLensRunning"
@@ -65,6 +69,26 @@ def build_box(
     box.add_menu_item("Quit MapleLens", QApplication.quit)
     box.show()
     return box
+
+
+def screen_status(has_access: bool, hwnd) -> str | None:
+    """The box's status line: the permission first, then the game search; None when fine."""
+    if not has_access:
+        return NEEDS_SCREEN_RECORDING
+    return None if hwnd else LOOKING
+
+
+def setup_screen_recording(box: Box) -> None:
+    """Show the system's Screen Recording prompt if it's needed (the box says so after);
+    on the Mac add the menu item that opens its settings page, above Quit."""
+    if not capture.has_access():
+        capture.request_access()
+    if sys.platform == "darwin":
+        box.add_menu_item(
+            "Open Screen Recording settings…",
+            lambda: QDesktopServices.openUrl(QUrl(SCREEN_RECORDING_URL)),
+            at=-1,
+        )
 
 
 def find_game(settings: dict, save: Callable[[], None]) -> int | None:
@@ -572,8 +596,9 @@ class Tick:
         if self.box.about_open:  # its updates line follows the check
             text, accent = about_line(self.updates)
             self.box.set_about_updates(text, accent=accent)
-        self.hwnd = self.hwnd or find_game(self.settings, self.save)
-        self.box.set_status(None if self.hwnd else LOOKING)  # a minimized game isn't "looking"
+        allowed = capture.has_access()  # each tick: it can be revoked or granted while we run
+        self.hwnd = (self.hwnd or find_game(self.settings, self.save)) if allowed else None
+        self.box.set_status(screen_status(allowed, self.hwnd))  # a minimized game isn't "looking"
         rect = capture.client_rect(self.hwnd) if self.hwnd else None
         if rect is None:
             self.hwnd = None  # gone or minimized: look again next tick
@@ -629,8 +654,6 @@ def main() -> int:
         return code
     app = _start_qt()
     capture.set_dpi_aware()
-    if not capture.ensure_access():
-        return 1
     start_log(data_dir() / "maplelens.log")
     path = data_dir() / "settings.json"
     settings = load_settings(path)
@@ -649,6 +672,7 @@ def main() -> int:
         tick.hwnd = None  # the next tick finds the chosen window
 
     box = build_box(settings, save, [tool, path_tool], pick)
+    setup_screen_recording(box)
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     shown = add_hide(box, layer, tray)

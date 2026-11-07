@@ -151,10 +151,18 @@ def grab(wid: int, rect: tuple[int, int, int, int]) -> np.ndarray:
     return crop_bgr(rgb, rect)
 
 
-def ensure_access() -> bool:
-    if Quartz.CGPreflightScreenCaptureAccess():
-        return True
+def has_access() -> bool:
+    return bool(Quartz.CGPreflightScreenCaptureAccess())
+
+
+def request_access() -> None:
     Quartz.CGRequestScreenCaptureAccess()
+
+
+def ensure_access() -> bool:
+    if has_access():
+        return True
+    request_access()
     print(
         "MapleLens needs Screen Recording permission to read the game window. It captures\n"
         "only that window's pixels, nothing else.\n"
