@@ -5,9 +5,6 @@ from pathlib import Path
 
 import pytest
 
-# The build makes the Windows installer and ships the licenses of win32-only packages (winrt).
-pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="the build is Windows-only")
-
 ROOT = Path(__file__).parent.parent
 _spec = importlib.util.spec_from_file_location(
     "build_installer", ROOT / "scripts" / "build_installer.py"
@@ -21,6 +18,16 @@ def bundle_ok(monkeypatch, tmp_path):
     monkeypatch.setattr(build_installer, "check_bundle", lambda src, bundle: None)
     monkeypatch.setattr(build_installer, "VERSION_FILE", tmp_path / "version_info.txt")
     monkeypatch.setattr(build_installer, "LICENSES", tmp_path / "licenses")
+    monkeypatch.setattr(build_installer, "LICENSE_SOURCES", {})  # winrt's exists on Windows only
+
+
+@pytest.fixture
+def mac_bundle_ok(monkeypatch, tmp_path):
+    monkeypatch.setattr(build_installer, "check_bundle", lambda *args: None)
+    monkeypatch.setattr(build_installer, "MAC_LICENSES", tmp_path)
+    mine = build_installer.MAC_LICENSE_SOURCES["MapleLens-LICENSE.txt"]
+    monkeypatch.setattr(build_installer, "MAC_LICENSE_SOURCES", {"MapleLens-LICENSE.txt": mine})
+    return tmp_path
 
 
 def _record(calls):
@@ -30,7 +37,7 @@ def _record(calls):
 
 def test_freeze_only_runs_pyinstaller_then_the_self_check(bundle_ok):
     calls = []
-    assert build_installer.main(["--freeze-only"], run=_record(calls)) == 0
+    assert build_installer.main(["--freeze-only"], run=_record(calls), platform="win32") == 0
     cmd, check = calls
     assert check == [str(ROOT / "dist" / "MapleLens" / "MapleLens.exe"), "--self-check"]
     assert cmd[1:3] == ["-m", "PyInstaller"]
@@ -47,7 +54,7 @@ def test_full_build_freezes_checks_then_runs_inno_setup(bundle_ok, monkeypatch, 
     iscc = tmp_path / "ISCC.exe"
     monkeypatch.setattr(build_installer, "find_iscc", lambda: iscc)
     calls = []
-    assert build_installer.main([], run=_record(calls)) == 0
+    assert build_installer.main([], run=_record(calls), platform="win32") == 0
     _, check, setup = calls
     assert check[-1] == "--self-check"
     version = build_installer.read_version(ROOT / "pyproject.toml")
@@ -64,7 +71,7 @@ def test_full_build_needs_inno_setup_before_freezing(bundle_ok, monkeypatch):
     monkeypatch.setattr(build_installer.shutil, "which", lambda name: None)
     calls = []
     with pytest.raises(SystemExit, match="Inno Setup"):
-        build_installer.main([], run=_record(calls))
+        build_installer.main([], run=_record(calls), platform="win32")
     assert calls == []
 
 
@@ -103,7 +110,7 @@ def test_failed_self_check_fails_the_build(bundle_ok):
             raise build_installer.subprocess.CalledProcessError(1, cmd)
 
     with pytest.raises(SystemExit, match="self-check"):
-        build_installer.main(["--freeze-only"], run=run)
+        build_installer.main(["--freeze-only"], run=run, platform="win32")
 
 
 def test_a_hung_self_check_fails_the_build(bundle_ok):
@@ -116,7 +123,7 @@ def test_a_hung_self_check_fails_the_build(bundle_ok):
             raise build_installer.subprocess.TimeoutExpired(cmd, timeout)
 
     with pytest.raises(SystemExit, match="took over"):
-        build_installer.main(["--freeze-only"], run=run)
+        build_installer.main(["--freeze-only"], run=run, platform="win32")
     assert timeouts == [None, build_installer.SELF_CHECK_S]  # the freeze takes its time
 
 
@@ -190,7 +197,7 @@ def test_freeze_writes_the_version_file_first_and_licenses_before_the_check(bund
             )
         )
 
-    build_installer.main(["--freeze-only"], run=run)
+    build_installer.main(["--freeze-only"], run=run, platform="win32")
     (_, version_before_freeze, _), (check, _, licenses_before_check) = seen
     assert version_before_freeze
     assert check == "--self-check"
@@ -199,6 +206,7 @@ def test_freeze_writes_the_version_file_first_and_licenses_before_the_check(bund
     assert f"'{version}'" in build_installer.VERSION_FILE.read_text(encoding="utf-8")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="winrt is installed on Windows only")
 def test_copy_licenses_ships_every_license(tmp_path):
     build_installer.copy_licenses(tmp_path)
     names = {p.name for p in tmp_path.iterdir()}
@@ -239,3 +247,46 @@ def test_setup_says_where_to_quit_a_running_maplelens():
     assert "Quit it from the ' + #$2022#$2022#$2022 +" in iss
     assert "' menu on its box or its tray icon, then try again.'" in iss
     assert "right-click" not in iss
+
+
+def test_mac_freeze_only_freezes_licenses_signs_adhoc_then_self_checks(mac_bundle_ok):
+    calls = []
+    assert build_installer.main(["--freeze-only"], run=_record(calls), platform="darwin") == 0
+    freeze, sign, check = calls
+    assert str(build_installer.MAC_SPEC) in freeze
+    assert sign == build_installer.sign_cmd(build_installer.MAC_APP, "-")
+    assert check == [str(build_installer.MAC_EXE), "--self-check"]
+    assert (mac_bundle_ok / "MapleLens-LICENSE.txt").is_file()  # copied before signing
+
+
+def test_check_bundle_needs_the_qt_cocoa_plugin(tmp_path):
+    src, bundle, app = tmp_path / "src", tmp_path / "bundle", tmp_path / "app"
+    req = build_installer.MAC_REQUIRED
+    _pngs(app, req)
+    build_installer.check_bundle(src, bundle, app, req)
+    (app / req[0]).unlink()
+    with pytest.raises(SystemExit, match=r"libqcocoa\.dylib"):
+        build_installer.check_bundle(src, bundle, app, req)
+
+
+def test_mac_licenses_ship_pyobjc_not_winrt():
+    assert "pyobjc-LICENSE.txt" in build_installer.MAC_LICENSE_SOURCES
+    assert "winrt-LICENSE.txt" not in build_installer.MAC_LICENSE_SOURCES
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="pyobjc is installed on the Mac only")
+def test_copy_licenses_ships_the_mac_set(tmp_path):
+    build_installer.copy_licenses(tmp_path, build_installer.MAC_LICENSE_SOURCES)
+    assert {p.name for p in tmp_path.iterdir()} == set(build_installer.MAC_LICENSE_SOURCES)
+    assert all(p.stat().st_size > 0 for p in tmp_path.iterdir())
+
+
+def test_mac_spec_and_icon_exist():
+    assert build_installer.MAC_SPEC.is_file()
+    assert (ROOT / "packaging" / "mac" / "icon.icns").is_file()
+
+
+def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
+    text = build_installer.MAC_SPEC.read_text()
+    assert "io.github.or-keren.maplelens" in text
+    assert "LSUIElement" in text
