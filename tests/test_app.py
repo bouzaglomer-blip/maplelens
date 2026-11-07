@@ -6,6 +6,7 @@ import pytest
 
 from maplelens import app
 from maplelens.readers import glyphs, ocr
+from maplelens.tools.path_arrow import maps
 
 
 @pytest.fixture
@@ -56,6 +57,23 @@ def test_a_second_start_from_a_terminal_says_why(monkeypatch, capsys):
 def test_self_check_fails_without_a_version(monkeypatch, no_cache):
     # a dist-info folder without METADATA gives None, not an error
     monkeypatch.setattr(app, "version", lambda name: None)
+    assert app.self_check() == 1
+
+
+def test_the_icon_is_package_data():
+    assert app.ICON.is_file()
+    assert app.ICON.parent == maps.DATA.parent  # next to maps.json, so the bundle ships it
+
+
+def test_self_check_fails_without_the_icon(tmp_path, monkeypatch, no_cache):
+    monkeypatch.setattr(app, "ICON", tmp_path / "icon.ico")
+    assert app.self_check() == 1
+
+
+def test_self_check_fails_on_an_icon_qt_cant_read(tmp_path, monkeypatch, no_cache):
+    # the frozen app without its ico image plugin reads the file but can't decode it
+    (tmp_path / "icon.ico").write_bytes(b"not an icon")
+    monkeypatch.setattr(app, "ICON", tmp_path / "icon.ico")
     assert app.self_check() == 1
 
 

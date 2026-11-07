@@ -76,9 +76,14 @@ T1 and T2 are independent, as are T3 and T4. Daniel works alone, so they run in 
 **Acceptance criteria:**
 - [ ] `uv run --group build python scripts/build_installer.py` builds the setup. The
       setup exe and `MapleLens.exe` still show the icon in Explorer.
-- [ ] `dist\MapleLens\MapleLens.exe --self-check` exits 0. With the bundled
+      *2026-11-07: builds (PyInstaller embeds the icon, ISCC takes the new path). The
+      Explorer look is still to check by hand.*
+- [x] `dist\MapleLens\MapleLens.exe --self-check` exits 0. With the bundled
       `icon.ico` deleted, or `qico.dll` deleted, it exits 1.
-- [ ] `packaging/windows/icon.ico` is gone, and nothing points at it
+      *2026-11-07: 0, 1, 1, and 0 again once restored. The first build failed it: `ICON`
+      came from `app.py`'s own folder, which the frozen app runs outside the package, so
+      it's found from `maplelens.__file__` instead.*
+- [x] `packaging/windows/icon.ico` is gone, and nothing points at it
       (`git grep "windows/icon.ico"` finds only the older specs and plans, which stay as
       written).
 

@@ -15,8 +15,10 @@ from importlib.metadata import version
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 
+import maplelens
 from maplelens import capture, update
 from maplelens.overlay import Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
@@ -28,6 +30,10 @@ from maplelens.tools.path_arrow.ui import PathArrowTool
 
 _TICK_MS = 500
 APP_NAME = "MapleLens"  # also the title of our own windows, which the picker leaves out
+# The app icon, as package data: the exe and Setup are built with it, and the app loads it.
+# Found from the package, not from this file: the frozen app runs this file as a script
+# outside the package folder.
+ICON = Path(maplelens.__file__).parent / "data" / "icon.ico"
 # The game client's window title. With no title saved, only a window with exactly this
 # title counts, so a browser tab like "MapleStory wiki - Chrome" never does.
 DEFAULT_TITLE = "MapleStory"
@@ -142,14 +148,17 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
 def self_check() -> int:
     """0 if everything MapleLens ships loads, else 1: the build's smoke test.
 
-    Templates, maps.json, every minimap picture, the OCR engine and the version.
-    The exit code is the answer: the frozen app is windowed, so it has no console.
+    Templates, maps.json, every minimap picture, the icon (which also needs Qt's ico
+    image plugin), the OCR engine and the version. The exit code is the answer: the
+    frozen app is windowed, so it has no console.
     """
     try:
         glyphs.load_all()
         maps.load()
         pictures = sorted(maps.PICTURES.glob("*.png"))
         if not pictures or any(maps.picture(p.stem) is None for p in pictures):
+            return 1
+        if QImage(str(ICON)).isNull():  # missing, or no plugin to decode it
             return 1
         if not version("maplelens"):  # None when its metadata file is missing
             return 1
