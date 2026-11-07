@@ -37,7 +37,8 @@ The build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup --scope user`
   - `overlay.py` — the see-through `Layer` and draggable `Box`; `overlay_mac.py` — the macOS panels
   - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures
   - `store.py` — settings file and data folder
-  - `app.py` — entry point (`uv run maplelens`)
+  - `update.py` — the update check's pure part: GitHub's latest-release reply → `Release`, version compare, digest check (`MAPLELENS_UPDATE_REPO` overrides the repo)
+  - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`)
   - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`
   - `tools/path_arrow/` — the path arrow: `maps`, `route`, `camera`, `ui`
 - `scripts/check_screen_only.py` — the guard; banned lists live there, with reasons
@@ -46,7 +47,7 @@ The build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup --scope user`
 - `scripts/build_installer.py` — the Windows build: freeze, check the bundle, `MapleLens.exe --self-check`, Inno Setup; run locally and by `release.yml`
 - `packaging/windows/` — `maplelens.spec` (PyInstaller), `maplelens.iss` (Inno Setup; its `AppId` never changes), the icon, `NOTICE.txt` and the license texts the build ships
 - `.github/workflows/` — `ci.yml` (the checks), `prepare-release.yml` (started by hand: bumps the version, opens the release PR), `release.yml` (on push to `main`: publishes a version that has no tag yet)
-- `tests/` — pytest; `tests/fixtures/screens/` holds cropped PNG screenshots
+- `tests/` — pytest; `tests/fixtures/screens/` holds cropped PNG screenshots, `tests/fixtures/github/` saved `releases/latest` replies
 - `docs/superpowers/specs/`, `docs/superpowers/plans/` — designs and plans
 
 Planned, **not yet** created: `tools/<name>/` for the class helper and prices.

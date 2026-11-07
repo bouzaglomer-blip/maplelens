@@ -69,6 +69,40 @@ It writes `dist\MapleLens-Setup-X.Y.Z.exe` and fails if the app is missing data 
 `MapleLens.exe --self-check` fails. You don't need it for a pull request; the release
 workflow builds the installer itself.
 
+## Testing an update
+
+The installed app asks `or-keren/maplelens` for its latest release. Point it at your
+fork instead: never test against or-keren's releases, which players see.
+
+1. Build version N and install it.
+2. Set the repo for your user, then start MapleLens from the Start menu so it picks the
+   variable up:
+
+   ```
+   setx MAPLELENS_UPDATE_REPO <you>/maplelens
+   ```
+
+3. Bump the version in `pyproject.toml` for the build only (don't commit it), build N+1,
+   and publish it on your fork by hand. GitHub computes the asset's digest itself.
+
+   ```
+   gh release create vN+1 dist\MapleLens-Setup-N+1.exe --repo <you>/maplelens
+   ```
+
+4. Start N. Within seconds the box offers N+1. Click **Update to N+1…**, and MapleLens
+   comes back as N+1 with your settings and history.
+5. Clean up: delete the test release and its tag, and the variable.
+
+   ```
+   gh release delete vN+1 --repo <you>/maplelens --cleanup-tag --yes
+   reg delete HKCU\Environment /v MAPLELENS_UPDATE_REPO /f
+   ```
+
+Run from source, MapleLens never checks. The update code is tested without the network:
+`tests/test_update.py` reads the saved replies in `tests/fixtures/github/`, and
+`tests/test_app.py` gives the check fake requests, downloads and setups, a tampered one
+included.
+
 ## Making a release (maintainers)
 
 The version lives in `pyproject.toml`. Don't change it by hand: a new version reaching

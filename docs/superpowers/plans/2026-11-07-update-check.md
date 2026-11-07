@@ -265,7 +265,7 @@ checks.
 
 ## Phase 3: ship it in PR #10
 
-### Task U6: docs, spec and plan wording
+### Task U6: docs, spec and plan wording (done)
 
 **Description:**
 - README Download: one paragraph. MapleLens checks GitHub for new versions, what it sends
@@ -281,11 +281,18 @@ checks.
 - Installer spec: the module line says `update-check` ships in the same PR.
 
 **Acceptance criteria:**
-- [ ] `tests/test_docs.py` passes (the Layout paths exist).
-- [ ] A read-through: a player learns from the README that the app calls GitHub and how
+- [x] `tests/test_docs.py` passes (the Layout paths exist).
+- [x] A read-through: a player learns from the README that the app calls GitHub and how
       to stop it.
 
 **Verification:** `uv run pytest tests/test_docs.py`, then the four checks.
+
+**Build notes (2026-11-07):**
+- The README's Updating paragraph now leads with the one-click update. A second
+  paragraph, "The update check talks to GitHub", says when it asks, what it sends, how to
+  turn it off, and that source runs never check.
+- Also updated: spec success criterion 1, which quoted the old notice copy, and Testing
+  step 2, which now publishes N+1 by hand like U7.
 
 **Dependencies:** U5. **Files:** `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, both
 specs. **Scope:** S.

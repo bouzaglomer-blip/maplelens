@@ -25,9 +25,10 @@ The screen-only rule in `AGENTS.md` holds for every part of this document, uncha
 | `update-check` | Tell players a newer version is on GitHub and help them get it | `installer` |
 
 This document specs **`first-run` and `installer`**. `first-run` is small and the
-installed app is useless without it, so the two ship together. `update-check` gets
-its own spec once this one is built; the installer is designed so it fits (see
-Goals → Upgrades).
+installed app is useless without it, so the two ship together. `update-check` has its
+own spec (`docs/superpowers/specs/2026-11-06-update-check-design.md`) and ships in the
+same PR, or-keren/maplelens#10, so v0.1.0 already has it (Daniel, 2026-11-07). The
+installer is designed so it fits (see Goals → Upgrades).
 
 ## What's in the box today (checked 2026-11-06)
 
@@ -131,7 +132,7 @@ Goals → Upgrades).
 ## Non-goals
 
 - **`update-check`**: checking GitHub for a newer version, downloading or applying it.
-  Next spec.
+  Its own spec, shipped in the same PR (#10).
 - **Code signing** (Daniel: unsigned for now).
 - **MSI**, winget, Microsoft Store, Chocolatey.
 - **A Mac app** (the Mac design already postpones `.app`, signing and notarisation).

@@ -15,8 +15,9 @@ This is the `update-check` module from the installer spec's capability map. It b
 that spec's upgrade-in-place installer: same fixed `AppId`, settings and history kept, one
 entry in Settings → Apps.
 
-v0.1.0 ships without this. Players on 0.1.0 install the first version that has it by
-hand, once. Every version after that offers its own updates.
+This ships in v0.1.0, inside or-keren/maplelens#10 with the installer (Daniel,
+2026-11-07). So every installed version offers its own updates, and no player has to
+install a second version by hand.
 
 The screen-only rule in `AGENTS.md` holds unchanged. The check talks only to GitHub, over
 HTTPS, from MapleLens's own process. It never touches the game, its files, its process or
@@ -63,7 +64,8 @@ its network traffic.
   `MapleLens-Setup-X.Y.Z.exe` asset, counts as "no update".
 - **How the player finds out** (Daniel: box line + menu item, no pop-up):
   - **A notice line in the box**, apart from the status line and leaving the tabs in place:
-    "MapleLens X.Y.Z is out, right-click to update". It has a small **×**. Clicking it hides
+    "Update to X.Y.Z: right-click" (2026-11-07: "MapleLens X.Y.Z is out, right-click to
+    update" measured 275 px, too wide for the box). It has a small **×**. Clicking it hides
     the line for that version only (`update_dismissed` in settings). A newer version
     brings the line back.
   - **Menu item "Update to X.Y.Z…"** in the right-click menu, there whenever an update
@@ -94,8 +96,8 @@ its network traffic.
   - A manual "Check for updates now" that fails shows "Couldn't check for updates" in the
     notice line, so the click isn't met with silence. "No update" shows "MapleLens is up
     to date".
-  - A failed download or digest mismatch shows "Update failed, right-click to retry"
-    and logs the reason. The old version keeps running.
+  - A failed download or digest mismatch shows "Update failed: right-click" (the menu
+    item tries again) and logs the reason. The old version keeps running.
 - **README:** one line under Download: MapleLens checks GitHub for new versions, what it
   sends (an HTTPS request with its version in the User-Agent), and how to turn it off.
 
@@ -191,12 +193,14 @@ uv run --group build python scripts/build_installer.py   # setup exe, for the ma
 - **On the fork, by hand** (all workflow and release testing stays on
   `dbeilin/maplelens`, as in the installer plan):
   1. Build and install version N with `MAPLELENS_UPDATE_REPO=dbeilin/maplelens`.
-  2. Publish N+1 on the fork (Prepare release → merge).
+  2. Publish N+1 on the fork by hand (`gh release create`, with a locally built setup),
+     so the fork's `main` is left alone. GitHub computes the asset's digest itself.
   3. Start N: within seconds the line and menu item show N+1.
   4. Click "Update to N+1…": it downloads, Setup runs with no prompts, and MapleLens
      comes back as N+1 with settings and history intact.
-  5. Repeat with a tampered download (served from a local fake API with a wrong digest).
-     Setup never runs and the line says the update failed.
+  5. The tampered download is a test, not a manual run (2026-11-07). `tests/test_app.py`
+     gives the update a download with the wrong bytes, one with no digest and one that
+     fails. Setup never runs, the line says the update failed, and the log says why.
   6. Run once offline: no line, one log entry.
   7. Afterwards, delete the fork's test tags and releases.
 
@@ -214,9 +218,9 @@ uv run --group build python scripts/build_installer.py   # setup exe, for the ma
 
 ## Success criteria
 
-1. With an installed N and a published N+1, the installed app shows "MapleLens N+1 is
-   out…" in the box and "Update to N+1…" in the menu within 10 s of starting, and the
-   tabs still show.
+1. With an installed N and a published N+1, the installed app shows "Update to N+1:
+   right-click" in the box and "Update to N+1…" in the menu within 10 s of starting, and
+   the tabs still show.
 2. Clicking "Update to N+1…" ends with MapleLens running N+1. No prompts were clicked,
    the game kept the keyboard throughout, settings and the history DB are unchanged,
    and Settings → Apps has one entry at N+1.
@@ -242,5 +246,5 @@ uv run --group build python scripts/build_installer.py   # setup exe, for the ma
 - **Builder: silent install or wizard.** Run Setup with `/SILENT` plus a relaunch entry,
   or show the normal wizard without the close prompt. Pick by what the player sees in
   Windows Sandbox (Constraints → Installer changes).
-- **Which version ships it:** the first release after #10 (0.1.1 or 0.2.0, the owner's
-  pick when running Prepare release). 0.1.0 players update to it by hand once.
+- ~~**Which version ships it**~~ Closed 2026-11-07: v0.1.0, inside #10 (Daniel). See
+  Intent.

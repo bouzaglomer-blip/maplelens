@@ -44,8 +44,20 @@ is what matters, and pull requests that break it are not accepted.
    MapleStory…", right-click the box, choose **Pick game window…** and pick the game.
 5. Drag the box where you want it. History opens the per-map table.
 
-**Updating:** download the newer setup and run it. It installs over the old version and
-keeps your settings and EXP history. If MapleLens is running, Setup offers to close it.
+**Updating:** when a new version is out, the box says "Update to X.Y.Z: right-click".
+Right-click the box and choose **Update to X.Y.Z…**. MapleLens downloads the setup,
+checks it against the SHA-256 checksum GitHub publishes for it, saves your session and
+closes. Setup then installs the new version without asking anything and starts it again.
+Your settings and EXP history are kept. You can also download the newer setup and run it
+yourself. It installs over the old version, and if MapleLens is running, Setup offers to
+close it.
+
+**The update check talks to GitHub:** a few seconds after it starts and then once a day,
+MapleLens sends one HTTPS request to GitHub's API for the latest release. The request
+carries `MapleLens/<version>` as its User-Agent and nothing about you or the game; the
+update itself is downloaded from GitHub too. To turn the check off, right-click the box
+and untick **Check for updates automatically**. **Check for updates now** still works
+when you want it. Only the installed Windows app checks; running from source never does.
 
 **Uninstalling:** Settings → Apps → MapleLens. Your settings and history stay in
 `%APPDATA%\MapleLens`; delete that folder to remove them too. If something goes wrong,
