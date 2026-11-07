@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 
 from maplelens.readers import Reading
+from maplelens.readers.skill_window import SkillRow, SkillWindow
 from maplelens.readers.stat_window import StatWindow
+from maplelens.readers.window import UNREADABLE
 from maplelens.store import DEFAULTS
 from maplelens.tools.class_helper.data import MAPS, load
 
@@ -15,9 +17,30 @@ def R(job="Rogue", level=12, stats=None, skills=None):
     return Reading(0.0, None, level, job, None, stats=stats, skills=skills)
 
 
-def SW(level=12, ap=0):
-    base = {"STR": 4, "DEX": 25, "INT": 4, "LUK": 4}
-    return StatWindow(level, ap, base, dict(base), {})
+PLUS = {"STR": (170, 100), "DEX": (170, 120), "INT": (170, 140), "LUK": (170, 160)}
+NIMBLE = 4000000
+
+
+def s(str_, dex, int_, luk):
+    return {"STR": str_, "DEX": dex, "INT": int_, "LUK": luk}
+
+
+def SW(level=12, ap=0, base=None, plus=None):
+    base = base or s(4, 25, 4, 4)
+    return StatWindow(level, ap, base, dict(base), PLUS if plus is None else plus)
+
+
+def KW(tab="Rogue", sp=0, rows=()):
+    return SkillWindow(tab, sp, tuple(rows))
+
+
+ALL_ROGUE = [SkillRow(NIMBLE, 0, (150, 120))]
+ALL_BANDIT = [SkillRow(4200000, 0, (150, 120))]
+LATER_ROWS_ONLY = [SkillRow(4000001, 0, (150, 120))]
+
+
+def pos(x, y):
+    return (x, y)  # RECT is 768 high at dpr 1
 
 
 @pytest.fixture
@@ -151,3 +174,58 @@ def test_bad_class_builds_setting_is_reset(make):
     tool._settings["class_builds"] = "oops"
     tool.update(R(level=12), RECT, 0)
     assert tool._settings["class_builds"] == {}
+
+
+def test_rings_on_the_plus_buttons(make):
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30))), RECT, 0)
+    assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
+
+
+def test_marks_follow_and_hide(make):
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5)), RECT, 0)
+    moved = SW(level=20, ap=5, plus={k: (x + 40, y) for k, (x, y) in PLUS.items()})
+    tool.update(R(level=20, stats=moved), RECT, 1)
+    assert [p for _, p in tool.marks()] == [pos(PLUS["LUK"][0] + 40, PLUS["LUK"][1])]
+    tool.update(R(level=20), RECT, 2)
+    assert tool.marks() == []
+
+
+def test_unreadable_window_hides_marks_and_says_why(make):
+    from maplelens.tools.class_helper.ui import STAT_UNREAD
+
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5)), RECT, 0)
+    tool.update(R(level=20, stats=UNREADABLE), RECT, 1)
+    assert tool.marks() == [] and STAT_UNREAD in texts(tool)
+
+
+def test_over_and_behind_tags(make):
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=0, base=s(4, 35, 4, 20))), RECT, 0)
+    assert {t for t, _ in tool.marks()} == {"DEX 10 over plan", "LUK 10 behind plan"}
+
+
+def test_scroll_the_list_once(make):
+    from maplelens.tools.class_helper.ui import SCROLL
+
+    tool = make()
+    tool.update(R(level=20, skills=KW(rows=LATER_ROWS_ONLY, sp=2)), RECT, 0)
+    assert [t for t, _ in tool.marks()] == [SCROLL]
+
+
+def test_skill_ring_and_merged_memory(make):
+    tool = make()
+    tool.update(R(level=20, skills=KW(rows=ALL_ROGUE, sp=2)), RECT, 0)
+    assert tool.marks() == [("2 here", pos(150, 120))]
+    tool.update(R(level=20, skills=KW(rows=LATER_ROWS_ONLY, sp=2)), RECT, 1)
+    assert tool.skills["Rogue"] == {NIMBLE: 0, 4000001: 0}
+
+
+def test_tabs_are_remembered_apart(make):
+    tool = make()
+    tool.update(R(level=32, job="Bandit", skills=KW(tab="Rogue", sp=2, rows=ALL_ROGUE)), RECT, 0)
+    tool.update(R(level=32, job="Bandit", skills=KW(tab="Bandit", sp=0, rows=ALL_BANDIT)), RECT, 1)
+    tool.update(R(level=32, job="Bandit"), RECT, 2)
+    assert "1st job tab: 2 SP to place" in texts(tool)

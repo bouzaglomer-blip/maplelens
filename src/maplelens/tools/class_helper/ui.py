@@ -2,12 +2,23 @@
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 from shiboken6 import delete
 
-from maplelens.overlay import ACCENT, LABEL_COLOR, LABEL_PT, TAB_W, VALUE_COLOR, Layer, text_label
-from maplelens.readers import Reading
+from maplelens.overlay import (
+    ACCENT,
+    FONT,
+    LABEL_COLOR,
+    LABEL_PT,
+    TAB_W,
+    VALUE_COLOR,
+    Layer,
+    game_to_layer,
+    text_label,
+)
+from maplelens.readers import Reading, glyphs
 from maplelens.readers.skill_window import SkillWindow
 from maplelens.readers.stat_window import StatWindow
 from maplelens.readers.window import UNREADABLE
@@ -15,9 +26,12 @@ from maplelens.tools.class_helper.data import ClassData, Place, load
 from maplelens.tools.class_helper.plan import (
     advance_due,
     advance_text,
+    ap_advice,
+    band_at,
     gear,
     next_step,
     short,
+    sp_advice,
     training,
 )
 
@@ -26,6 +40,9 @@ NO_PLAN = "No plan for {} yet"
 OPEN_STATS = "Open your stat window once"
 STAT_UNREAD = "Can't read your stat window: move it fully into view"
 SKILL_UNREAD = "Can't read your skill window: move it fully into view"
+SCROLL = "scroll the list once"
+TIERS = {0: "Beginner", 1: "1st job", 2: "2nd job"}
+RING_R, TAG_GAP = 11, 26  # ring radius; the tag starts this far right of the + centre
 
 DASH = "\u2013"
 _FIELD, _DARK = "#0b0f15", "#2a1d00"
@@ -35,6 +52,46 @@ QComboBox {{ background: {_FIELD}; color: {VALUE_COLOR}; border: 1px solid {ACCE
 QPushButton#go {{ background: {ACCENT}; color: {_DARK}; font-weight: bold; border: 0;
     border-radius: 4px; padding: 2px 8px; }}
 """
+
+
+class _Mark(QWidget):
+    """A ring of ACCENT with a tag beside it, or a quiet tag alone. Never takes a click."""
+
+    def __init__(self, layer: Layer):
+        super().__init__(layer)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFont(QFont(FONT, LABEL_PT, QFont.Bold))
+        self.tag, self.centre, self.ring = "", (0, 0), False
+        self.hide()
+
+    def put(self, tag: str, centre: tuple[float, float], ring: bool) -> None:
+        self.tag, self.centre, self.ring = tag, centre, ring
+        w = TAG_GAP + QFontMetrics(self.font()).horizontalAdvance(tag) + 6
+        self.setGeometry(round(centre[0]) - RING_R, round(centre[1]) - RING_R, w, 2 * RING_R)
+        self.show()
+        self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setFont(self.font())
+        colour = QColor(ACCENT if self.ring else LABEL_COLOR)
+        if self.ring:
+            p.setPen(QPen(colour, 3))
+            p.drawEllipse(QRectF(2, 2, 2 * RING_R - 4, 2 * RING_R - 4))
+        p.setPen(colour)
+        p.drawText(
+            QRectF(TAG_GAP, 0, self.width() - TAG_GAP, self.height()), Qt.AlignVCenter, self.tag
+        )
+
+
+def _tag(stat: str, a) -> str:
+    if a.add:
+        return f"{a.add} here"
+    if a.over:
+        return f"{stat}{a.over} over plan"
+    return f"{stat}{a.behind} behind plan" if a.behind else ""
 
 
 def _go_map(place: Place | None) -> str | None:
@@ -66,6 +123,9 @@ class ClassHelperTool:
         self._plan_job: str | None = None
         self._r: Reading | None = None
         self._seen_at = 0  # the level at the last update
+        self._rect: tuple | None = None
+        self._pool: list[_Mark] = []  # the layer owns them; they are hidden and reused
+        self._marks: list[tuple[str, tuple[float, float], bool]] = []
         self.tab = self._build_tab()
         self._render([(("label", NO_CLASS, ACCENT), None)])
 
@@ -86,7 +146,58 @@ class ClassHelperTool:
         return tab
 
     def hide_marks(self) -> None:
-        pass  # the marks on the game windows come later
+        for m in self._pool:
+            m.hide()
+
+    def marks(self) -> list[tuple[str, tuple[int, int]]]:
+        return [(m.tag, m.centre) for m in self._pool if not m.isHidden()]
+
+    def _draw_marks(self) -> None:
+        self.hide_marks()
+        r, rect = self._r, self._rect
+        if r is None or rect is None or self._job is None or self._level is None:
+            return
+        k = rect[3] / glyphs.BASE_H  # normalized px -> client px
+        dpr = self._layer.devicePixelRatioF()
+        found = self._ap_marks(r) + self._sp_marks(r)
+        while len(self._pool) < len(found):
+            self._pool.append(_Mark(self._layer))
+        for m, (tag, (x, y), ring) in zip(self._pool, found, strict=False):
+            m.put(tag, game_to_layer(x * k, y * k, dpr), ring)
+
+    def _ap_marks(self, r: Reading) -> list:
+        st, level = r.stats, self._level
+        plan = self._data.plan(self._job)
+        if not isinstance(st, StatWindow) or st.level != level or plan is None:
+            return []
+        band = band_at(plan.build(self._choices().get(plan.job)), level)
+        if band is None:
+            return []
+        out = []
+        for stat, a in ap_advice(band, level, st.base, st.ap).items():
+            if stat in st.plus:
+                tag = _tag(stat + " ", a)
+                if tag:
+                    out.append((tag, st.plus[stat], a.add > 0))
+        return out
+
+    def _sp_marks(self, r: Reading) -> list:
+        sk = r.skills
+        plan = self._data.plan(sk.tab) if isinstance(sk, SkillWindow) else None
+        if plan is None or not sk.rows:
+            return []
+        steps = plan.build(self._choices().get(plan.job)).sp
+        advice = sp_advice(steps, self.skills[sk.tab], sk.sp, self._data.skills, sk.tab)
+        if advice is None:
+            return [(SCROLL, sk.rows[0].plus, False)]
+        planned = {s.skill for s in steps}
+        out = []
+        for row in sk.rows:
+            a = advice.get(row.skill)
+            tag = _tag("", a) if row.skill in planned else ("off plan" if a and a.over else "")
+            if a and tag:
+                out.append((tag, row.plus, a.add > 0))
+        return out
 
     def _on_build(self, name: str) -> None:
         if self._plan_job is None or not name:
@@ -114,7 +225,7 @@ class ClassHelperTool:
             self._stats = (st, st.level)
         sk = r.skills
         if isinstance(sk, SkillWindow) and self._level is not None:
-            self.skills[sk.tab] = {row.skill: row.level for row in sk.rows}
+            self.skills.setdefault(sk.tab, {}).update({row.skill: row.level for row in sk.rows})
             self.sp[sk.tab] = (sk.sp, self._level)
 
     def _stats_now(self) -> StatWindow | None:
@@ -129,15 +240,16 @@ class ClassHelperTool:
 
     # --- view -------------------------------------------------------------
 
-    def update(self, r: Reading | None, _game_rect: tuple | None, _now: float) -> None:
+    def update(self, r: Reading | None, game_rect: tuple | None, _now: float) -> None:
         self._remember(r)
-        self._r = r
+        self._r, self._rect = r, game_rect
         self._render_last()
 
     def _render_last(self) -> None:
         was = self._content
         items, content = self._items(self._r)
         self._render(items)
+        self._draw_marks()
         level = self._level
         if self.tab.isVisible():
             self.dot = False
@@ -162,8 +274,19 @@ class ClassHelperTool:
             more, extra = self._plan_items(plan, level)
             out += more
             key += extra
+        out += [(("label", t, ACCENT), None) for t in self._tab_lines(r)]
         out += [(("label", t, ACCENT), None) for t in self._reasons(r)]
         return out, tuple(key)
+
+    def _tab_lines(self, r: Reading | None) -> list[str]:
+        """A skill tab left with SP, other than the one open now."""
+        open_tab = r.skills.tab if r and isinstance(r.skills, SkillWindow) else None
+        out = []
+        for tab, (n, at) in self.sp.items():
+            plan = self._data.plan(tab)
+            if tab != open_tab and n > 0 and at == self._level and plan:
+                out.append(f"{TIERS.get(plan.tier, tab)} tab: {n} SP to place")
+        return out
 
     def _plan_items(self, plan, level: int):  # -> (items, dot key parts)
         out = []
