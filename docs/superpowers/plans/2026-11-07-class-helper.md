@@ -374,8 +374,15 @@ The skill window (Task 7) uses the same two steps, so they live in `readers/wind
 ```python
 @pytest.mark.parametrize(
     "text, want",
-    [("25", (25, 25)), ("124(122+2)", (122, 124)), ("4(4+0)", (4, 4)), ("25(20+4)", None),
-     ("", None), ("2a", None), ("25(20+", None)],
+    [
+        ("25", (25, 25)),
+        ("124(122+2)", (122, 124)),
+        ("4(4+0)", (4, 4)),
+        ("25(20+4)", None),
+        ("", None),
+        ("2a", None),
+        ("25(20+", None),
+    ],
 )
 def test_parse_stat(text, want):
     assert parse_stat(text) == want
