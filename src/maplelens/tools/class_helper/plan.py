@@ -42,15 +42,16 @@ def ap_advice(band: Band, level: int, stats: dict[str, int], unspent: int) -> di
 def _walk(steps, levels, points, skills):  # -> dict | None (None: next point hits an unknown skill)
     lv = dict(levels)
     for _ in range(points):
-        step = next(
-            (
-                s
-                for s in steps
-                if lv.get(s.skill, -1) < s.up_to
-                and all(lv.get(r, 0) >= n for r, n in skills[s.skill].requires.items())
-            ),
-            None,
-        )
+        step = None
+        for s in steps:
+            if lv.get(s.skill, -1) >= s.up_to:
+                continue
+            req = skills[s.skill].requires
+            if any(r not in lv for r in req):  # a prerequisite we can't see: can't tell if met
+                return None
+            if all(lv[r] >= n for r, n in req.items()):
+                step = s
+                break
         if step is None:
             break
         if step.skill not in lv:

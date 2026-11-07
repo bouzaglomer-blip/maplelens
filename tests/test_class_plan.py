@@ -72,3 +72,7 @@ def test_unknown_later_skill_still_marks_without_tags():
 def test_finished_plan_places_nothing():
     a = sp_advice(STEPS, {1: 3, 2: 2, 3: 1}, 2, SK, "T")
     assert all(v == Advice() for v in a.values())
+
+
+def test_unknown_prerequisite_needs_a_scroll():
+    assert sp_advice([SpStep(2, 2), SpStep(3, 1)], {2: 0, 3: 0}, 1, SK, "T") is None
