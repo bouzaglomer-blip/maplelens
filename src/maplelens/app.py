@@ -39,6 +39,7 @@ APP_MUTEX = "MapleLensRunning"
 # Tells Setup the app started it to update itself: Setup waits for MapleLens to exit instead
 # of asking to close it, then starts the new version (IsUpdateRun in maplelens.iss).
 UPDATE_FLAG = "/MAPLELENSUPDATE"
+_ALREADY_EXISTS = 183  # Windows' error code when the named mutex was already there
 
 
 def build_box(
@@ -147,15 +148,19 @@ def self_check() -> int:
     return 0 if ocr.engine() is not None else 1
 
 
-def mark_running() -> int | None:
-    """Create APP_MUTEX on Windows; the handle stays open until MapleLens exits."""
+def mark_running() -> bool:
+    """Create APP_MUTEX on Windows, held until MapleLens exits; False if a copy holds it.
+
+    True if it can't be created at all: better a second copy than none. Elsewhere, True.
+    """
     if sys.platform != "win32":
-        return None
+        return True
     import ctypes
 
-    kernel32 = ctypes.windll.kernel32
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateMutexW.restype = ctypes.c_void_p
-    return kernel32.CreateMutexW(None, False, APP_MUTEX)
+    kernel32.CreateMutexW(None, False, APP_MUTEX)  # the handle stays open until exit
+    return ctypes.get_last_error() != _ALREADY_EXISTS
 
 
 def update_cmd(setup: Path) -> list[str]:
@@ -399,15 +404,29 @@ def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests
 
 def _prepare_process() -> None:
     """Process-wide setup that must happen before Qt starts."""
-    mark_running()
     if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
         os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
 
 
-def main() -> int:  # noqa: PLR0915 - the entry point wires every part together
+def early_exit() -> int | None:
+    """main's exit code when it must stop before any window, else None.
+
+    The self-check comes first: the build runs it while MapleLens may be running. Then
+    one copy at a time: each holds its own settings and rewrites the whole file on save,
+    so a second would undo the first's changes. It quits quietly, with no window to take
+    focus from the game. An update's new version starts only once the old one has exited.
+    """
     if "--self-check" in sys.argv[1:]:
         return self_check()
+    if not mark_running():
+        return 0
+    return None
+
+
+def main() -> int:  # noqa: PLR0915 - the entry point wires every part together
+    if (code := early_exit()) is not None:
+        return code
     _prepare_process()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)

@@ -38,6 +38,13 @@ def test_main_runs_self_check_before_any_window(monkeypatch):
     assert app.main() == 7
 
 
+def test_a_second_start_exits_without_opening_a_window(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["maplelens"])
+    monkeypatch.setattr(app, "mark_running", lambda: False)  # another copy holds the mutex
+    monkeypatch.setattr(app, "QApplication", None)  # building one would fail the test
+    assert app.main() == 0
+
+
 def test_self_check_fails_without_a_version(monkeypatch, no_cache):
     # a dist-info folder without METADATA gives None, not an error
     monkeypatch.setattr(app, "version", lambda name: None)
@@ -152,6 +159,13 @@ def test_mark_running_holds_the_mutex_the_installer_checks(monkeypatch):
     handle = kernel32.OpenMutexW(synchronize, False, "MapleLensTestMutex")
     assert handle
     kernel32.CloseHandle(ctypes.c_void_p(handle))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="named mutexes are a Windows thing")
+def test_mark_running_is_false_while_another_copy_holds_the_mutex(monkeypatch):
+    monkeypatch.setattr(app, "APP_MUTEX", "MapleLensTestSecondCopy")
+    assert app.mark_running()  # the first copy
+    assert not app.mark_running()  # a second start finds it held
 
 
 def test_installer_checks_the_apps_mutex():
