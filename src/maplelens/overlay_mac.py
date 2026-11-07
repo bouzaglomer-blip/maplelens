@@ -3,7 +3,7 @@
 import objc
 from AppKit import (
     NSApplication,
-    NSApplicationActivationPolicyAccessory,
+    NSApplicationActivationPolicyRegular,
     NSPanel,
     NSPopUpMenuWindowLevel,
     NSWindowStyleMaskNonactivatingPanel,
@@ -24,9 +24,12 @@ def make_panel(widget: QWidget) -> None:
     window.setLevel_(NSPopUpMenuWindowLevel - 1)
 
 
-def make_accessory() -> None:
-    """No Dock icon or menu bar: the game stays the frontmost app."""
-    NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+def make_regular() -> None:
+    """A Dock icon and a menu bar, also for a plain python process (run from source).
+
+    Only the policy: it never brings MapleLens or any other app to the front.
+    """
+    NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyRegular)
 
 
 def release_keyboard() -> None:

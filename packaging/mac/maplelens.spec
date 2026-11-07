@@ -69,7 +69,6 @@ app = BUNDLE(
     info_plist={
         "CFBundleShortVersionString": VERSION,
         "CFBundleVersion": VERSION,
-        "LSUIElement": True,  # no Dock icon, even before the app hides it itself
         "LSMinimumSystemVersion": "14.4",
     },
 )

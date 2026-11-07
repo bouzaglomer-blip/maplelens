@@ -2,11 +2,13 @@ import hashlib
 import re
 import sys
 import threading
+import types
 from typing import ClassVar
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 
+import maplelens
 from maplelens import app, overlay, update_mac
 from maplelens.readers import glyphs, ocr
 from maplelens.tools.path_arrow import maps
@@ -1037,6 +1039,102 @@ def test_with_no_tray_there_is_no_hide_item(qt_box):
     shown = app.add_hide(qt_box, Layer(), None)
     assert shown.on
     assert _menu(qt_box) == ["Quit MapleLens"]
+
+
+def test_the_dock_menu_is_the_box_menu_with_items_added_later(qt_box):
+    docked = []  # stands in for QMenu.setAsDockMenu, which needs the real Dock
+    menu = app.make_dock(qt_box, available=True, as_dock=docked.append)
+    assert docked == [menu]
+    assert menu.parent() is qt_box  # lives as long as the box
+    qt_box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)  # the update check, later
+    menu.aboutToShow.emit()  # what Qt does as the Dock menu opens
+    assert menu.actions() == qt_box.actions()
+    assert [a.text() for a in menu.actions()] == ["Update to 0.2.0…", "Quit MapleLens"]
+
+
+def test_no_dock_menu_off_the_mac(qt_box):
+    assert app.make_dock(qt_box, available=False, as_dock=pytest.fail) is None
+
+
+class _FakeQApp(QObject):
+    """Stands in for the QApplication: its applicationStateChanged, which the Dock click
+    sends (Qt::ApplicationActive, even when MapleLens is already active)."""
+
+    applicationStateChanged = Signal(object)  # a Qt.ApplicationState
+
+
+@pytest.fixture
+def dock_hide(qt_box, monkeypatch):
+    """hide's Mac version: no tray; the Dock click is the way back."""
+    from maplelens.overlay import Layer
+
+    layer = Layer()
+    qt_box.show()
+    layer.show()
+    qt = _FakeQApp()
+    monkeypatch.setattr(sys, "platform", "darwin")
+    return qt_box, layer, qt, app.add_hide(qt_box, layer, None, qt)
+
+
+def test_on_the_mac_the_hide_item_sits_just_before_quit(dock_hide):
+    box, *_ = dock_hide
+    assert _menu(box) == ["Hide MapleLens", "Quit MapleLens"]
+
+
+def test_a_dock_click_brings_a_hidden_box_back(dock_hide):
+    box, _, qt, shown = dock_hide
+    shown.toggle()
+    qt.applicationStateChanged.emit(Qt.ApplicationActive)
+    assert shown.on and box.isVisible()
+    assert _menu(box)[0] == "Hide MapleLens"
+
+
+def test_activation_while_shown_changes_nothing(dock_hide):
+    box, _, qt, shown = dock_hide
+    qt.applicationStateChanged.emit(Qt.ApplicationActive)  # Cmd-Tab, or a Dock click
+    assert shown.on and box.isVisible()
+    shown.toggle()
+    qt.applicationStateChanged.emit(Qt.ApplicationInactive)  # the game comes back
+    assert not shown.on and not box.isVisible()
+
+
+def test_on_windows_activation_never_shows_the_box(qt_box, fake_tray, monkeypatch):
+    from maplelens.overlay import Layer
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    box, layer, qt = qt_box, Layer(), _FakeQApp()
+    box.show()
+    tray = app.make_tray(box, app.ICON, available=True, tray_cls=fake_tray)
+    shown = app.add_hide(box, layer, tray, qt)
+    shown.toggle()
+    qt.applicationStateChanged.emit(Qt.ApplicationActive)
+    assert not shown.on and not box.isVisible()
+
+
+def test_on_linux_with_no_tray_there_is_still_no_hide_item(qt_box, monkeypatch):
+    from maplelens.overlay import Layer
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    app.add_hide(qt_box, Layer(), None, _FakeQApp())
+    assert _menu(qt_box) == ["Quit MapleLens"]
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+def test_on_the_mac_maplelens_is_in_the_dock_with_the_maple_leaf(qt_box, monkeypatch, frozen):
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QApplication
+
+    calls = []  # never the real activation policy
+    fake = types.SimpleNamespace(make_regular=lambda: calls.append("regular"))
+    monkeypatch.setitem(sys.modules, "maplelens.overlay_mac", fake)
+    monkeypatch.setattr(maplelens, "overlay_mac", fake, raising=False)
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+    qt = QApplication.instance()
+    qt.setWindowIcon(QIcon())
+    app.show_in_dock(qt)
+    assert calls == ["regular"]
+    # from source the icon is ICON, not Python's; the installed app has its icon.icns
+    assert qt.windowIcon().isNull() is frozen
 
 
 class _Recorder:

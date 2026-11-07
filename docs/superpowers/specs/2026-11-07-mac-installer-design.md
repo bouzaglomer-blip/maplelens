@@ -20,8 +20,8 @@ The screen-only rule in `AGENTS.md` holds for every part of this document, uncha
 ## What's there today (checked 2026-11-07, `main` at 4199c20)
 
 - Mac support works from source: `capture_mac.py` (`CGWindowListCreateImage`, sRGB),
-  `ocr_mac.py` (Vision), `overlay_mac.py` (`make_accessory()`: no Dock icon, non-activating
-  panels). Runtime deps on the Mac: PySide6, numpy, opencv-python-headless and three
+  `ocr_mac.py` (Vision), `overlay_mac.py` (non-activating panels; `make_accessory()`, no
+  Dock icon, until 2026-11-08, when the user asked for a Dock icon: now `make_regular()`). Runtime deps on the Mac: PySide6, numpy, opencv-python-headless and three
   `pyobjc-framework-*` packages (Cocoa, Quartz, Vision).
 - `capture_mac.ensure_access()` checks Screen Recording, asks macOS for it, **prints** a
   message and returns `False`, and `main()` exits. A windowed `.app` has no console, so
@@ -92,8 +92,9 @@ code-signing certificate** that never changes:
     permissions on it. `io.github.or-keren.maplelens`, **confirmed by the owner
     2026-11-08**.
   - `CFBundleShortVersionString` / `CFBundleVersion`: the `pyproject.toml` version.
-  - `LSUIElement` = true, so there's no Dock icon even for the moment before
-    `make_accessory()` runs *(my call)*.
+  - No `LSUIElement`: MapleLens is a normal app with a Dock icon (the bundle's
+    `icon.icns`) and a menu bar, named by `CFBundleName` "MapleLens" (user, 2026-11-08).
+    The Dock icon's menu is the box's menu; clicking the icon brings a hidden box back.
   - Minimum macOS: whatever PySide6 and the wheels need; the builder writes it down.
 - Icon: `packaging/mac/icon.icns`, main's maple leaf, drawn by `scripts/make_icon.py`
   with the Windows `src/maplelens/data/icon.ico`. The bundle also ships that `.ico` as
@@ -301,7 +302,7 @@ tests/                             update asset per platform; can_update; helper
 1. On an Apple silicon Mac with no Python or developer tools, a player downloads
    `MapleLens-X.Y.Z.dmg` from the Release, drags MapleLens to Applications, opens it via
    Open Anyway, allows Screen Recording once, and MapleLens finds the game by itself. No
-   Terminal at any point, no Dock icon.
+   Terminal at any point. MapleLens shows in the Dock with the maple leaf.
 2. EXP meter and path arrow readings match `uv run maplelens` on the same screen.
 3. "Update to X.Y.Z…" on the Mac downloads, verifies, replaces and restarts MapleLens;
    settings and history kept; no Gatekeeper prompt; no Screen Recording prompt if

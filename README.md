@@ -84,12 +84,16 @@ Apple silicon (M1 or newer) only.
    **Open Anyway** next to MapleLens, then confirm. You only do this once.
 4. MapleLens needs Screen Recording to see the game. If the box says "Allow, then
    reopen: click •••", click **•••** on the box, choose **Open Screen Recording
-   settings…** and tick MapleLens. Then quit and reopen MapleLens: macOS doesn't give a
-   running app the permission, and it doesn't offer to restart it. If MapleLens is
+   settings…** and tick MapleLens. Then quit MapleLens (right-click its Dock icon and
+   choose **Quit**, or press ⌘Q) and click MapleLens in the Dock or open it from
+   Applications again: macOS doesn't give a running app the permission, and it doesn't
+   offer to restart it. If MapleLens is
    already listed but not working, remove it with "−" and add it again with "+".
 5. Start MapleStory Classic **windowed** (the Mac launcher's fullscreen hides overlays),
    then use the box as on Windows. If it says "Looking for MapleStory…", click **•••** on
-   the box and choose **Pick game window…**. There's no tray icon on the Mac.
+   the box and choose **Pick game window…**. Right-clicking MapleLens in the Dock opens
+   the same menu; **Hide MapleLens** there hides the box and the arrow, and clicking the
+   Dock icon brings them back.
 
 **Updating:** same as Windows: click **•••** on the box and choose **Update to X.Y.Z…**.
 MapleLens downloads the new dmg, checks its SHA-256 checksum, and swaps itself in. You

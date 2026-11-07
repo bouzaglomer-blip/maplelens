@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QIcon, QImage
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -557,11 +557,29 @@ def make_tray(
         return None
     tray = tray_cls(QIcon(str(icon)), box)
     tray.setToolTip(APP_NAME)
-    menu = QMenu(box)
-    box.attach_menu(menu)
-    tray.setContextMenu(menu)
+    tray.setContextMenu(box_menu(box))
     tray.show()
     return tray
+
+
+def box_menu(box: Box) -> QMenu:
+    """A menu of the box's own items, read again each time it opens: the tray's, the Dock's."""
+    menu = QMenu(box)
+    box.attach_menu(menu)
+    return menu
+
+
+def make_dock(box: Box, *, available: bool, as_dock: Callable | None = None) -> QMenu | None:
+    """The Dock icon's menu on the Mac: the box's menu, as the tray has it. None if not
+    `available`. macOS adds its own items (Options, Quit…) under it.
+
+    `as_dock` makes the menu the Dock's (QMenu.setAsDockMenu, which only the Mac's Qt has).
+    """
+    if not available:
+        return None
+    menu = box_menu(box)
+    (as_dock or QMenu.setAsDockMenu)(menu)
+    return menu
 
 
 HIDE, SHOW = f"Hide {APP_NAME}", f"Show {APP_NAME}"
@@ -590,21 +608,34 @@ class Shown:
             self.item.setText(HIDE if self.on else SHOW)
 
 
-def add_hide(box: Box, layer: Layer, tray: QSystemTrayIcon | None) -> Shown:
-    """Hide / Show: a menu item just before Quit, and a left click on the tray icon.
+def add_hide(
+    box: Box, layer: Layer, tray: QSystemTrayIcon | None, qt: QApplication | None = None
+) -> Shown:
+    """Hide / Show: a menu item just before Quit, and a way back: a left click on the
+    tray icon (Windows), or on the Mac a click on the Dock icon.
 
-    Only with a tray icon: without one, a hidden box would leave no way back.
+    The Dock click reaches Qt as `qt` (the QApplication) becoming active, sent even when
+    it already is; so does Cmd-Tab. Either shows a hidden box; a shown one stays as it is.
+    With no way back there's no item: a hidden box would stay hidden.
     """
     shown = Shown(box, layer)
-    if tray is None:
+    dock = sys.platform == "darwin" and qt is not None
+    if tray is None and not dock:
         return shown
 
     def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.Trigger:  # a left click; a double click has one too
             shown.toggle()
 
+    def activated(state: Qt.ApplicationState) -> None:
+        if state == Qt.ApplicationActive and not shown.on:
+            shown.toggle()
+
     shown.item = box.add_menu_item(HIDE, shown.toggle, at=-1)
-    tray.activated.connect(clicked)
+    if tray is not None:
+        tray.activated.connect(clicked)
+    if dock:
+        qt.applicationStateChanged.connect(activated)
     return shown
 
 
@@ -675,17 +706,26 @@ class Tick:
         self.box.place(rect)
 
 
+def show_in_dock(app: QApplication) -> None:
+    """Mac: a normal app, with a Dock icon and a menu bar, even run from source as a plain
+    python. From source the icon is ICON, not Python's; the installed app has its icon.icns.
+    """
+    from maplelens import overlay_mac  # AppKit only exists on the Mac
+
+    overlay_mac.make_regular()
+    if not getattr(sys, "frozen", False):
+        app.setWindowIcon(QIcon(str(ICON)))
+
+
 def _start_qt() -> QApplication:
-    """The QApplication, started so that it never takes the front from the game."""
-    if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
-        os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
+    """The QApplication, started so that it never takes the front from the game itself:
+    only the player's Dock click or Cmd-Tab brings MapleLens forward."""
+    if sys.platform == "darwin":  # Qt raises a starting app over the others unless told not
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     if sys.platform == "darwin":
-        from maplelens import overlay_mac
-
-        overlay_mac.make_accessory()
+        show_in_dock(app)
         app.processEvents()  # finish launching first: a window shown before that activates us
     return app
 
@@ -733,7 +773,8 @@ def main() -> int:
     setup_screen_recording(box)
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
-    shown = add_hide(box, layer, tray)
+    make_dock(box, available=sys.platform == "darwin")  # the box, its parent, holds it
+    shown = add_hide(box, layer, tray, app)
     add_about(box, updates)  # after Hide: just before Quit
     tick = Tick(settings, save, box, layer, tool, path_tool, updates, seen, shown)
     timer = QTimer()
