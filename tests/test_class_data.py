@@ -102,3 +102,25 @@ def test_bands_cover_from_level_to_200():
 
 def test_records_cover_the_owners_path():
     assert {"Beginner", "Rogue", "Assassin", "Bandit"} <= set(D.jobs)
+
+
+def test_sp_plans_only_ever_raise_a_skill_and_meet_prerequisites():
+    for job, plan in D.jobs.items():
+        for b in plan.builds:
+            have: dict[int, int] = {}
+            for s in b.sp:
+                where = f"{job}/{b.name}: skill {s.skill}"
+                assert s.up_to > have.get(s.skill, 0), f"{where} up_to {s.up_to} does not raise it"
+                for need, lv in D.skills[s.skill].requires.items():
+                    # a prerequisite on an earlier job's tab would be treated as met; none exist
+                    assert have.get(need, 0) >= lv, f"{where} needs skill {need} at {lv} first"
+                have[s.skill] = s.up_to
+
+
+def test_reset_at_is_inside_the_record():
+    for job, plan in D.jobs.items():
+        for b in plan.builds:
+            if b.reset_at is not None:
+                assert plan.from_level <= b.reset_at <= 200, (
+                    f"{job}/{b.name}: reset_at {b.reset_at}"
+                )

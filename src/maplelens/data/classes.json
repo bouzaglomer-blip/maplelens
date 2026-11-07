@@ -244,6 +244,37 @@
     "DEX": 65,
     "LUK": 140
    }
+  },
+  "1332013": {
+   "name": "Korean Fan",
+   "req": {
+    "level": 40,
+    "LUK": 70
+   }
+  },
+  "1332016": {
+   "name": "Sai",
+   "req": {
+    "level": 50,
+    "STR": 45,
+    "LUK": 100
+   }
+  },
+  "1332019": {
+   "name": "Serpent's Coil",
+   "req": {
+    "level": 60,
+    "STR": 55,
+    "LUK": 120
+   }
+  },
+  "1332021": {
+   "name": "Golden River",
+   "req": {
+    "level": 70,
+    "STR": 65,
+    "LUK": 140
+   }
   }
  },
  "jobs": [
@@ -1297,17 +1328,67 @@
       },
       {
        "from": 40,
+       "to": 41,
+       "hold": {
+        "STR": 4,
+        "DEX": 31
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 41,
+       "to": 49,
+       "hold": {
+        "STR": {
+         "base": -196,
+         "per_level": 5
+        },
+        "DEX": 31
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 49,
        "to": 50,
        "hold": {
+        "STR": 45,
         "DEX": 35
        },
        "rest": "LUK"
       },
       {
        "from": 50,
+       "to": 58,
+       "hold": {
+        "STR": 45,
+        "DEX": 40
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 58,
+       "to": 59,
+       "hold": {
+        "STR": 50,
+        "DEX": 40
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 59,
+       "to": 60,
+       "hold": {
+        "STR": 55,
+        "DEX": 40
+       },
+       "rest": "LUK"
+      },
+      {
+       "from": 60,
        "to": 66,
        "hold": {
-        "DEX": 40
+        "STR": 55,
+        "DEX": 45
        },
        "rest": "LUK"
       },
@@ -1315,7 +1396,8 @@
        "from": 66,
        "to": 67,
        "hold": {
-        "DEX": 42
+        "STR": 57,
+        "DEX": 45
        },
        "rest": "LUK"
       },
@@ -1323,7 +1405,8 @@
        "from": 67,
        "to": 68,
        "hold": {
-        "DEX": 47
+        "STR": 62,
+        "DEX": 45
        },
        "rest": "LUK"
       },
@@ -1331,7 +1414,8 @@
        "from": 68,
        "to": 69,
        "hold": {
-        "DEX": 52
+        "STR": 65,
+        "DEX": 47
        },
        "rest": "LUK"
       },
@@ -1339,7 +1423,8 @@
        "from": 69,
        "to": 70,
        "hold": {
-        "DEX": 57
+        "STR": 65,
+        "DEX": 52
        },
        "rest": "LUK"
       },
@@ -1347,7 +1432,8 @@
        "from": 70,
        "to": 200,
        "hold": {
-        "DEX": 62
+        "STR": 65,
+        "DEX": 57
        },
        "rest": "LUK"
       }
@@ -1390,24 +1476,8 @@
        "up_to": 21
       },
       {
-       "skill": 4201001,
-       "up_to": 1
-      },
-      {
        "skill": 4201003,
        "up_to": 30
-      },
-      {
-       "skill": 4201001,
-       "up_to": 19
-      },
-      {
-       "skill": 4201001,
-       "up_to": 20
-      },
-      {
-       "skill": 4200001,
-       "up_to": 2
       },
       {
        "skill": 4200001,
@@ -1450,17 +1520,22 @@
        "map_id": null
       },
       {
-       "item": 1332012,
+       "item": 1332013,
        "from_level": 40,
        "map_id": null
       },
       {
-       "item": 1332015,
+       "item": 1332016,
        "from_level": 50,
        "map_id": null
       },
       {
-       "item": 1332020,
+       "item": 1332019,
+       "from_level": 60,
+       "map_id": null
+      },
+      {
+       "item": 1332021,
        "from_level": 70,
        "map_id": null
       }
