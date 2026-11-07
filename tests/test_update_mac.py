@@ -107,6 +107,13 @@ def test_install_update_keeps_running_when_the_helper_wont_start(handoff, tmp_pa
     assert handoff.calls == []
 
 
+def test_install_update_refuses_outside_an_app_bundle(handoff, monkeypatch, tmp_path):
+    monkeypatch.setattr(update_mac.sys, "executable", "/usr/local/bin/python3")
+    with pytest.raises(RuntimeError, match=r"\.app"):
+        update_mac.install_update(tmp_path / "MapleLens-0.2.0.dmg")
+    assert handoff.calls == []
+
+
 # --- the real helper: hdiutil and ditto, a fake `open` ---------------------------------
 
 

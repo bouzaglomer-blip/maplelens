@@ -76,9 +76,13 @@ def helper_cmd(pid: int, dmg: Path, bundle: Path, result: Path) -> list[str]:
 
 def install_update(dmg: Path) -> None:
     """Start the helper on its own, then quit the way Quit does (aboutToQuit saves the
-    session). If the helper can't start, the OSError propagates and MapleLens keeps running.
+    session). If there's no bundle or the helper can't start, the error propagates and
+    MapleLens keeps running.
     """
-    cmd = helper_cmd(os.getpid(), dmg, bundle_path(sys.executable), dmg.parent / RESULT)
+    bundle = bundle_path(sys.executable)
+    if bundle is None:
+        raise RuntimeError(f"{sys.executable} isn't inside a .app: nothing to replace")
+    cmd = helper_cmd(os.getpid(), dmg, bundle, dmg.parent / RESULT)
     subprocess.Popen(cmd, start_new_session=True)
     QApplication.quit()
 

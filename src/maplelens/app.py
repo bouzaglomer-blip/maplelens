@@ -20,7 +20,7 @@ from PySide6.QtGui import QAction, QDesktopServices, QIcon, QImage
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import maplelens
-from maplelens import capture, update
+from maplelens import capture, update, update_mac
 from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
@@ -240,13 +240,17 @@ def downloading_notice(new: str) -> str:
 UPDATE_FAILED = f"Update failed: click {MENU_MARK}"  # the menu item tries again
 UP_TO_DATE = "MapleLens is up to date"  # "Check for updates now" replies
 COULDNT_CHECK = "Couldn't check for updates"
+MOVE_TO_APPLICATIONS = "Move to Applications to update"  # on the dmg or where it can't write
+ALLOW_UPDATES = f"Allow updates: click {MENU_MARK}"  # macOS's App Management blocked the swap
+ALLOW_UPDATES_ITEM = "Allow MapleLens to update…"
+APP_MANAGEMENT_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles"
 # About's updates line (UpdateCheck.status, about_line)
 CHECKING = "Checking…"
 CURRENT = "Up to date"
 FAILED_CHECK = "Couldn't check"
 CHECKS_OFF = "Automatic checks off"
 NOT_CHECKED = "Not checked yet"
-FROM_SOURCE = "Running from source"  # no update check: uv run maplelens, or the Mac
+FROM_SOURCE = "Running from source"  # no update check: uv run maplelens
 
 
 def update_available(new: str) -> str:
@@ -275,8 +279,9 @@ def download_file(url: str, dest: Path) -> None:
 
 
 def clear_updates(folder: Path) -> None:
-    """Delete setups left from earlier updates. One still running stays until next time."""
-    for old in folder.glob("MapleLens-Setup-*"):
+    """Delete setups and dmgs left from earlier updates (the Mac helper's result stays).
+    One still in use stays until next time."""
+    for old in folder.glob("MapleLens-*"):
         with contextlib.suppress(OSError):
             old.unlink()
 
@@ -307,10 +312,15 @@ class UpdateCheck:
         folder: Path,
         download: Callable[[str, Path], None] = download_file,
         install: Callable[[Path], None] = install_update,
+        platform: str = sys.platform,
+        can_install: Callable[[], str | None] = lambda: None,  # a line when this copy can't
     ):
         self._box, self._settings, self._save = box, settings, save
         self._fetch, self._running, self._seen = fetch, running, seen
         self._folder, self._download, self._install = folder, download, install
+        self._platform, self._can_install = platform, can_install
+        self._now = now  # the last poll's, for a click's reply timer
+        self._held = False  # show_result's line stays until it's closed or replaced
         self._due = now + self.FIRST_S
         self._thread: threading.Thread | None = None
         self._result: tuple[dict | None, Exception | None] = (None, None)
@@ -323,6 +333,7 @@ class UpdateCheck:
         self._last: str | None = None  # the last check's outcome, for status()
 
     def poll(self, now: float) -> None:
+        self._now = now
         if self._quiet_at is not None and now >= self._quiet_at:
             self._say(None)
         if self._download_thread is not None and not self._download_thread.is_alive():
@@ -338,7 +349,7 @@ class UpdateCheck:
                 if manual:
                     self._reply(COULDNT_CHECK, now)
             else:
-                self._found(update.parse_latest(reply), manual, now)
+                self._found(update.parse_latest(reply, self._platform), manual, now)
         automatic = self._settings.get("update_check", True)  # the toggle, read each time
         if self._thread is None and now >= self._due and automatic:
             self._due = now + self.EVERY_S
@@ -359,6 +370,23 @@ class UpdateCheck:
         self._manual = True
         if self._thread is None:  # else the request already running gives the reply
             self._start()
+
+    def show_result(self, result: str | None) -> None:
+        """What the Mac helper left from the last update: "blocked" asks the player to allow
+        updates, anything else says it failed. Logged either way: the helper has no log."""
+        if result is None:
+            return
+        report_once(RuntimeError(f"the last update didn't finish: {result}"), self._seen)
+        if result == "blocked":
+            self._box.add_menu_item(
+                ALLOW_UPDATES_ITEM,
+                lambda: QDesktopServices.openUrl(QUrl(APP_MANAGEMENT_URL)),
+                at=-1,
+            )
+            self._say(ALLOW_UPDATES, lambda: self._say(None))
+        else:
+            self._say(UPDATE_FAILED, lambda: self._say(None))
+        self._held = True
 
     def set_auto(self, on: bool) -> None:
         """The "Check for updates automatically" toggle."""
@@ -385,6 +413,7 @@ class UpdateCheck:
     def _say(self, text: str | None, on_dismiss=None, *, until: float | None = None) -> None:
         self._box.set_notice(text, on_dismiss)
         self._quiet_at = until
+        self._held = False
 
     def _reply(self, text: str, now: float) -> None:
         if self._download_thread is None:  # the "Downloading…" line stays until it ends
@@ -404,7 +433,7 @@ class UpdateCheck:
             self._item.setText(label)
         downloading = self._download_thread is not None  # its line stays until it ends
         asked = manual or self._settings.get("update_dismissed") != release.version
-        if not downloading and asked:
+        if not downloading and asked and (manual or not self._held):
             self._say(update_notice(release.version), lambda: self._dismiss(release.version))
 
     def _dismiss(self, new: str) -> None:
@@ -415,6 +444,9 @@ class UpdateCheck:
         """The menu item's click: download the setup; poll() hands over once it's checked."""
         if self.release is None or self._download_thread is not None:
             return  # a second click while downloading does nothing
+        if (line := self._can_install()) is not None:
+            self._reply(line, self._now)
+            return
         self._say(downloading_notice(self.release.version))
         self._got = (None, None)
         self._download_thread = threading.Thread(
@@ -423,7 +455,7 @@ class UpdateCheck:
         self._download_thread.start()
 
     def _get(self, release: update.Release) -> None:  # on the download's own thread: no Qt
-        setup = self._folder / f"MapleLens-Setup-{release.version}.exe"
+        setup = self._folder / update.asset_name(release.version, self._platform)
         part = setup.with_name(setup.name + ".part")  # renamed only once its digest matches
         try:
             if release.digest is None:
@@ -461,19 +493,44 @@ def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests
     now: float,
     fetch: Callable[[], dict] = fetch_latest,
 ) -> UpdateCheck | None:
-    """An UpdateCheck for the installed Windows app, with its two menu items; else None.
+    """An UpdateCheck for the installed app (Windows or Mac), with its two menu items;
+    else None.
 
-    Keep the result: Qt holds the menu items' links to it weakly. Clears the setups
-    earlier updates left in the data folder's `updates`.
+    Keep the result: Qt holds the menu items' links to it weakly. Clears the setups and
+    dmgs earlier updates left in the data folder's `updates`; on the Mac also shows what
+    the last update's helper left there.
     """
     if not update.can_update(getattr(sys, "frozen", False), sys.platform):
         return None
     folder = data_dir() / "updates"
     clear_updates(folder)
-    check = UpdateCheck(box, settings, save, fetch, version("maplelens"), seen, now, folder=folder)
+    mac = {}
+    if sys.platform == "darwin":
+        mac = {
+            "install": update_mac.install_update,
+            "can_install": lambda: (
+                None
+                if (b := update_mac.bundle_path(sys.executable)) and update_mac.can_replace(b)
+                else MOVE_TO_APPLICATIONS
+            ),
+        }
+    check = UpdateCheck(
+        box,
+        settings,
+        save,
+        fetch,
+        version("maplelens"),
+        seen,
+        now,
+        folder=folder,
+        platform=sys.platform,
+        **mac,
+    )
     box.add_menu_item("Check for updates now", check.check_now, at=-1)  # above Quit
     auto = settings.get("update_check", True)
     box.add_toggle("Check for updates automatically", auto, check.set_auto, at=-1)
+    if sys.platform == "darwin":
+        check.show_result(update_mac.read_result(folder))
     return check
 
 
