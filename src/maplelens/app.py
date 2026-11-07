@@ -11,11 +11,12 @@ import time
 import traceback
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QIcon, QImage
+from PySide6.QtGui import QAction, QIcon, QImage
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import maplelens
@@ -458,6 +459,90 @@ def make_tray(
     return tray
 
 
+HIDE, SHOW = f"Hide {APP_NAME}", f"Show {APP_NAME}"
+
+
+class Shown:
+    """Whether MapleLens draws over the game: the player's Hide / Show. Not saved.
+
+    Hidden means the box and the Layer, with the path arrow on it. The tools keep
+    running: hiding is about the screen, not a pause.
+    """
+
+    def __init__(self, box: Box, layer: Layer):
+        self.on = True
+        self._box, self._layer = box, layer
+        self.item: QAction | None = None  # the menu item, relabelled on each toggle
+
+    def toggle(self) -> None:
+        """Hide both, or show the box again; the next tick shows the Layer if the game's
+        there."""
+        self.on = not self.on
+        self._box.setVisible(self.on)
+        if not self.on:
+            self._layer.hide()
+        if self.item is not None:
+            self.item.setText(HIDE if self.on else SHOW)
+
+
+def add_hide(box: Box, layer: Layer, tray: QSystemTrayIcon | None) -> Shown:
+    """Hide / Show: a menu item just before Quit, and a left click on the tray icon.
+
+    Only with a tray icon: without one, a hidden box would leave no way back.
+    """
+    shown = Shown(box, layer)
+    if tray is None:
+        return shown
+
+    def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.Trigger:  # a left click; a double click has one too
+            shown.toggle()
+
+    shown.item = box.add_menu_item(HIDE, shown.toggle, at=-1)
+    tray.activated.connect(clicked)
+    return shown
+
+
+@dataclass
+class Tick:
+    """What MapleLens does every _TICK_MS: find the game, read it, feed the tools.
+
+    `hwnd` is the game window found so far; None looks for it again.
+    """
+
+    settings: dict
+    save: Callable[[], None]
+    box: Box
+    layer: Layer
+    exp: ExpMeterTool
+    path: PathArrowTool
+    updates: "UpdateCheck | None"
+    seen: set[str]  # error types/messages already logged
+    shown: Shown
+    hwnd: int | None = None
+
+    def run(self, now: float) -> None:
+        poll_updates(self.updates, now, self.seen)  # before the game lookup: shows with no game
+        self.hwnd = self.hwnd or find_game(self.settings, self.save)
+        self.box.set_status(None if self.hwnd else LOOKING)  # a minimized game isn't "looking"
+        rect = capture.client_rect(self.hwnd) if self.hwnd else None
+        if rect is None:
+            self.hwnd = None  # gone or minimized: look again next tick
+            self.layer.hide()
+            update_tools(self.box, self.exp, self.path, None, None, now, self.seen)
+            return
+        self.layer.follow(rect)
+        if self.shown.on:  # hidden by the player: the tools still run, nothing shows
+            self.layer.show()
+        try:
+            reading = read_all(capture.grab(self.hwnd, rect), now)
+        except Exception as e:  # a bad tick counts as no reading; the box still follows the game
+            report_once(e, self.seen)
+            reading = None
+        update_tools(self.box, self.exp, self.path, reading, rect, now, self.seen)
+        self.box.place(rect)
+
+
 def _start_qt() -> QApplication:
     """The QApplication, started so that it never takes the front from the game."""
     if sys.platform == "darwin":  # Qt must never bring MapleLens to the front over the game
@@ -508,42 +593,19 @@ def main() -> int:
     tool = ExpMeterTool(settings, open_db(data_dir() / "maplelens.db"))
     # the lambda defers the lookup: `box` is built from path_tool on the next line
     path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))  # noqa: PLW0108
-    hwnd = None
     seen: set[str] = set()  # error types/messages already logged
 
     def pick(title: str) -> None:
-        nonlocal hwnd
         choose_window(settings, save, title)
-        hwnd = None  # the next tick finds the chosen window
+        tick.hwnd = None  # the next tick finds the chosen window
 
     box = build_box(settings, save, [tool, path_tool], pick)
     updates = update_check(box, settings, save, seen, time.time())
-    tray = make_tray(box, ICON, available=tray_available())  # noqa: F841 - held, or it vanishes
-
-    def tick() -> None:
-        nonlocal hwnd
-        now = time.time()
-        poll_updates(updates, now, seen)  # before the game lookup: shows with no game open
-        hwnd = hwnd or find_game(settings, save)
-        box.set_status(None if hwnd else LOOKING)  # a minimized game isn't "looking"
-        rect = capture.client_rect(hwnd) if hwnd else None
-        if rect is None:
-            hwnd = None  # gone or minimized: look again next tick
-            layer.hide()
-            update_tools(box, tool, path_tool, None, None, now, seen)
-            return
-        layer.follow(rect)
-        layer.show()
-        try:
-            reading = read_all(capture.grab(hwnd, rect), now)
-        except Exception as e:  # a bad tick counts as no reading; the box still follows the game
-            report_once(e, seen)
-            reading = None
-        update_tools(box, tool, path_tool, reading, rect, now, seen)
-        box.place(rect)
-
+    tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
+    shown = add_hide(box, layer, tray)
+    tick = Tick(settings, save, box, layer, tool, path_tool, updates, seen, shown)
     timer = QTimer()
-    timer.timeout.connect(tick)
+    timer.timeout.connect(lambda: tick.run(time.time()))
     timer.start(_TICK_MS)
     app.aboutToQuit.connect(lambda: tool.shutdown(time.time()))
     return app.exec()

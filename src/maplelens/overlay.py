@@ -205,9 +205,14 @@ class Box(QWidget):
         self._tab_dots[index].setVisible(on)
 
     def allow_typing(self, on: bool) -> None:
-        """Let the box take keyboard focus (only while a text field needs it)."""
+        """Let the box take keyboard focus (only while a text field needs it).
+
+        A box the player hid stays hidden.
+        """
+        shown = self.isVisible()
         self.setWindowFlag(Qt.WindowDoesNotAcceptFocus, not on)
-        self.show()  # changing a window flag hides a shown window
+        if shown:
+            self.show()  # changing a window flag hides a shown window
         if not on and sys.platform == "darwin":
             from maplelens import overlay_mac
 

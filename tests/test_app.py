@@ -4,6 +4,7 @@ import sys
 from typing import ClassVar
 
 import pytest
+from PySide6.QtCore import QObject, Signal
 
 from maplelens import app
 from maplelens.readers import glyphs, ocr
@@ -799,13 +800,15 @@ def test_the_box_text_points_at_the_menu_button():
         assert "right" not in text.lower()
 
 
-class _FakeTray:
+class _FakeTray(QObject):
     """Stands in for QSystemTrayIcon, which needs a real notification area."""
 
     made: ClassVar[list["_FakeTray"]] = []
+    activated = Signal(object)  # a QSystemTrayIcon.ActivationReason
 
     def __init__(self, icon, parent=None):
-        self._icon, self.parent, self.shown = icon, parent, False
+        super().__init__(parent)
+        self._icon, self.shown = icon, False
         self._tip = self._menu = None
         _FakeTray.made.append(self)
 
@@ -839,7 +842,7 @@ def test_the_tray_shows_the_app_icon_and_name(qt_box, fake_tray):
     assert tray is fake_tray.made[0] and tray.shown
     assert tray.toolTip() == "MapleLens"
     assert not tray.icon().isNull()
-    assert tray.parent is qt_box  # lives as long as the box
+    assert tray.parent() is qt_box  # lives as long as the box
 
 
 def test_the_tray_menu_is_the_box_menu_with_items_added_later(qt_box, fake_tray):
@@ -872,3 +875,135 @@ def test_on_windows_the_tray_needs_a_notification_area(monkeypatch, there):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: there))
     assert app.tray_available() is there
+
+
+@pytest.fixture
+def hide(qt_box, fake_tray):
+    """The box and a Layer, both shown, with a tray and its Hide item."""
+    from maplelens.overlay import Layer
+
+    layer = Layer()
+    qt_box.show()
+    layer.show()
+    tray = app.make_tray(qt_box, app.ICON, available=True, tray_cls=fake_tray)
+    return qt_box, layer, tray, app.add_hide(qt_box, layer, tray)
+
+
+def test_the_hide_item_sits_just_before_quit(hide):
+    box, *_ = hide
+    assert _menu(box) == ["Hide MapleLens", "Quit MapleLens"]
+
+
+def test_hide_hides_the_box_and_the_layer_and_show_brings_the_box_back(hide):
+    box, layer, _, shown = hide
+    shown.toggle()
+    assert not shown.on
+    assert not box.isVisible() and not layer.isVisible()
+    assert _menu(box)[0] == "Show MapleLens"
+    shown.toggle()
+    assert shown.on and box.isVisible()  # the Layer follows on the next tick
+    assert _menu(box)[0] == "Hide MapleLens"
+
+
+def test_the_hide_item_toggles(hide):
+    box, _, _, shown = hide
+    box.actions()[0].trigger()
+    assert not shown.on and not box.isVisible()
+
+
+def test_a_left_click_on_the_tray_toggles_and_other_clicks_dont(hide):
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    box, _, tray, shown = hide
+    tray.activated.emit(QSystemTrayIcon.Trigger)
+    assert not shown.on and not box.isVisible()
+    for other in (QSystemTrayIcon.Context, QSystemTrayIcon.DoubleClick):
+        tray.activated.emit(other)  # a double click comes after its first click's Trigger
+    assert not shown.on
+    tray.activated.emit(QSystemTrayIcon.Trigger)
+    assert shown.on and box.isVisible()
+
+
+def test_with_no_tray_there_is_no_hide_item(qt_box):
+    from maplelens.overlay import Layer
+
+    shown = app.add_hide(qt_box, Layer(), None)
+    assert shown.on
+    assert _menu(qt_box) == ["Quit MapleLens"]
+
+
+class _Recorder:
+    """A tool that keeps what each update got."""
+
+    running = False
+
+    def __init__(self):
+        self.updates = []
+
+    def update(self, reading, rect, now):
+        self.updates.append((reading, rect, now))
+
+
+@pytest.fixture
+def game_found(monkeypatch):
+    """A tick that finds the game, grabs a frame and reads `READING` from it."""
+    rect = (0, 0, 800, 600)
+    monkeypatch.setattr(app, "find_game", lambda settings, save: 42)
+    monkeypatch.setattr(app.capture, "client_rect", lambda hwnd: rect)
+    monkeypatch.setattr(app.capture, "grab", lambda hwnd, r: "frame")
+    monkeypatch.setattr(app, "read_all", lambda frame, now: READING)
+    return rect
+
+
+READING = object()
+
+
+def _tick(box, layer, shown):
+    from PySide6.QtWidgets import QLabel
+
+    for title in ("EXP", "Path"):  # the tick sets the Path tab's dot
+        box.add_tab(title, QLabel())
+    exp, path = _Recorder(), _Recorder()
+    tick = app.Tick(
+        settings={"window_title": "MapleStory"},
+        save=lambda: None,
+        box=box,
+        layer=layer,
+        exp=exp,
+        path=path,
+        updates=None,
+        seen=set(),
+        shown=shown,
+    )
+    return tick, exp
+
+
+def test_a_tick_while_hidden_keeps_both_hidden_and_the_tools_running(hide, game_found):
+    box, layer, _, shown = hide
+    shown.toggle()
+    tick, exp = _tick(box, layer, shown)
+    tick.run(5.0)
+    assert not box.isVisible() and not layer.isVisible()
+    assert exp.updates == [(READING, game_found, 5.0)]  # still recording
+    shown.toggle()
+    tick.run(6.0)
+    assert box.isVisible() and layer.isVisible()
+
+
+def test_a_tick_with_the_game_shows_the_layer(hide, game_found):
+    box, layer, _, shown = hide
+    layer.hide()
+    tick, exp = _tick(box, layer, shown)
+    tick.run(5.0)
+    assert layer.isVisible() and box.isVisible()
+    assert exp.updates == [(READING, game_found, 5.0)]
+
+
+def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypatch):
+    box, layer, _, shown = hide
+    monkeypatch.setattr(app, "find_game", lambda settings, save: None)
+    tick, exp = _tick(box, layer, shown)
+    tick.run(5.0)
+    assert not layer.isVisible()
+    assert box._status.text() == app.LOOKING
+    assert exp.updates == [(None, None, 5.0)]

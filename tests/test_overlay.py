@@ -344,3 +344,12 @@ def test_menu_button_lines_up_with_the_first_line_of_a_two_line_status(monkeypat
     box.adjustSize()
     button, strip = box._menu_button.geometry(), box._strip_row.geometry()
     assert abs(button.center().y() - strip.center().y()) <= 2  # level with the tab titles
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_allow_typing_leaves_a_hidden_box_hidden(monkeypatch, on):
+    box = _box(monkeypatch)
+    box.show()
+    box.hide()  # the player hid MapleLens
+    box.allow_typing(on)
+    assert not box.isVisible()

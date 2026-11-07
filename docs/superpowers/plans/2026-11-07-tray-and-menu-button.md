@@ -216,14 +216,20 @@ above.
 - Not saved: every start begins shown.
 
 **Acceptance criteria:**
-- [ ] Tests (fake tray, offscreen): toggling hides the box and the `Layer`, and the label
+- [x] Tests (fake tray, offscreen): toggling hides the box and the `Layer`, and the label
       reads "Show MapleLens". A tick with the game "found" (faked `client_rect`/`grab`)
       leaves both hidden and still updates the EXP tool. Toggling back shows both.
       `allow_typing(False)` on a hidden box leaves it hidden. With no tray there's no
       Hide item.
+      *2026-11-07: the tick is now `Tick` (a dataclass with `run(now)`), so tests drive
+      it. Toggling back shows the box at once and the `Layer` on the next tick with the
+      game, so an empty `Layer` never shows while the game is gone.*
 - [ ] By hand: left-clicking the tray icon hides the box and the arrow, and again brings
       them back. A double-click toggles once, not twice. While hidden for a minute of
       play, the EXP session keeps counting.
+      *2026-11-07: a scripted run with the real tray: `Trigger` hides and shows, and
+      `DoubleClick` does nothing. Whether a real double-click sends one `Trigger` or two
+      is still to see by hand, along with the clicks and the minute of play.*
 
 **Verification:** `uv run pytest`, the four checks, and the run above.
 
