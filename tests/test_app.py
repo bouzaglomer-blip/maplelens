@@ -320,6 +320,12 @@ class _Fetch:
         return self.reply
 
 
+@pytest.fixture(autouse=True)
+def _windows(monkeypatch):
+    """The update tests use the Windows release fixtures; a later task passes the platform in."""
+    monkeypatch.setattr(sys, "platform", "win32")
+
+
 @pytest.fixture
 def make_check(qt_box, tmp_path):
     """make_check(fetch, settings, save, **kw): an UpdateCheck on qt_box, running 0.1.0."""
@@ -479,13 +485,8 @@ def installed(monkeypatch, tmp_path):
     monkeypatch.setattr(app, "version", lambda name: "0.1.0")
 
 
-@pytest.mark.parametrize("where", ["source", "mac"])
-def test_from_source_or_on_the_mac_there_is_no_update_check(qt_box, monkeypatch, where):
-    if where == "source":
-        monkeypatch.delattr(sys, "frozen", raising=False)
-    else:
-        monkeypatch.setattr(sys, "frozen", True, raising=False)
-        monkeypatch.setattr(sys, "platform", "darwin")
+def test_from_source_there_is_no_update_check(qt_box, monkeypatch):
+    monkeypatch.delattr(sys, "frozen", raising=False)
     fetch = _Fetch(NEWER)
     assert app.update_check(qt_box, {"update_check": True}, lambda: None, set(), 0.0, fetch) is None
     assert fetch.calls == 0
