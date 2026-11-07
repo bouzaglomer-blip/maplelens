@@ -39,8 +39,7 @@ ICON = Path(maplelens.__file__).parent / "data" / "icon.ico"
 # title counts, so a browser tab like "MapleStory wiki - Chrome" never does.
 DEFAULT_TITLE = "MapleStory"
 _log_path: Path | None = None  # where report_once also writes; set by start_log
-# Two lines: on one, the box would be nearly twice its width with the tabs.
-LOOKING = f"Looking for {DEFAULT_TITLE}…\nclick {MENU_MARK} to pick the game window"
+LOOKING = f"Looking for {DEFAULT_TITLE}…"  # the box's ••• beside it has the window picker
 # Held while MapleLens runs. The Windows installer and uninstaller look for it (AppMutex in
 # packaging/windows/maplelens.iss) and ask the player to close MapleLens first.
 APP_MUTEX = "MapleLensRunning"

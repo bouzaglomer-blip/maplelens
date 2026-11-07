@@ -86,7 +86,8 @@ traffic, and they send no input to it.
   - The item exists only where there's a tray icon. On a Mac there would be no way back
     once the box and its ⋯ were gone.
 - **Text points at ⋯:**
-  - `LOOKING` → "Looking for MapleStory… click ⋯ to pick the game window"
+  - `LOOKING` → "Looking for MapleStory…" alone. The ⋯ beside it is hint enough (Daniel,
+    2026-11-07, which replaced "… click ⋯ to pick the game window").
   - `update_notice(v)` → "Update to X.Y.Z: click ⋯"
   - `UPDATE_FAILED` → "Update failed: click ⋯"
   - README: each "right-click the box" becomes "click ⋯ on the box". One line under
@@ -233,5 +234,6 @@ uv run --group build python scripts/build_installer.py   # icon path, frozen tra
 - **Owner: the icon's new home.** Moving `icon.ico` into `src/maplelens/data/` changes
   where the installer spec said it lives. Is that OK, or should the build copy it there
   instead?
-- **Builder: one line or two** for "Looking for MapleStory… click ⋯ to pick the game
-  window", next to the ⋯ (Constraints → Layout).
+- ~~**Builder: one line or two** for "Looking for MapleStory… click ⋯ to pick the game
+  window", next to the ⋯ (Constraints → Layout).~~ Gone: the line is now just "Looking
+  for MapleStory…", which fits on one.
