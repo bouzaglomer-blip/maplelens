@@ -282,6 +282,19 @@ above.
 **Dependencies:** T1–T5. **Files:** `README.md`, `AGENTS.md`, the spec, this plan.
 **Scope:** S.
 
+**Run notes (2026-11-07):**
+- Docs done in `af05bfe`. The README's tray line doesn't say "right-click" ("Its menu is
+  the same as •••"), so criterion 5's grep stays empty.
+- `MapleLens-Setup-0.1.0.exe` built from `af05bfe`, bundle check and `--self-check`
+  passing. A 0.1.1 was also built from this branch, with the version bumped only for the
+  build and restored afterwards.
+- **No test release** (Daniel): the PR goes up now, and Daniel publishes a release later.
+  So the installed run (spec Testing → by hand, steps 1–7, including step 2's update item
+  and step 7's "still running" text) and the Explorer look of the exe and Setup icons
+  (T1) are still open. The PR says so.
+- **Mac: CI only** (Daniel). The ••• and the text are the only Mac changes. Its by-hand
+  check isn't done.
+
 ### Checkpoint C: done
 
 - [ ] All spec success criteria met.
@@ -303,4 +316,5 @@ above.
 
 - **Owner (from the spec): the icon's new home** in `src/maplelens/data/`. T1 assumes yes.
   If the owner says no, the build copies it there instead, and only T1 changes.
-- **Daniel: is a Mac at hand** for the spec's by-hand Mac check, or is it CI only (T6)?
+- ~~**Daniel: is a Mac at hand** for the spec's by-hand Mac check, or is it CI only
+  (T6)?~~ CI only (Daniel, 2026-11-07).
