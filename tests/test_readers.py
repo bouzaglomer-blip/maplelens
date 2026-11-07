@@ -681,6 +681,13 @@ def test_number_text_light_patch_off_the_glyphs_is_none():
     assert window.read_number_text(win, box) is None
 
 
+def test_every_known_skill_name_snaps_to_itself():
+    from maplelens.readers import skill_window
+
+    names = list(skill_window.known_skills())
+    assert [n for n in names if skill_window._snap(n, names) != n] == []
+
+
 def test_skill_name_near_twins_do_not_snap():
     from maplelens.readers import skill_window
 

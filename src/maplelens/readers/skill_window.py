@@ -61,6 +61,8 @@ def _max(skill: int) -> int:
 
 def _snap(text: str, names) -> str | None:
     """The known name `text` is read from (one letter may be misread), else None."""
+    if text in names:  # an exact read wins, even with a one-letter twin ("Max HP/MP Increase")
+        return text
     near = difflib.get_close_matches(text, names, n=2, cutoff=0.8)
     if not near or abs(len(near[0]) - len(text)) > 1:
         return None
