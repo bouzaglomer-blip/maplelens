@@ -1,6 +1,7 @@
 """Build MapleLens: freeze it, then (Windows) wrap it in dist/MapleLens-Setup-X.Y.Z.exe.
 
-Usage: uv run --group build python scripts/build_installer.py [--freeze-only]
+Usage: uv run --group build python scripts/build_installer.py
+           [--freeze-only | --sign-only | --dmg-only]
 Before the freeze it writes the exe's version info from pyproject.toml; after it, it copies
 the license texts into dist/MapleLens/licenses/. The build fails if the app holds fewer
 templates or minimap pictures than src/, lacks Qt's Windows platform plugin, or if
@@ -9,6 +10,9 @@ Then Inno Setup 6 (ISCC.exe: the ISCC environment variable, PATH, or its default
 folders) builds the installer; --freeze-only stops before that step.
 On the Mac the freeze makes dist/MapleLens.app instead: licenses go in, the app gets an
 ad-hoc signature (the licenses invalidate PyInstaller's), then the same checks run.
+Then it is signed with $MAPLELENS_SIGN_IDENTITY (ad-hoc without it), verified and wrapped
+in dist/MapleLens-X.Y.Z.dmg. --sign-only and --dmg-only run just that stage, with the
+standard library alone, so CI can split the stages into jobs.
 """
 
 import argparse
@@ -183,6 +187,35 @@ def sign_cmd(app: Path, identity: str) -> list[str]:
     return ["codesign", "--force", "--deep", "--timestamp=none", "--sign", identity, str(app)]
 
 
+IDENTITY_ENV = "MAPLELENS_SIGN_IDENTITY"
+
+
+def sign_identity() -> str:
+    if identity := os.environ.get(IDENTITY_ENV):
+        return identity
+    print(f"no {IDENTITY_ENV}: signing ad-hoc")
+    return "-"
+
+
+def verify_cmd(app: Path) -> list[str]:
+    return ["codesign", "--verify", "--deep", "--strict", str(app)]
+
+
+def dmg_path(version: str) -> Path:
+    return DIST / f"MapleLens-{version}.dmg"
+
+
+def make_dmg(app: Path, dmg: Path, run: Callable[..., None] = _run) -> None:
+    """A dmg holding `app` and a link to /Applications to drag it onto."""
+    stage = DIST / "dmg"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
+    run(["ditto", str(app), str(stage / app.name)])  # keeps symlinks and signatures
+    (stage / "Applications").symlink_to("/Applications")
+    create = ["hdiutil", "create", "-volname", "MapleLens", "-srcfolder", str(stage)]
+    run([*create, "-fs", "HFS+", "-format", "UDZO", "-ov", str(dmg)])
+
+
 def find_iscc() -> Path:
     if env := os.environ.get("ISCC"):
         return Path(env)
@@ -227,12 +260,38 @@ def _self_check(exe: Path, run: Callable[..., None]) -> None:
         sys.exit(f"{exe.name} --self-check took over {SELF_CHECK_S} s (an error box?)")
 
 
-def _main_mac(run: Callable[..., None]) -> int:
+def _freeze_mac(run: Callable[..., None]) -> None:
     run(freeze_cmd(MAC_SPEC))
     copy_licenses(MAC_LICENSES, MAC_LICENSE_SOURCES)
     run(sign_cmd(MAC_APP, "-"))  # the licenses broke PyInstaller's own signature
     check_bundle(SRC_PKG, MAC_BUNDLE_PKG, MAC_APP, MAC_REQUIRED)
     _self_check(MAC_EXE, run)
+
+
+def _sign_mac(run: Callable[..., None]) -> None:
+    run(sign_cmd(MAC_APP, sign_identity()))
+    run(verify_cmd(MAC_APP))
+
+
+def _dmg_mac(run: Callable[..., None]) -> None:
+    dmg = dmg_path(read_version())
+    make_dmg(MAC_APP, dmg, run)
+    report_size(dmg)
+
+
+def _main_mac(args: argparse.Namespace, run: Callable[..., None]) -> int:
+    if args.freeze_only:
+        _freeze_mac(run)
+    elif args.sign_only:
+        _sign_mac(run)
+    elif args.dmg_only:
+        _self_check(MAC_EXE, run)
+        _dmg_mac(run)
+    else:
+        _freeze_mac(run)
+        _sign_mac(run)
+        _self_check(MAC_EXE, run)  # the real signature must not break the app
+        _dmg_mac(run)
     return 0
 
 
@@ -242,10 +301,15 @@ def main(
     platform: str = sys.platform,
 ) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--freeze-only", action="store_true", help="build the app folder only")
+    stage = parser.add_mutually_exclusive_group()
+    stage.add_argument("--freeze-only", action="store_true", help="build the app folder only")
+    stage.add_argument("--sign-only", action="store_true", help="Mac: sign and verify the app")
+    stage.add_argument("--dmg-only", action="store_true", help="Mac: wrap the app in a dmg")
     args = parser.parse_args(argv)
     if platform == "darwin":
-        return _main_mac(run)
+        return _main_mac(args, run)
+    if args.sign_only or args.dmg_only:
+        parser.error("--sign-only and --dmg-only are for the Mac")
     iscc = None if args.freeze_only else find_iscc()  # missing Inno Setup fails fast
     version = read_version()
     VERSION_FILE.parent.mkdir(parents=True, exist_ok=True)

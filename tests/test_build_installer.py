@@ -1,5 +1,8 @@
+import ast
 import importlib.util
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -290,3 +293,93 @@ def test_mac_spec_pins_the_bundle_id_and_hides_the_dock_icon():
     text = build_installer.MAC_SPEC.read_text()
     assert "io.github.or-keren.maplelens" in text
     assert "LSUIElement" in text
+
+
+def test_mac_full_build_freezes_signs_verifies_self_checks_and_makes_the_dmg(
+    mac_bundle_ok, monkeypatch
+):
+    monkeypatch.setenv("MAPLELENS_SIGN_IDENTITY", "MapleLens Release")
+    made = []
+    monkeypatch.setattr(build_installer, "make_dmg", lambda app, dmg, run: made.append(dmg))
+    calls = []
+    assert build_installer.main([], run=_record(calls), platform="darwin") == 0
+    app, exe = build_installer.MAC_APP, str(build_installer.MAC_EXE)
+    assert calls[1:] == [
+        build_installer.sign_cmd(app, "-"),
+        [exe, "--self-check"],
+        build_installer.sign_cmd(app, "MapleLens Release"),
+        build_installer.verify_cmd(app),
+        [exe, "--self-check"],
+    ]
+    assert made == [build_installer.dmg_path(build_installer.read_version())]
+
+
+def test_sign_only_without_identity_signs_adhoc_and_says_so(monkeypatch, capsys):
+    monkeypatch.delenv("MAPLELENS_SIGN_IDENTITY", raising=False)
+    calls = []
+    assert build_installer.main(["--sign-only"], run=_record(calls), platform="darwin") == 0
+    app = build_installer.MAC_APP
+    assert calls == [build_installer.sign_cmd(app, "-"), build_installer.verify_cmd(app)]
+    assert "signing ad-hoc" in capsys.readouterr().out
+
+
+def test_dmg_only_self_checks_then_makes_the_dmg(monkeypatch):
+    made = []
+    monkeypatch.setattr(build_installer, "make_dmg", lambda app, dmg, run: made.append(app))
+    calls = []
+    assert build_installer.main(["--dmg-only"], run=_record(calls), platform="darwin") == 0
+    assert calls == [[str(build_installer.MAC_EXE), "--self-check"]]
+    assert made == [build_installer.MAC_APP]
+
+
+def test_new_flags_are_mac_only_and_exclusive():
+    for flag in ("--sign-only", "--dmg-only"):
+        with pytest.raises(SystemExit):
+            build_installer.main([flag], run=_record([]), platform="win32")
+    with pytest.raises(SystemExit):
+        build_installer.main(["--sign-only", "--dmg-only"], run=_record([]), platform="darwin")
+
+
+def test_build_script_imports_only_the_standard_library_at_top_level():
+    tree = ast.parse((ROOT / "scripts" / "build_installer.py").read_text())
+    names = {a.name.split(".")[0] for n in tree.body if isinstance(n, ast.Import) for a in n.names}
+    names |= {n.module.split(".")[0] for n in tree.body if isinstance(n, ast.ImportFrom)}
+    assert names <= sys.stdlib_module_names | {"__future__"}
+
+
+def _fake_app(root):
+    app = root / "MapleLens.app"
+    (app / "Contents").mkdir(parents=True)
+    (app / "Contents" / "Info.plist").write_text("x")
+    return app
+
+
+def test_dmg_stage_has_the_app_and_an_applications_link(tmp_path, monkeypatch):
+    monkeypatch.setattr(build_installer, "DIST", tmp_path / "dist")
+    app, dmg, calls = _fake_app(tmp_path), tmp_path / "out.dmg", []
+    stage = tmp_path / "dist" / "dmg"
+    stage.mkdir(parents=True)
+    (stage / "stale").write_text("x")
+
+    def run(cmd, timeout=None):
+        calls.append(cmd)
+        if cmd[0] == "ditto":  # the fake ditto copies like the real one
+            build_installer.shutil.copytree(cmd[1], cmd[2], symlinks=True)
+
+    build_installer.make_dmg(app, dmg, run)
+    assert calls[0] == ["ditto", str(app), str(stage / "MapleLens.app")]
+    assert (stage / "MapleLens.app" / "Contents" / "Info.plist").is_file()
+    assert os.readlink(stage / "Applications") == "/Applications"
+    assert not (stage / "stale").exists()
+    assert calls[-1] == [
+        "hdiutil", "create", "-volname", "MapleLens", "-srcfolder", str(stage),
+        "-fs", "HFS+", "-format", "UDZO", "-ov", str(dmg),
+    ]  # fmt: skip
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS tools")
+def test_make_dmg_really_builds_a_dmg(tmp_path, monkeypatch):
+    monkeypatch.setattr(build_installer, "DIST", tmp_path / "dist")
+    dmg = tmp_path / "out.dmg"
+    build_installer.make_dmg(_fake_app(tmp_path), dmg)
+    subprocess.run(["hdiutil", "imageinfo", str(dmg)], check=True, capture_output=True)
