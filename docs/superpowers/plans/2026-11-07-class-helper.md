@@ -344,61 +344,81 @@ def test_next_step_is_the_nearest_milestone():
 
 ### Task 6: Stat window reader
 
+**Why this reader differs from the status-bar readers (measured on the owner's 2026-11-08 grabs):** the game draws its windows at screen-pixel positions, so after `glyphs.normalize` a draggable window's glyphs come out differently at each sub-pixel offset (15 offsets per axis at 1440, 45 at 1080). Exact-mask glyph templates fail at most positions. Two fixes, both proven in a prototype on every grab:
+1. **Window-aligned scaling.** Find the window coarsely on the normalized frame. Then try each native start `(int(ox*s)+kx, int(oy*s)+ky)` for `kx, ky in range(-ceil(2s), ceil(2s)+1)`, scale that native crop by exactly `1/s` (`cv2.resize(c, None, fx=1/s, fy=1/s, interpolation=cv2.INTER_AREA)`; never a rounded `dsize`: the 0.13% error drifts 0.4 px down the window at 1080), and keep the start whose title scores best **at its exact spot** (no search slack). At 768 (`s == 1`) this is the plain crop.
+2. **Correlated digits with a margin.** On that 768-scale window image, slide each glyph template (grey, 1 px of background around the ink, 13 rows) along the field strip with `TM_CCOEFF_NORMED`. Take local maxima at or above `GLYPH_MIN`. Greedily keep the best non-overlapping ones. A glyph is accepted only if no other char scores within `GLYPH_MARGIN` of it within 1 px. Every ink column of the strip must be covered by an accepted glyph, else the field reads `None`. In the prototype, every accepted glyph scored ≥ 0.83 at 1080/1440 and 1.0 at 768.
+
+The skill window (Task 7) uses the same two steps, so they live in `readers/window.py`, shared by both.
+
 **Files:**
-- Create: `src/maplelens/readers/stat_window.py`, `src/maplelens/readers/templates/stat_title_<1366|1920|2560>.png`, `src/maplelens/readers/templates/stat_font/*.png`
-- Modify: `src/maplelens/readers/__init__.py` (`Reading`, `read_all`), `tests/test_readers.py`
+- Create: `src/maplelens/readers/window.py`, `src/maplelens/readers/stat_window.py`, `src/maplelens/readers/templates/stat_title.png`, `stat_bottom.png` (the ABILITY POINT label), `templates/window_font/*.png`
+- Modify: `src/maplelens/readers/__init__.py` (`Reading`, `read_all`), `src/maplelens/readers/glyphs.py` (`CHAR_NAMES` gains `"plus": "+"`, `"lpar": "("`, `"rpar": ")"`, `"slash": "/"`), `tests/test_readers.py`
+- Fixtures (already cut, names painted over): copy `stat_*.png` from `.superpowers/sdd/2026-11-07-class-helper/fixtures/` into `tests/fixtures/screens/`. They are **native** crops (not normalized), the window plus 3 px (768-scale) of margin.
 
 **Interfaces:**
-- Consumes: `glyphs.find_anchor`, `glyphs.mask`, `glyphs.read_text` (existing)
-- Produces:
+- Produces in `window.py`:
   - `UNREADABLE = "unreadable"`
-  - `StatWindow(level: int, ap: int, base: dict[str, int], plus: dict[str, tuple[int, int]])` (frozen): `plus` is the centre of each stat's + button in the normalized frame
-  - `parse_stat(text: str) -> int | None`
-  - `read_stat_window(frame: np.ndarray, native: np.ndarray | None = None) -> StatWindow | str | None`: `None` when the window is absent, `UNREADABLE` when it's present but not fully read
-  - `Reading` gains `stats: "StatWindow | str | None" = None`, as its last field
+  - `align(frame: np.ndarray, native: np.ndarray, scale: float, anchors: list[tuple[str, tuple[int, int]]], size: tuple[int, int]) -> tuple[np.ndarray, tuple[int, int]] | None`: `anchors` are (template name, its offset from the window's top-left); returns the window-aligned 768-scale BGR image of `size` (w, h) and the window's top-left in `frame` coordinates, or `None` when no anchor scores ≥ `ANCHOR_MIN`. Parts of the window outside `native` come back as black (so their fields read `None`).
+  - `read_number_text(win: np.ndarray, box: tuple[int, int, int, int]) -> str | None`: the strip of `box` (x, y, w, h in window coordinates) read with `window_font`, or `None`.
+- Produces in `stat_window.py`:
+  - `StatWindow(level: int, ap: int, base: dict[str, int], total: dict[str, int], plus: dict[str, tuple[int, int]])` (frozen). `plus` is the centre of each stat's **single-arrow** + button (the left one of the two), in `frame` coordinates. `total` per R6.
+  - `parse_stat(text: str) -> tuple[int, int] | None`: `(base, total)`; "25" → (25, 25); "124(122+2)" → (122, 124) only when 122 + 2 == 124; anything else `None`.
+  - `read_stat_window(frame: np.ndarray, native: np.ndarray | None = None, scale: float | None = None) -> StatWindow | str | None`: `native` defaults to `frame`, `scale` to `native.shape[0] / frame.shape[0]`. `None` when no anchor is found, `UNREADABLE` when found but any field reads `None`, fails `parse_stat`, or fails the AP check.
+  - `Reading` gains `stats: "StatWindow | str | None" = None`, as its last field; `read_all` calls `stat_window.read_stat_window(img, frame, frame.shape[0] / glyphs.BASE_H)`.
+- AP check (R13): `sum(base) + ap <= 25 + 5 * (level - 1)`, else `UNREADABLE`. On the owner's level 28 Rogue it is equal: 4 + 25 + 4 + 122 + 5 = 160.
+
+**Fixture truth (all three `stat_a_*`):** level 28, AP 5, base STR 4 / DEX 25 / INT 4 / LUK 122, total LUK 124 (others = base). `stat_covered_1366x768_100.png`: an inventory window over the left half of the stat rows, title covered, the ABILITY POINT label visible → `UNREADABLE`. `stat_edge_1366x768_100.png`: the window mostly off the frame's left edge → `None` or `UNREADABLE` (record which; never a `StatWindow`).
 
 - [ ] **Step 1: Write the failing tests.**
 
 ```python
 @pytest.mark.parametrize(
-    "text, base",
-    [("25", 25), ("25 (20+5)", 20), ("4 (4+0)", 4), ("", None), ("2a", None), ("25 (20+", None)],
+    "text, want",
+    [("25", (25, 25)), ("124(122+2)", (122, 124)), ("4(4+0)", (4, 4)), ("25(20+4)", None),
+     ("", None), ("2a", None), ("25(20+", None)],
 )
-def test_parse_stat(text, base):
-    assert parse_stat(text) == base
+def test_parse_stat(text, want):
+    assert parse_stat(text) == want
 ```
 
-  Add each `stat_*` fixture to `EXPECTED` with Task 1's true values: `StatWindow(...)`, with the `plus` centres measured once on the fixture; `UNREADABLE` for `covered` and `edge`. Extend the existing parametrized fixture test so `stat_*` files go through `read_stat_window`. Add `test_no_stat_window_reads_none`: every `exp_a_*` fixture gives `None`.
+  Fixtures are native crops, so the stat tests load them with a helper `_window_args(name) -> (frame, native, scale)`: `scale = H / 768` from the filename's `WxH`, `frame = cv2.resize(native, None, fx=1/scale, fy=1/scale, interpolation=cv2.INTER_AREA)`. Add each `stat_*` fixture to `EXPECTED` (the `plus` centres measured once on the fixture) and route `stat_*` through `read_stat_window(*_window_args(name))`. Also:
+  - `test_no_stat_window_reads_none`: every `exp_a_*` fixture gives `None`.
+  - `test_stat_reads_at_every_offset`: for `stat_a_2560x1440_100.png`, drop the first `k` native columns and rows for `k in range(0, 15, 2)`; every read equals the same `StatWindow` with `plus` shifted by the dropped amount / scale (±1).
+  - `test_stat_ap_check`: monkeypatch the AP so the sum exceeds the bound → `UNREADABLE`.
 - [ ] **Step 2: Run the tests.** `uv run pytest tests/test_readers.py -v -k stat`. Expected: FAIL.
-- [ ] **Step 3: Cut the anchor and glyph templates** from the `stat_a_*` fixtures: the title bar crop, and one glyph per digit plus `(`, `)` and `+` (stems `lbr`/`rbr` exist; add `"plus": "+"` and `"lpar"`/`"rpar"` to `CHAR_NAMES`). Use a variant suffix per resolution, as `level_font` does.
-- [ ] **Step 4: Implement `read_stat_window`.** Search for the `stat_title` anchor over the whole frame, then read each field at fixed offsets from it (constants named like `LV_DX` in `level.py`). If any field box falls outside the frame or any field reads `None`, return `UNREADABLE`. Wire it into `read_all` as `stat_window.read_stat_window(img, frame)`.
+- [ ] **Step 3: Cut the templates** from `stat_a_1366x768_100.png` (native = 768 look): the title text and the ABILITY POINT label as anchors, and one grey glyph per digit plus `(`, `)`, `+`, `/` into `window_font/` (13 rows: the glyph's 9 rows plus 2 above and 2 below; 1 px of background left and right). A glyph the fixture lacks may be cut from the skill fixture (same font). Digits advance 7 px; the stat value column starts 58 px right of the window's left edge.
+- [ ] **Step 4: Implement** `window.py` and `stat_window.py` as above. Field boxes are constants relative to the window's top-left (named like `LV_DX` in `level.py`). Strips end before the + buttons. Tune `ANCHOR_MIN`, `GLYPH_MIN` and `GLYPH_MARGIN` on the fixtures and write the measured scores in a comment beside them.
 - [ ] **Step 5: Run the tests.** `uv run pytest tests/test_readers.py -v`. Expected: all PASS, the old fixtures too.
 - [ ] **Step 6: Commit** with `feat(readers): stat window`.
 
 ### Task 7: Skill window reader
 
 **Files:**
-- Create: `src/maplelens/readers/skill_window.py`, its anchor templates, and `templates/skill_font/` (if the stat font's digits differ)
+- Create: `src/maplelens/readers/skill_window.py`, `templates/skill_title.png`, `templates/skill_bottom.png` (the SKILL POINT label)
 - Modify: `src/maplelens/readers/__init__.py`, `tests/test_readers.py`
+- Fixtures: copy `skill_*.png` from `.superpowers/sdd/2026-11-07-class-helper/fixtures/` into `tests/fixtures/screens/` (native crops, as in Task 6).
 
 **Interfaces:**
-- Consumes: `ocr.crop`, `ocr.read_lines`, the `glyphs` functions, `stat_window.UNREADABLE`, the `skills` table of `data/classes.json` (read directly with `json`, as `map_name.known_titles` reads `maps.json`)
+- Consumes: `window.align`, `window.read_number_text`, `window.UNREADABLE` (Task 6), `ocr.crop`, `ocr.read_lines`, the `skills` table of `data/classes.json` (read directly with `json`, as `map_name.known_titles` reads `maps.json`)
 - Produces:
-  - `SkillRow(skill: int, level: int, plus: tuple[int, int])` and `SkillWindow(tab: str, sp: int, rows: tuple[SkillRow, ...])` (frozen)
-  - `known_skills() -> dict[str, tuple[int, str]]` (name → (id, job)), cached
-  - `read_skill_window(frame, native=None) -> SkillWindow | str | None`
+  - `SkillRow(skill: int, level: int, plus: tuple[int, int])` and `SkillWindow(tab: str, sp: int, rows: tuple[SkillRow, ...])` (frozen). `plus`: the single-arrow + button's centre in `frame` coordinates.
+  - `known_skills() -> dict[str, list[tuple[int, str]]]` (name → every (id, job) with that name; R3), cached
+  - `read_skill_window(frame, native=None, scale=None) -> SkillWindow | str | None`
   - `Reading` gains `skills: "SkillWindow | str | None" = None`, after `stats`
 
-- [ ] **Step 1: Write the failing tests.** Add `EXPECTED` entries for each `skill_*` fixture: the `SkillWindow` with Task 1's tab, SP and rows; `skill_b` holds only the rows in view; `UNREADABLE` for `covered`/`edge`. Then add:
+**Fixture truth (all three `skill_a_*`):** tab "Rogue", SP 3, rows in order: Nimble Body 15, Keen Eyes 15, Disorder 2, Dark Sight 0, Double Stab 0, Lucky Seven 20. Rows sit 40 px apart (768 scale). `skill_covered_2560x1440_100.png`: inventory over the top rows, title covered, SKILL POINT label visible → `UNREADABLE`. `skill_edge_2560x1440_100.png`: the window mostly off the left edge → `None` or `UNREADABLE` (never a `SkillWindow`). No scrolled (`skill_b`) grab exists: a 1st-job Rogue has 6 skills and the list doesn't scroll. Rows whose name line is blank are simply not returned.
+
+- [ ] **Step 1: Write the failing tests.** `EXPECTED` entries for each `skill_*` fixture, routed through `read_skill_window(*_window_args(name))`. Then:
 
 ```python
 def test_unknown_skill_name_is_unreadable(monkeypatch):
     monkeypatch.setattr(skill_window, "known_skills", lambda: {})
-    assert read_skill_window(*_load("skill_a_1366x768_100.png")) == UNREADABLE
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
 ```
 
+  Plus `test_skill_level_over_max_is_unreadable` (monkeypatch a skill's max below its read level) and `test_skill_reads_at_every_offset` (as Task 6, on `skill_a_2560x1440_100.png`).
 - [ ] **Step 2: Run the tests.** Expected: FAIL.
-- [ ] **Step 3: Implement it.** Find the window anchor, read SP and each row's level with the glyph font, and read each row's name with OCR. Snap names with `difflib.get_close_matches(cutoff=0.8)` plus the length guard that `job.read_job` uses. The tab is the job shared by every matched row. A row that snaps to nothing, or rows from mixed jobs, make the result `UNREADABLE`. Wire it into `read_all`.
+- [ ] **Step 3: Implement it.** `align` the window (anchors: title, SKILL POINT label). Read SP and each row's level with `read_number_text`. Read each row's name with OCR from the native pixels (`ocr.crop`), and snap it with `difflib.get_close_matches(cutoff=0.8)` plus the length guard `job.read_job` uses. The tab is the job that every matched row shares (R3: a name may map to several (id, job) pairs; take the one job in all of them). A row that snaps to nothing, rows with no shared job, or a level above the skill's `max` make the result `UNREADABLE`. Wire it into `read_all` like Task 6.
 - [ ] **Step 4: Run the tests.** `uv run pytest tests/test_readers.py -v`. Expected: PASS.
 - [ ] **Step 5: Commit** with `feat(readers): skill window`.
 
