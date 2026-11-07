@@ -1,11 +1,15 @@
 import hashlib
 import re
 import sys
+import threading
+from typing import ClassVar
 
 import pytest
+from PySide6.QtCore import QObject, Signal
 
 from maplelens import app
 from maplelens.readers import glyphs, ocr
+from maplelens.tools.path_arrow import maps
 
 
 @pytest.fixture
@@ -56,6 +60,23 @@ def test_a_second_start_from_a_terminal_says_why(monkeypatch, capsys):
 def test_self_check_fails_without_a_version(monkeypatch, no_cache):
     # a dist-info folder without METADATA gives None, not an error
     monkeypatch.setattr(app, "version", lambda name: None)
+    assert app.self_check() == 1
+
+
+def test_the_icon_is_package_data():
+    assert app.ICON.is_file()
+    assert app.ICON.parent == maps.DATA.parent  # next to maps.json, so the bundle ships it
+
+
+def test_self_check_fails_without_the_icon(tmp_path, monkeypatch, no_cache):
+    monkeypatch.setattr(app, "ICON", tmp_path / "icon.ico")
+    assert app.self_check() == 1
+
+
+def test_self_check_fails_on_an_icon_qt_cant_read(tmp_path, monkeypatch, no_cache):
+    # the frozen app without its ico image plugin reads the file but can't decode it
+    (tmp_path / "icon.ico").write_bytes(b"not an icon")
+    monkeypatch.setattr(app, "ICON", tmp_path / "icon.ico")
     assert app.self_check() == 1
 
 
@@ -766,3 +787,329 @@ def test_download_file_saves_the_reply_with_the_user_agent(tmp_path, monkeypatch
     assert dest.read_bytes() == SETUP
     assert seen["url"] == URL
     assert seen["headers"]["User-agent"] == f"MapleLens/{app.version('maplelens')}"
+
+
+def test_the_box_text_points_at_the_menu_button():
+    from maplelens.overlay import MENU_MARK
+
+    assert app.LOOKING == "Looking for MapleStory…"  # the ••• beside it is the hint
+    assert app.update_notice("1.2.3") == f"Update to 1.2.3: click {MENU_MARK}"
+    assert app.UPDATE_FAILED == f"Update failed: click {MENU_MARK}"
+    for text in (app.LOOKING, app.update_notice("1.2.3"), app.UPDATE_FAILED):
+        assert "right" not in text.lower()
+
+
+class _FakeTray(QObject):
+    """Stands in for QSystemTrayIcon, which needs a real notification area."""
+
+    made: ClassVar[list["_FakeTray"]] = []
+    activated = Signal(object)  # a QSystemTrayIcon.ActivationReason
+
+    def __init__(self, icon, parent=None):
+        super().__init__(parent)
+        self._icon, self.shown = icon, False
+        self._tip = self._menu = None
+        _FakeTray.made.append(self)
+
+    def icon(self):
+        return self._icon
+
+    def setToolTip(self, tip):
+        self._tip = tip
+
+    def toolTip(self):
+        return self._tip
+
+    def setContextMenu(self, menu):
+        self._menu = menu
+
+    def contextMenu(self):
+        return self._menu
+
+    def show(self):
+        self.shown = True
+
+
+@pytest.fixture
+def fake_tray():
+    _FakeTray.made = []
+    return _FakeTray
+
+
+def test_the_tray_shows_the_app_icon_and_name(qt_box, fake_tray):
+    tray = app.make_tray(qt_box, app.ICON, available=True, tray_cls=fake_tray)
+    assert tray is fake_tray.made[0] and tray.shown
+    assert tray.toolTip() == "MapleLens"
+    assert not tray.icon().isNull()
+    assert tray.parent() is qt_box  # lives as long as the box
+
+
+def test_the_tray_menu_is_the_box_menu_with_items_added_later(qt_box, fake_tray):
+    tray = app.make_tray(qt_box, app.ICON, available=True, tray_cls=fake_tray)
+    qt_box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)  # the update check, later
+    menu = tray.contextMenu()
+    menu.aboutToShow.emit()  # what Qt does as the menu opens
+    assert menu.actions() == qt_box.actions()
+    assert [a.text() for a in menu.actions()] == ["Update to 0.2.0…", "Quit MapleLens"]
+
+
+def test_no_tray_where_there_is_none(qt_box, fake_tray):
+    assert app.make_tray(qt_box, app.ICON, available=False, tray_cls=fake_tray) is None
+    assert fake_tray.made == []
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_the_tray_is_windows_only(monkeypatch, platform):
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: True))
+    assert not app.tray_available()
+
+
+@pytest.mark.parametrize("there", [True, False])
+def test_on_windows_the_tray_needs_a_notification_area(monkeypatch, there):
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: there))
+    assert app.tray_available() is there
+
+
+@pytest.fixture
+def hide(qt_box, fake_tray):
+    """The box and a Layer, both shown, with a tray and its Hide item."""
+    from maplelens.overlay import Layer
+
+    layer = Layer()
+    qt_box.show()
+    layer.show()
+    tray = app.make_tray(qt_box, app.ICON, available=True, tray_cls=fake_tray)
+    return qt_box, layer, tray, app.add_hide(qt_box, layer, tray)
+
+
+def test_the_hide_item_sits_just_before_quit(hide):
+    box, *_ = hide
+    assert _menu(box) == ["Hide MapleLens", "Quit MapleLens"]
+
+
+def test_hide_hides_the_box_and_the_layer_and_show_brings_the_box_back(hide):
+    box, layer, _, shown = hide
+    shown.toggle()
+    assert not shown.on
+    assert not box.isVisible() and not layer.isVisible()
+    assert _menu(box)[0] == "Show MapleLens"
+    shown.toggle()
+    assert shown.on and box.isVisible()  # the Layer follows on the next tick
+    assert _menu(box)[0] == "Hide MapleLens"
+
+
+def test_the_hide_item_toggles(hide):
+    box, _, _, shown = hide
+    box.actions()[0].trigger()
+    assert not shown.on and not box.isVisible()
+
+
+def test_a_left_click_on_the_tray_toggles_and_other_clicks_dont(hide):
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    box, _, tray, shown = hide
+    tray.activated.emit(QSystemTrayIcon.Trigger)
+    assert not shown.on and not box.isVisible()
+    for other in (QSystemTrayIcon.Context, QSystemTrayIcon.DoubleClick):
+        tray.activated.emit(other)  # a double click comes after its first click's Trigger
+    assert not shown.on
+    tray.activated.emit(QSystemTrayIcon.Trigger)
+    assert shown.on and box.isVisible()
+
+
+def test_with_no_tray_there_is_no_hide_item(qt_box):
+    from maplelens.overlay import Layer
+
+    shown = app.add_hide(qt_box, Layer(), None)
+    assert shown.on
+    assert _menu(qt_box) == ["Quit MapleLens"]
+
+
+class _Recorder:
+    """A tool that keeps what each update got."""
+
+    running = False
+
+    def __init__(self):
+        self.updates = []
+
+    def update(self, reading, rect, now):
+        self.updates.append((reading, rect, now))
+
+
+@pytest.fixture
+def game_found(monkeypatch):
+    """A tick that finds the game, grabs a frame and reads `READING` from it."""
+    rect = (0, 0, 800, 600)
+    monkeypatch.setattr(app, "find_game", lambda settings, save: 42)
+    monkeypatch.setattr(app.capture, "client_rect", lambda hwnd: rect)
+    monkeypatch.setattr(app.capture, "grab", lambda hwnd, r: "frame")
+    monkeypatch.setattr(app, "read_all", lambda frame, now: READING)
+    return rect
+
+
+READING = object()
+
+
+def _tick(box, layer, shown, updates=None):
+    from PySide6.QtWidgets import QLabel
+
+    for title in ("EXP", "Path"):  # the tick sets the Path tab's dot
+        box.add_tab(title, QLabel())
+    exp, path = _Recorder(), _Recorder()
+    tick = app.Tick(
+        settings={"window_title": "MapleStory"},
+        save=lambda: None,
+        box=box,
+        layer=layer,
+        exp=exp,
+        path=path,
+        updates=updates,
+        seen=set(),
+        shown=shown,
+    )
+    return tick, exp
+
+
+def test_a_tick_while_hidden_keeps_both_hidden_and_the_tools_running(hide, game_found):
+    box, layer, _, shown = hide
+    shown.toggle()
+    tick, exp = _tick(box, layer, shown)
+    tick.run(5.0)
+    assert not box.isVisible() and not layer.isVisible()
+    assert exp.updates == [(READING, game_found, 5.0)]  # still recording
+    shown.toggle()
+    tick.run(6.0)
+    assert box.isVisible() and layer.isVisible()
+
+
+def test_a_tick_with_the_game_shows_the_layer(hide, game_found):
+    box, layer, _, shown = hide
+    layer.hide()
+    tick, exp = _tick(box, layer, shown)
+    tick.run(5.0)
+    assert layer.isVisible() and box.isVisible()
+    assert exp.updates == [(READING, game_found, 5.0)]
+
+
+def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypatch):
+    box, layer, _, shown = hide
+    monkeypatch.setattr(app, "find_game", lambda settings, save: None)
+    tick, exp = _tick(box, layer, shown)
+    tick.run(5.0)
+    assert not layer.isVisible()
+    assert box._status.text() == app.LOOKING
+    assert exp.updates == [(None, None, 5.0)]
+
+
+class _Gate:
+    """A fetch that waits until opened, so a check can be caught running."""
+
+    def __init__(self, reply):
+        self.reply, self.open = reply, threading.Event()
+
+    def __call__(self):
+        self.open.wait(5)
+        return self.reply
+
+
+def test_update_status_while_a_check_runs_then_with_a_newer_release(make_check):
+    fetch = _Gate(NEWER)
+    check = make_check(fetch)
+    check.poll(5.0)  # the first check starts
+    assert check.status() == "Checking…"
+    fetch.open.set()
+    check._thread.join(5)
+    check.poll(5.0)
+    assert check.status() == "Update to 0.2.0 available"
+
+
+def test_update_status_keeps_a_dismissed_update(make_check):
+    settings = {"update_dismissed": "0.2.0"}  # its line is hidden, the update isn't
+    check = make_check(_Fetch(NEWER), settings)
+    _run(check, 5.0)
+    assert check.status() == "Update to 0.2.0 available"
+
+
+def test_update_status_with_nothing_newer(make_check):
+    check = make_check(_Fetch(_latest("0.1.0")))
+    _run(check, 5.0)
+    assert check.status() == "Up to date"
+
+
+def test_update_status_after_a_failed_check(make_check, log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+    check = make_check(_Fetch(error=OSError("offline")))
+    _run(check, 5.0)
+    assert check.status() == "Couldn't check"
+
+
+def test_update_status_before_the_first_check(make_check):
+    assert make_check(_Fetch(NEWER)).status() == "Not checked yet"
+
+
+def test_update_status_with_automatic_checks_off(make_check):
+    settings = {"update_check": False, "update_dismissed": None}
+    check = make_check(_Fetch(_latest("0.1.0")), settings)
+    _run(check, 5.0)  # off: no check starts
+    assert check.status() == "Automatic checks off"
+    check.check_now()
+    _run(check, 6.0)
+    assert check.status() == "Up to date"  # a check since starting answers instead
+
+
+def test_about_line_from_source_and_with_an_update(make_check):
+    assert app.about_line(None) == ("Running from source", False)
+    check = make_check(_Fetch(NEWER))
+    assert app.about_line(check) == ("Not checked yet", False)
+    _run(check, 5.0)
+    assert app.about_line(check) == ("Update to 0.2.0 available", True)
+
+
+def test_about_sits_just_before_quit(qt_box):
+    app.add_about(qt_box, None)
+    assert _menu(qt_box) == ["About MapleLens", "Quit MapleLens"]
+
+
+def test_about_comes_after_hide_with_a_tray(hide):
+    box, *_ = hide
+    app.add_about(box, None)
+    assert _menu(box) == ["Hide MapleLens", "About MapleLens", "Quit MapleLens"]
+
+
+def test_the_about_item_opens_the_view_with_the_version_and_the_repo(qt_box, monkeypatch):
+    monkeypatch.setattr(app, "version", lambda name: "0.1.0")
+    monkeypatch.setattr(app.update, "REPO", "someone/fork")  # MAPLELENS_UPDATE_REPO
+    opened = []
+    monkeypatch.setattr(qt_box, "show_about", lambda *a, **kw: opened.append((a, kw)))
+    app.add_about(qt_box, None)
+    qt_box.actions()[0].trigger()
+    url = "https://github.com/someone/fork"
+    assert opened == [(("0.1.0", "Running from source", url), {"accent": False})]
+
+
+def test_the_about_line_follows_a_check_on_each_tick(qt_box, make_check, monkeypatch):
+    from maplelens.overlay import Layer
+
+    monkeypatch.setattr(app, "find_game", lambda settings, save: None)
+    monkeypatch.setattr(app, "version", lambda name: "0.1.0")
+    fetch = _Gate(NEWER)
+    check = make_check(fetch)
+    app.add_about(qt_box, check)
+    qt_box.actions()[-2].trigger()  # About, just before Quit
+    assert qt_box._about_updates.text() == "Not checked yet"
+    layer = Layer()
+    tick, _ = _tick(qt_box, layer, app.Shown(qt_box, layer), updates=check)
+    tick.run(5.0)  # the first check starts
+    assert qt_box._about_updates.text() == "Checking…"
+    fetch.open.set()
+    check._thread.join(5)
+    tick.run(6.0)
+    assert qt_box._about_updates.text() == "Update to 0.2.0 available"
+    assert qt_box.about_open  # still open: the line changed in place

@@ -35,9 +35,13 @@ SRC_PKG = REPO / "src" / "maplelens"
 BUNDLE_PKG = DIST / "MapleLens" / "_internal" / "maplelens"
 # Data folders, relative to the package, whose PNG count must survive the freeze.
 COUNTED = ["readers/templates", "data/minimaps"]
-# Files, relative to the app folder, the self-check can't miss: it opens no window, and
-# without Qt's Windows platform plugin the app can't show its box.
-REQUIRED = ["_internal/PySide6/plugins/platforms/qwindows.dll"]
+# Files, relative to the app folder, the bundle must have. The self-check opens no
+# window, so it can't miss Qt's Windows platform plugin, without which the app can't show
+# its box. The icon it does load; checking it here names the missing file.
+REQUIRED = [
+    "_internal/PySide6/plugins/platforms/qwindows.dll",
+    "_internal/maplelens/data/icon.ico",
+]
 # A frozen app whose import fails shows an error box and waits for a click: on CI, until
 # the job's timeout. The self-check takes a few seconds.
 SELF_CHECK_S = 120

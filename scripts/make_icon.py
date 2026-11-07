@@ -1,7 +1,7 @@
 """Draw the MapleLens icon: a cream maple leaf on a warm orange tile.
 
 Writes, from one drawing:
-  packaging/windows/icon.ico   the app, Setup, shortcuts and uninstall entry (16-256 px)
+  src/maplelens/data/icon.ico  the app, Setup, shortcuts, uninstall entry and tray (16-256 px)
   packaging/mac/icon.icns      for the Mac app, once there is one (16-1024 px)
   docs/icon.png                the README header
   docs/social-preview.png      GitHub's link preview, 1280x640; uploaded by hand under
@@ -154,7 +154,7 @@ def main() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     QGuiApplication(sys.argv)
     out = {
-        REPO / "packaging" / "windows" / "icon.ico": ico_bytes(
+        REPO / "src" / "maplelens" / "data" / "icon.ico": ico_bytes(
             {s: png(icon(s)) for s in ICO_SIZES}
         ),
         REPO / "packaging" / "mac" / "icon.icns": icns_bytes(

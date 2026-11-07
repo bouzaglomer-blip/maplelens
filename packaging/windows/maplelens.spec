@@ -16,7 +16,7 @@ VERSION_FILE = ROOT / "build" / "version_info.txt"
 a = Analysis(
     [str(ROOT / "src" / "maplelens" / "app.py")],
     pathex=[str(ROOT / "src")],
-    # templates, maps.json and minimap pictures, at their module-relative paths;
+    # templates, maps.json, minimap pictures and the icon, at their module-relative paths;
     # the metadata is where --self-check and the app read the version
     datas=collect_data_files("maplelens") + copy_metadata("maplelens"),
     excludes=["tkinter", "unittest", "pydoc", "PyInstaller"],
@@ -53,7 +53,7 @@ exe = EXE(
     name="MapleLens",
     console=False,
     upx=False,
-    icon=str(HERE / "icon.ico"),
+    icon=str(ROOT / "src" / "maplelens" / "data" / "icon.ico"),
     version=str(VERSION_FILE),
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="MapleLens", upx=False)

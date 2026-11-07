@@ -149,6 +149,16 @@ def test_check_bundle_needs_the_qt_windows_plugin(tmp_path):
         build_installer.check_bundle(src, bundle, app)
 
 
+def test_check_bundle_needs_the_icon(tmp_path):
+    # the tray shows it; collect_data_files ships it only while it's package data
+    src, bundle, app = tmp_path / "src", tmp_path / "bundle", tmp_path / "app"
+    _pngs(app, build_installer.REQUIRED)
+    build_installer.check_bundle(src, bundle, app)
+    (app / "_internal/maplelens/data/icon.ico").unlink()
+    with pytest.raises(SystemExit, match=r"icon\.ico"):
+        build_installer.check_bundle(src, bundle, app)
+
+
 def test_read_version_from_pyproject(tmp_path):
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "1.2.3"\n')
     assert build_installer.read_version(tmp_path / "pyproject.toml") == "1.2.3"
@@ -211,4 +221,21 @@ def test_copy_licenses_ships_every_license(tmp_path):
 
 
 def test_icon_exists():
-    assert (ROOT / "packaging" / "windows" / "icon.ico").is_file()
+    # one copy, as package data: the exe, Setup and the running app all use it
+    assert (ROOT / "src" / "maplelens" / "data" / "icon.ico").is_file()
+    assert not (ROOT / "packaging" / "windows" / "icon.ico").exists()
+
+
+def test_the_spec_and_setup_point_at_the_packaged_icon():
+    spec = (ROOT / "packaging" / "windows" / "maplelens.spec").read_text(encoding="utf-8")
+    iss = (ROOT / "packaging" / "windows" / "maplelens.iss").read_text(encoding="utf-8")
+    assert 'ROOT / "src" / "maplelens" / "data" / "icon.ico"' in spec
+    assert r"SetupIconFile=..\..\src\maplelens\data\icon.ico" in iss
+
+
+def test_setup_says_where_to_quit_a_running_maplelens():
+    iss = (ROOT / "packaging" / "windows" / "maplelens.iss").read_text(encoding="utf-8")
+    # the menu button's bullets as character codes: the script stays ASCII
+    assert "Quit it from the ' + #$2022#$2022#$2022 +" in iss
+    assert "' menu on its box or its tray icon, then try again.'" in iss
+    assert "right-click" not in iss

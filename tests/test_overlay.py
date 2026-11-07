@@ -148,9 +148,9 @@ def test_notice_shows_under_the_tabs_and_x_dismisses_it(monkeypatch):
     page = QLabel("page")
     box.add_tab("A", page)
     dismissed = []
-    box.set_notice("Update to 0.2.0: right-click", lambda: dismissed.append(1))
+    box.set_notice("Update to 0.2.0: click •••", lambda: dismissed.append(1))
     assert box._notice.isVisibleTo(box)
-    assert box._notice_text.text() == "Update to 0.2.0: right-click"
+    assert box._notice_text.text() == "Update to 0.2.0: click •••"
     assert page.isVisibleTo(box) and box._tab_buttons[0].isVisibleTo(box)
     box._notice_close.click()
     assert not box._notice.isVisibleTo(box)
@@ -217,3 +217,223 @@ def test_toggle_shows_its_state_and_reports_changes(monkeypatch):
     toggle.trigger()
     assert changes == [False, True]
     assert not box.add_toggle("Off", False, changes.append).isChecked()
+
+
+def test_menu_button_shows_with_the_tabs_and_with_the_status_line(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    assert box._menu_button.isVisibleTo(box)
+    box.set_status("Looking for the game")
+    assert box._menu_button.isVisibleTo(box)
+    box.set_status(None)
+    assert box._menu_button.isVisibleTo(box)
+
+
+def test_menu_button_sits_right_of_the_tabs_and_the_status(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.show()
+    button = box._menu_button.geometry()
+    assert button.left() >= box._strip_row.geometry().right()
+    box.set_status("Looking for the game")
+    box.adjustSize()
+    assert box._menu_button.geometry().left() >= box._status.geometry().right()
+    assert box._menu_button.geometry().top() <= box._status.geometry().top() + 4
+
+
+def _menu_texts(menu):
+    menu.aboutToShow.emit()  # what Qt does as the menu opens
+    return [a.text() for a in menu.actions()]
+
+
+def test_attached_menu_lists_the_box_actions_when_it_opens(monkeypatch):
+    from PySide6.QtWidgets import QMenu
+
+    box = _box(monkeypatch)
+    box.add_submenu("Pick game window…", lambda: ["A"], lambda t: None)
+    box.add_menu_item("Quit", lambda: None)
+    menu = QMenu()
+    box.attach_menu(menu)
+    assert _menu_texts(menu) == ["Pick game window…", "Quit"]
+    box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)  # the update check, later on
+    assert _menu_texts(menu) == ["Update to 0.2.0…", "Pick game window…", "Quit"]
+    assert menu.actions() == box.actions()
+
+
+def test_opening_an_attached_menu_twice_keeps_every_action_working(monkeypatch):
+    from PySide6.QtWidgets import QMenu
+
+    box = _box(monkeypatch)
+    picked, quit_ = [], []
+    box.add_submenu("Pick", lambda: ["A"], picked.append)
+    box.add_menu_item("Quit", lambda: quit_.append(1))
+    menu = QMenu()
+    box.attach_menu(menu)
+    _menu_texts(menu)
+    _menu_texts(menu)
+    pick, quit_action = box.actions()  # still the box's, not deleted by clear()
+    assert [a.text() for a in box.actions()] == ["Pick", "Quit"]
+    quit_action.trigger()
+    sub = pick.menu()
+    sub.aboutToShow.emit()
+    sub.actions()[0].trigger()
+    assert quit_ == [1] and picked == ["A"]
+
+
+def test_menu_button_opens_the_box_menu(monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.add_menu_item("Quit", lambda: None)
+    box.show()
+    box.move(400, 300)  # off the screen's edges, which Qt keeps the menu inside
+    QTest.mouseClick(box._menu_button, Qt.LeftButton)
+    try:
+        assert box._menu.isVisible()
+        assert [a.text() for a in box._menu.actions()] == ["Quit"]
+        # just under the button, right edges lined up: the box sits at the game's right
+        button_bottom_right = box._menu_button.mapToGlobal(box._menu_button.rect().bottomRight())
+        assert box._menu.geometry().top() >= button_bottom_right.y()
+        assert abs(box._menu.geometry().right() - button_bottom_right.x()) <= 1
+    finally:
+        box._menu.hide()
+
+
+def test_menu_button_never_takes_focus_or_starts_a_drag(monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.show()
+    assert box._menu_button.focusPolicy() == Qt.NoFocus
+    QTest.mousePress(box._menu_button, Qt.LeftButton)
+    assert box._drag_from is None
+    QTest.mouseRelease(box._menu_button, Qt.LeftButton)
+    box._menu.hide()
+    assert box._drag_from is None
+
+
+def test_right_click_still_opens_the_box_menu(monkeypatch):
+    from PySide6.QtCore import Qt
+
+    box = _box(monkeypatch)
+    box.add_menu_item("Quit", lambda: None)
+    assert box.contextMenuPolicy() == Qt.ActionsContextMenu
+
+
+def test_menu_button_lines_up_with_the_first_line_of_a_two_line_status(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    box = _box(monkeypatch)
+    box.add_tab("A", QLabel("page"))
+    box.show()
+    box.set_status("Looking for the game…\nclick ••• to pick it")
+    box.adjustSize()
+    button, status = box._menu_button.geometry(), box._status.geometry()
+    assert abs(button.top() - status.top()) <= 2  # the corner, not between the lines
+    box.set_status(None)
+    box.adjustSize()
+    button, strip = box._menu_button.geometry(), box._strip_row.geometry()
+    assert abs(button.center().y() - strip.center().y()) <= 2  # level with the tab titles
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_allow_typing_leaves_a_hidden_box_hidden(monkeypatch, on):
+    box = _box(monkeypatch)
+    box.show()
+    box.hide()  # the player hid MapleLens
+    box.allow_typing(on)
+    assert not box.isVisible()
+
+
+URL = "https://github.com/someone/maplelens"
+
+
+def _tabbed_box(monkeypatch):
+    from PySide6.QtWidgets import QWidget
+
+    box = _box(monkeypatch)
+    page = QWidget()
+    page.setFixedSize(overlay.TAB_W, 40)  # as wide as the real tabs
+    box.add_tab("A", page)
+    return box, page
+
+
+def test_about_replaces_the_tabs_and_x_brings_them_back(monkeypatch):
+    box, page = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Up to date", URL)
+    assert box.about_open
+    assert not box._strip_row.isVisibleTo(box) and not page.isVisibleTo(box)
+    assert not box._status.isVisibleTo(box)
+    for part in (box._about_title, box._about_close, box._menu_button, box._about):
+        assert part.isVisibleTo(box)
+    assert box._about_title.text() == "About MapleLens"
+    assert box._about_version.text() == "0.1.0"
+    assert box._about_updates.text() == "Up to date"
+    box._about_close.click()
+    assert not box.about_open
+    assert box._strip_row.isVisibleTo(box) and page.isVisibleTo(box)
+    assert not box._about.isVisibleTo(box) and not box._about_title.isVisibleTo(box)
+
+
+def test_a_status_set_while_about_is_open_shows_once_it_closes(monkeypatch):
+    box, page = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Up to date", URL)
+    box.set_status("Looking for the game")  # the tick, every 500 ms
+    assert not box._status.isVisibleTo(box) and box._about.isVisibleTo(box)
+    box.close_about()
+    assert box._status.isVisibleTo(box) and box._status.text() == "Looking for the game"
+    assert not page.isVisibleTo(box)
+    box.set_status(None)
+    assert page.isVisibleTo(box) and not box._status.isVisibleTo(box)
+
+
+def test_the_about_updates_line_changes_and_lights_up_for_an_update(monkeypatch):
+    box, _ = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Checking…", URL)
+    assert overlay.ACCENT not in box._about_updates.styleSheet()
+    box.set_about_updates("Update to 0.2.0 available", accent=True)
+    assert box._about_updates.text() == "Update to 0.2.0 available"
+    assert overlay.ACCENT in box._about_updates.styleSheet()
+    box.set_about_updates("Up to date")
+    assert overlay.ACCENT not in box._about_updates.styleSheet()
+
+
+def test_the_github_link_opens_the_url(monkeypatch):
+    from PySide6.QtCore import QUrl
+
+    opened = []
+    monkeypatch.setattr(overlay.QDesktopServices, "openUrl", opened.append)
+    box, _ = _tabbed_box(monkeypatch)
+    box.show_about("0.1.0", "Up to date", URL)
+    assert box._about_link.text() == "GitHub page ↗"
+    box._about_link.click()
+    assert opened == [QUrl(URL)]
+
+
+def test_about_never_takes_focus(monkeypatch):
+    from PySide6.QtCore import Qt
+
+    box, _ = _tabbed_box(monkeypatch)
+    assert box._about_close.focusPolicy() == Qt.NoFocus
+    assert box._about_link.focusPolicy() == Qt.NoFocus
+
+
+def test_about_at_the_longest_version_keeps_the_box_width(monkeypatch):
+    box, _ = _tabbed_box(monkeypatch)
+    box.show()
+    width = box.width()
+    box.show_about("10.10.10", "Update to 10.10.10 available", URL)
+    box.set_about_updates("Update to 10.10.10 available", accent=True)
+    box.adjustSize()
+    assert box._about.sizeHint().width() <= overlay.TAB_W
+    assert box.width() == width
