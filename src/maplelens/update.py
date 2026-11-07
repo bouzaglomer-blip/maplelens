@@ -69,6 +69,6 @@ def digest_ok(path: Path, digest) -> bool:
     return got == want.lower()
 
 
-def should_check(frozen: bool, platform: str, settings: dict) -> bool:
-    """Only the installed Windows app checks on its own, and only with the toggle on."""
-    return bool(frozen) and platform == "win32" and bool(settings.get("update_check", True))
+def can_update(frozen: bool, platform: str) -> bool:
+    """Only the installed Windows app updates itself: source runs and the Mac never ask."""
+    return bool(frozen) and platform == "win32"

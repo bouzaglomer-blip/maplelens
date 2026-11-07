@@ -400,26 +400,136 @@ def test_a_hanging_check_never_blocks_a_tick(qt_box, make_check, log, monkeypatc
     assert not qt_box._notice.isVisibleTo(qt_box)
 
 
-def test_from_source_there_is_no_update_check(qt_box, monkeypatch):
-    monkeypatch.delattr(sys, "frozen", raising=False)
-    fetch = _Fetch(NEWER)
-    assert app.update_check(qt_box, {"update_check": True}, lambda: None, set(), 0.0, fetch) is None
-    assert fetch.calls == 0
-
-
-def test_toggle_off_there_is_no_update_check(qt_box, monkeypatch):
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "platform", "win32")
-    fetch = _Fetch(NEWER)
-    settings = {"update_check": False}
-    assert app.update_check(qt_box, settings, lambda: None, set(), 0.0, fetch) is None
-    assert fetch.calls == 0
-
-
-def test_the_installed_windows_app_gets_an_update_check(qt_box, monkeypatch, tmp_path):
+@pytest.fixture
+def installed(monkeypatch, tmp_path):
+    """Pretend to be the installed Windows app 0.1.0, with its data folder in tmp_path."""
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(app, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(app, "version", lambda name: "0.1.0")
+
+
+@pytest.mark.parametrize("where", ["source", "mac"])
+def test_from_source_or_on_the_mac_there_is_no_update_check(qt_box, monkeypatch, where):
+    if where == "source":
+        monkeypatch.delattr(sys, "frozen", raising=False)
+    else:
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "platform", "darwin")
+    fetch = _Fetch(NEWER)
+    assert app.update_check(qt_box, {"update_check": True}, lambda: None, set(), 0.0, fetch) is None
+    assert fetch.calls == 0
+    assert _menu(qt_box) == ["Quit MapleLens"]  # neither update item
+
+
+def test_the_installed_app_has_both_items_above_quit(qt_box, installed):
+    settings = {"update_check": True, "update_dismissed": None}
+    app.update_check(qt_box, settings, lambda: None, set(), 0.0, _Fetch(NEWER))
+    assert _menu(qt_box) == [
+        "Check for updates now",
+        "Check for updates automatically",
+        "Quit MapleLens",
+    ]
+    assert qt_box.actions()[1].isCheckable() and qt_box.actions()[1].isChecked()
+
+
+def test_toggle_off_survives_a_restart_and_check_now_still_works(qt_box, installed, tmp_path):
+    from maplelens.store import load_settings, save_settings
+
+    path = tmp_path / "settings.json"
+    settings = load_settings(path)
+
+    def save():
+        save_settings(path, settings)
+
+    # kept, as main keeps its own: the menu items call into it
+    first = app.update_check(qt_box, settings, save, set(), 0.0, _Fetch())
+    qt_box.actions()[1].trigger()  # untick "Check for updates automatically"
+    assert load_settings(path)["update_check"] is False
+    assert first is not None
+
+    for a in qt_box.actions()[:-1]:  # "restart": a fresh menu, settings read from the file
+        qt_box.removeAction(a)
+    fetch, settings = _Fetch(NEWER), load_settings(path)
+    check = app.update_check(qt_box, settings, lambda: None, set(), 0.0, fetch)
+    _run(check, 10 * app.UpdateCheck.EVERY_S)
+    assert fetch.calls == 0  # no automatic request
+    assert not qt_box.actions()[1].isChecked()
+    qt_box.actions()[0].trigger()  # "Check for updates now"
+    _run(check, 10 * app.UpdateCheck.EVERY_S + 1)
+    assert fetch.calls == 1
+
+
+def test_toggling_back_on_resumes_the_automatic_checks(qt_box, installed):
+    fetch, settings = _Fetch(NEWER), {"update_check": False, "update_dismissed": None}
+    check = app.update_check(qt_box, settings, lambda: None, set(), 0.0, fetch)
+    _run(check, 10.0)
+    assert fetch.calls == 0
+    qt_box.actions()[1].trigger()
+    _run(check, 11.0)
+    assert fetch.calls == 1
+
+
+def _check_now(check, box, now):
+    [item] = [a for a in box.actions() if a.text() == "Check for updates now"]
+    item.trigger()
+    check._thread.join(5)
+    check.poll(now)
+
+
+@pytest.fixture
+def manual(qt_box, installed):
+    """manual(fetch, settings=None): an installed app's UpdateCheck, for "Check now"."""
+
+    def make(fetch, settings=None):
+        settings = settings or {"update_check": False, "update_dismissed": None}
+        return app.update_check(qt_box, settings, lambda: None, set(), 0.0, fetch)
+
+    return make
+
+
+def test_check_now_says_up_to_date_then_hides_it(qt_box, manual):
+    check = manual(_Fetch(_latest("0.1.0")))
+    _check_now(check, qt_box, 20.0)
+    assert qt_box._notice.isVisibleTo(qt_box)
+    assert qt_box._notice_text.text() == app.UP_TO_DATE
+    check.poll(20.0 + app.UpdateCheck.REPLY_S - 1)
+    assert qt_box._notice.isVisibleTo(qt_box)
+    check.poll(20.0 + app.UpdateCheck.REPLY_S)
+    assert not qt_box._notice.isVisibleTo(qt_box)
+
+
+def test_check_now_says_when_it_couldnt_check(qt_box, manual, log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+    check = manual(_Fetch(error=OSError("offline")))
+    _check_now(check, qt_box, 20.0)
+    assert qt_box._notice_text.text() == app.COULDNT_CHECK
+    assert "OSError: offline" in log.read_text(encoding="utf-8")
+    check.poll(20.0 + app.UpdateCheck.REPLY_S)
+    assert not qt_box._notice.isVisibleTo(qt_box)
+
+
+def test_check_now_shows_the_update_even_if_dismissed(qt_box, manual):
+    check = manual(_Fetch(NEWER), {"update_check": False, "update_dismissed": "0.2.0"})
+    _check_now(check, qt_box, 20.0)
+    assert qt_box._notice_text.text() == app.update_notice("0.2.0")
+    assert qt_box.actions()[0].text() == "Update to 0.2.0…"
+    check.poll(20.0 + app.UpdateCheck.REPLY_S)
+    assert qt_box._notice.isVisibleTo(qt_box)  # an update stays until it's closed or used
+
+
+def test_a_replys_timer_leaves_a_later_line_alone(qt_box, manual):
+    fetch = _Fetch(_latest("0.1.0"))
+    check = manual(fetch)
+    _check_now(check, qt_box, 20.0)
+    fetch.reply = NEWER
+    _check_now(check, qt_box, 25.0)
+    check.poll(20.0 + app.UpdateCheck.REPLY_S)
+    assert qt_box._notice_text.text() == app.update_notice("0.2.0")
+    assert qt_box._notice.isVisibleTo(qt_box)
+
+
+def test_the_installed_windows_app_gets_an_update_check(qt_box, installed, tmp_path):
     old = tmp_path / "updates"
     old.mkdir()
     (old / "MapleLens-Setup-0.1.0.exe").write_bytes(b"last update's setup")

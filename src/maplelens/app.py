@@ -189,6 +189,8 @@ def downloading_notice(new: str) -> str:
 
 
 UPDATE_FAILED = "Update failed: right-click"  # the menu item tries again
+UP_TO_DATE = "MapleLens is up to date"  # "Check for updates now" replies
+COULDNT_CHECK = "Couldn't check for updates"
 
 
 def _user_agent() -> dict[str, str]:
@@ -230,6 +232,7 @@ class UpdateCheck:
 
     FIRST_S = 5
     EVERY_S = 24 * 3600
+    REPLY_S = 10  # how long "Check for updates now" shows "up to date" or "couldn't check"
 
     def __init__(  # noqa: PLR0913, PLR0917 - the box, settings and the parts tests swap
         self,
@@ -254,23 +257,45 @@ class UpdateCheck:
         self._download_thread: threading.Thread | None = None
         self._got: tuple[Path | None, Exception | None] = (None, None)
         self._item = None  # the "Update to X.Y.Z…" menu item, once an update is known
+        self._manual = False  # the request running answers "Check for updates now"
+        self._quiet_at: float | None = None  # when the line showing now hides itself
         self.release: update.Release | None = None
 
     def poll(self, now: float) -> None:
+        if self._quiet_at is not None and now >= self._quiet_at:
+            self._say(None)
         if self._download_thread is not None and not self._download_thread.is_alive():
             self._download_thread = None
             self._hand_over(*self._got)
         if self._thread is not None and not self._thread.is_alive():
             self._thread = None
             reply, error = self._result
+            manual, self._manual = self._manual, False
             if error is not None:
                 report_once(error, self._seen)
+                if manual:
+                    self._reply(COULDNT_CHECK, now)
             else:
-                self._found(update.parse_latest(reply))
-        if self._thread is None and now >= self._due:
+                self._found(update.parse_latest(reply), manual, now)
+        automatic = self._settings.get("update_check", True)  # the toggle, read each time
+        if self._thread is None and now >= self._due and automatic:
             self._due = now + self.EVERY_S
-            self._thread = threading.Thread(target=self._ask, daemon=True)
-            self._thread.start()
+            self._start()
+
+    def check_now(self) -> None:
+        """The "Check for updates now" item: one request whatever the toggle, with a reply."""
+        self._manual = True
+        if self._thread is None:  # else the request already running gives the reply
+            self._start()
+
+    def set_auto(self, on: bool) -> None:
+        """The "Check for updates automatically" toggle."""
+        self._settings["update_check"] = on
+        self._save()
+
+    def _start(self) -> None:
+        self._thread = threading.Thread(target=self._ask, daemon=True)
+        self._thread.start()
 
     def _ask(self) -> None:  # on the check's own thread: no Qt here
         try:
@@ -278,20 +303,29 @@ class UpdateCheck:
         except Exception as e:
             self._result = (None, e)
 
-    def _found(self, release: update.Release | None) -> None:
+    def _say(self, text: str | None, on_dismiss=None, *, until: float | None = None) -> None:
+        self._box.set_notice(text, on_dismiss)
+        self._quiet_at = until
+
+    def _reply(self, text: str, now: float) -> None:
+        if self._download_thread is None:  # the "Downloading…" line stays until it ends
+            self._say(text, until=now + self.REPLY_S)
+
+    def _found(self, release: update.Release | None, manual: bool, now: float) -> None:
         if release is None or not update.is_newer(release, self._running):
+            if manual:
+                self._reply(UP_TO_DATE, now)
             return
         self.release = release
         label = f"Update to {release.version}…"
         if self._item is None:
-            self._item = self._box.add_menu_item(label, self._update, first=True)
+            self._item = self._box.add_menu_item(label, self._update, at=0)
         else:
             self._item.setText(label)
         downloading = self._download_thread is not None  # its line stays until it ends
-        if not downloading and self._settings.get("update_dismissed") != release.version:
-            self._box.set_notice(
-                update_notice(release.version), lambda: self._dismiss(release.version)
-            )
+        asked = manual or self._settings.get("update_dismissed") != release.version
+        if not downloading and asked:
+            self._say(update_notice(release.version), lambda: self._dismiss(release.version))
 
     def _dismiss(self, new: str) -> None:
         self._settings["update_dismissed"] = new
@@ -301,7 +335,7 @@ class UpdateCheck:
         """The menu item's click: download the setup; poll() hands over once it's checked."""
         if self.release is None or self._download_thread is not None:
             return  # a second click while downloading does nothing
-        self._box.set_notice(downloading_notice(self.release.version))
+        self._say(downloading_notice(self.release.version))
         self._got = (None, None)
         self._download_thread = threading.Thread(
             target=self._get, args=(self.release,), daemon=True
@@ -336,7 +370,7 @@ class UpdateCheck:
                     setup.unlink(missing_ok=True)
         if error is not None:
             report_once(error, self._seen)
-        self._box.set_notice(UPDATE_FAILED)
+        self._say(UPDATE_FAILED)
 
 
 def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests swap
@@ -347,15 +381,20 @@ def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests
     now: float,
     fetch: Callable[[], dict] = fetch_latest,
 ) -> UpdateCheck | None:
-    """An UpdateCheck for the installed Windows app with the toggle on, else None.
+    """An UpdateCheck for the installed Windows app, with its two menu items; else None.
 
-    Clears the setups earlier updates left in the data folder's `updates`.
+    Keep the result: Qt holds the menu items' links to it weakly. Clears the setups
+    earlier updates left in the data folder's `updates`.
     """
-    if not update.should_check(getattr(sys, "frozen", False), sys.platform, settings):
+    if not update.can_update(getattr(sys, "frozen", False), sys.platform):
         return None
     folder = data_dir() / "updates"
     clear_updates(folder)
-    return UpdateCheck(box, settings, save, fetch, version("maplelens"), seen, now, folder=folder)
+    check = UpdateCheck(box, settings, save, fetch, version("maplelens"), seen, now, folder=folder)
+    box.add_menu_item("Check for updates now", check.check_now, at=-1)  # above Quit
+    auto = settings.get("update_check", True)
+    box.add_toggle("Check for updates automatically", auto, check.set_auto, at=-1)
+    return check
 
 
 def _prepare_process() -> None:

@@ -171,7 +171,9 @@ def test_notice_stays_while_the_status_line_shows(monkeypatch):
     assert box._notice.isVisibleTo(box)
 
 
-@pytest.mark.parametrize("which", ["update", "downloading", "failed"])
+@pytest.mark.parametrize(
+    "which", ["update", "downloading", "failed", "up to date", "couldn't check"]
+)
 def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch, which):
     from maplelens import app
 
@@ -179,6 +181,8 @@ def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch, which):
         "update": app.update_notice("10.10.10"),
         "downloading": app.downloading_notice("10.10.10"),
         "failed": app.UPDATE_FAILED,
+        "up to date": app.UP_TO_DATE,
+        "couldn't check": app.COULDNT_CHECK,
     }[which]
     box = _box(monkeypatch)
     box.set_notice(text, lambda: None)
@@ -188,7 +192,28 @@ def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch, which):
 def test_menu_item_can_go_first_and_be_relabelled(monkeypatch):
     box = _box(monkeypatch)
     box.add_menu_item("Quit", lambda: None)
-    item = box.add_menu_item("Update to 0.2.0…", lambda: None, first=True)
+    item = box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)
     assert [a.text() for a in box.actions()] == ["Update to 0.2.0…", "Quit"]
     item.setText("Update to 0.3.0…")
     assert box.actions()[0].text() == "Update to 0.3.0…"
+
+
+def test_menu_items_can_go_before_the_last_one(monkeypatch):
+    box = _box(monkeypatch)
+    box.add_menu_item("Pick", lambda: None)
+    box.add_menu_item("Quit", lambda: None)
+    box.add_menu_item("Check now", lambda: None, at=-1)
+    box.add_toggle("Check automatically", True, lambda on: None, at=-1)
+    assert [a.text() for a in box.actions()] == ["Pick", "Check now", "Check automatically", "Quit"]
+
+
+def test_toggle_shows_its_state_and_reports_changes(monkeypatch):
+    box = _box(monkeypatch)
+    changes = []
+    toggle = box.add_toggle("Check automatically", True, changes.append)
+    assert toggle.isCheckable() and toggle.isChecked()
+    toggle.trigger()
+    assert not toggle.isChecked()
+    toggle.trigger()
+    assert changes == [False, True]
+    assert not box.add_toggle("Off", False, changes.append).isChecked()

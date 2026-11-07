@@ -220,7 +220,7 @@ setups in `updates/` are cleared at startup.
 **Dependencies:** U2, U3. **Files:** `src/maplelens/app.py`, `tests/test_app.py`.
 **Scope:** S–M.
 
-### Task U5: opt-out toggle, "Check for updates now", and the replies
+### Task U5: opt-out toggle, "Check for updates now", and the replies (done)
 
 **Description:**
 - `Box.add_toggle(label, checked, on_change)`: a checkable menu item.
@@ -231,13 +231,27 @@ setups in `updates/` are cleared at startup.
 - Both items appear only when the app is frozen on Windows.
 
 **Acceptance criteria:**
-- [ ] Toggle off: no automatic fetch after a restart (settings round-trip), and "Check
+- [x] Toggle off: no automatic fetch after a restart (settings round-trip), and "Check
       now" still fetches.
-- [ ] "Check now" shows each of the three replies (offscreen Qt, fake fetch).
-- [ ] From source: neither item is in the menu.
+- [x] "Check now" shows each of the three replies (offscreen Qt, fake fetch).
+- [x] From source: neither item is in the menu.
 
 **Verification:** `uv run pytest tests/test_overlay.py tests/test_app.py`, then the four
 checks.
+
+**Build notes (2026-11-07):**
+- U1's `should_check(frozen, platform, settings)` became `can_update(frozen, platform)`.
+  The installed Windows app always gets the check and both menu items. The toggle is
+  read on each tick, so unticking it stops automatic requests at once, and ticking it
+  again resumes them.
+- Menu order: "Update to X.Y.Z…" (once known), "Pick game window…", "Check for updates
+  now", "Check for updates automatically", "Quit MapleLens". `add_menu_item` takes
+  `at=` (as `list.insert`) instead of U3's `first=`.
+- *(my call)* "Up to date" and "Couldn't check" hide after 10 s. An update found by
+  "Check now" shows even if that version was dismissed, and it stays until × or the
+  update, like the automatic line. A reply never covers "Downloading…".
+- Qt holds the menu items' links to the `UpdateCheck` weakly, so the caller must keep it.
+  `main` does, through the tick.
 
 **Dependencies:** U3. **Files:** `src/maplelens/overlay.py`, `src/maplelens/app.py`,
 `tests/test_overlay.py`, `tests/test_app.py`. **Scope:** S.

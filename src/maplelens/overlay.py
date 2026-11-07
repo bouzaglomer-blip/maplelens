@@ -191,18 +191,33 @@ class Box(QWidget):
             overlay_mac.release_keyboard()
 
     def add_menu_item(
-        self, label: str, callback: Callable[[], None], *, first: bool = False
+        self, label: str, callback: Callable[[], None], *, at: int | None = None
     ) -> QAction:
-        """An item in the box's right-click menu, at the end or, with `first`, the top.
+        """An item in the box's right-click menu; returns it, so its label can change.
 
-        Returns it, so its label can change later.
+        At the end, or before the item now at index `at` (as list.insert: -1 is before
+        the last one).
         """
         action = QAction(label, self)
         action.triggered.connect(callback)
-        actions = self.actions()
-        self.insertAction(actions[0] if first and actions else None, action)
-        self.setContextMenuPolicy(Qt.ActionsContextMenu)
+        self._insert(action, at)
         return action
+
+    def add_toggle(
+        self, label: str, checked: bool, on_change: Callable[[bool], None], *, at: int | None = None
+    ) -> QAction:
+        """A checkable item in the right-click menu; `on_change` gets its new state."""
+        action = QAction(label, self)
+        action.setCheckable(True)
+        action.setChecked(checked)
+        action.toggled.connect(on_change)
+        self._insert(action, at)
+        return action
+
+    def _insert(self, action: QAction, at: int | None) -> None:
+        actions = self.actions()
+        self.insertAction(actions[at] if at is not None and actions else None, action)
+        self.setContextMenuPolicy(Qt.ActionsContextMenu)
 
     def add_submenu(
         self, label: str, choices: Callable[[], list[str]], on_pick: Callable[[str], None]

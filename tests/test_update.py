@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from maplelens import update
-from maplelens.update import Release, digest_ok, is_newer, parse_latest, should_check
+from maplelens.update import Release, can_update, digest_ok, is_newer, parse_latest
 
 FIXTURES = Path(__file__).parent / "fixtures" / "github"
 H = "a" * 64
@@ -168,19 +168,17 @@ def test_repo_can_point_at_a_fork(monkeypatch):
         importlib.reload(update)
 
 
-# should_check
+# can_update: only the installed Windows app; the toggle is read by the app on each tick
 
 
 @pytest.mark.parametrize(
-    "frozen, platform, settings, want",
+    "frozen, platform, want",
     [
-        (True, "win32", {"update_check": True}, True),
-        (True, "win32", {}, True),  # on by default
-        (True, "win32", {"update_check": False}, False),
-        (False, "win32", {"update_check": True}, False),  # from source
-        (True, "darwin", {"update_check": True}, False),
-        (True, "linux", {"update_check": True}, False),
+        (True, "win32", True),
+        (False, "win32", False),  # from source
+        (True, "darwin", False),
+        (True, "linux", False),
     ],
 )
-def test_should_check(frozen, platform, settings, want):
-    assert should_check(frozen, platform, settings) is want
+def test_can_update(frozen, platform, want):
+    assert can_update(frozen, platform) is want
