@@ -31,8 +31,8 @@ this plan points at its sections instead of repeating them.
 - Never commit the certificate, its password, a built `.app` or `.dmg`. Never print the
   secrets. Never remove quarantine flags or touch the TCC database.
 - Apple silicon (arm64) only.
-- `CFBundleIdentifier` = `io.github.or-keren.maplelens` (pending the owner's confirmation
-  in Task 9; it can never change after the first Mac release).
+- `CFBundleIdentifier` = `io.github.or-keren.maplelens` (confirmed by the owner 2026-11-08;
+  it can never change after the first Mac release).
 - Signing identity name (the certificate's Common Name): `MapleLens Release`. The build
   reads it from env `MAPLELENS_SIGN_IDENTITY`; unset means ad-hoc (`-`) with a printed
   notice.

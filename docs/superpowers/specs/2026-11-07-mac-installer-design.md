@@ -89,8 +89,8 @@ code-signing certificate** that never changes:
   wheel)*. The README says so.
 - `Info.plist`:
   - `CFBundleIdentifier`: fixed forever, like the Windows `AppId`, because macOS keys
-    permissions on it. Proposed `io.github.or-keren.maplelens`; **the owner confirms
-    before the first Mac release.**
+    permissions on it. `io.github.or-keren.maplelens`, **confirmed by the owner
+    2026-11-08**.
   - `CFBundleShortVersionString` / `CFBundleVersion`: the `pyproject.toml` version.
   - `LSUIElement` = true, so there's no Dock icon even for the moment before
     `make_accessory()` runs *(my call)*.
