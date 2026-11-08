@@ -58,8 +58,9 @@ def snap_title(text: str, titles: Collection[str]) -> str:
     roman = re.sub(r"\b(1|11|111)$", lambda m: ROMAN[m[1]], text)
     if roman in titles:
         return roman
-    # Windows OCR can drop a title's last word ("The Forest North of" for "... of Ellinia").
-    cut = [t for t in titles if t.startswith(text + " ")]
+    # Windows OCR can drop a title's last word ("The Forest North of" for "... of Ellinia"),
+    # sometimes with a case slip too ("The field Up North of").
+    cut = [t for t in titles if t.casefold().startswith(text.casefold() + " ")]
     if len(cut) == 1:
         return cut[0]
     scored = sorted(((SequenceMatcher(None, text, t).ratio(), t) for t in titles), reverse=True)

@@ -333,6 +333,7 @@ V = "Victoria Road / "
         (V + "kerning City", V + "Kerning City"),
         ("Hidden Street / ist Accompaniment <Bonus>", "Hidden Street / 1st Accompaniment <Bonus>"),
         (V + "The Forest North of", V + "The Forest North of Ellinia"),  # last word dropped
+        (V + "The field Up North of", V + "The Field Up North of Ellinia"),  # and a case slip
     ],
 )
 def test_snap_misreads(text, want):
