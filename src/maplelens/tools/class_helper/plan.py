@@ -11,6 +11,7 @@ from maplelens.tools.class_helper.data import (
     GearRow,
     Item,
     JobPlan,
+    Place,
     Skill,
     SpStep,
     TrainRow,
@@ -149,3 +150,36 @@ def next_step(plan: JobPlan, build: Build, level: int) -> str | None:
         return None
     at, text = min(cands, key=lambda c: c[0])
     return f"{'Now' if at <= level else f'At {at}'}: {text}"
+
+
+@dataclass(frozen=True)
+class Milestone:
+    """Something ahead at `level`: the job advance, the next gear, or an AP reset."""
+
+    level: int
+    text: str
+    where: Place | None = None
+    item: Item | None = None
+
+
+def advance_ready(plan: JobPlan, build: Build, level: int) -> Advance | None:
+    adv = plan.advance_for(build)
+    return adv if adv and level >= adv.level else None
+
+
+def milestones(plan: JobPlan, build: Build, level: int) -> list[Milestone]:
+    """What's ahead, nearest first; a ready advance isn't ahead."""
+    out = []
+    adv = plan.advance_for(build)
+    if adv and level < adv.level:
+        out.append(Milestone(adv.level, "Advance: " + " or ".join(adv.next_jobs), adv.where))
+    if nxt := gear(build, level)[1]:
+        out.append(Milestone(nxt.from_level, f"Gear: {nxt.item.name}", nxt.where, nxt.item))
+    if build.reset_at is not None and level <= build.reset_at:
+        out.append(Milestone(build.reset_at, f"Reset AP for the {build.name} build"))
+    return sorted(out, key=lambda m: m.level)  # stable: ties keep this order
+
+
+def short_name(name: str) -> str:
+    """ "Street / Name" -> "Name"."""
+    return name.rsplit(" / ", 1)[-1]

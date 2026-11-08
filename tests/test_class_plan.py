@@ -14,12 +14,15 @@ from maplelens.tools.class_helper.data import (
 from maplelens.tools.class_helper.plan import (
     Advice,
     advance_due,
+    advance_ready,
     advance_text,
     ap_advice,
     band_at,
     gear,
+    milestones,
     next_step,
     short,
+    short_name,
     sp_advice,
     training,
 )
@@ -163,3 +166,28 @@ def test_next_step_reset_and_none():
     assert next_step(nobody, sindit, 20) == "At 30: reset AP for the Sindit build"
     assert next_step(nobody, sindit, 30) == "Now: reset AP for the Sindit build"
     assert next_step(nobody, sindit, 31) is None
+
+
+def test_milestones_in_level_order():
+    luk, sindit = ROGUE.build("LUK"), ROGUE.build("Sindit")
+    assert [(m.level, m.text) for m in milestones(ROGUE, luk, 12)] == [
+        (15, "Gear: Second Claw"),
+        (30, "Advance: Assassin or Bandit"),
+    ]
+    gear_step = milestones(ROGUE, luk, 12)[0]
+    assert gear_step.item.name == "Second Claw" and gear_step.where is not None
+    # a ready advance is left out; Sindit has no gear
+    assert [(m.level, m.text) for m in milestones(ROGUE, sindit, 30)] == [
+        (30, "Reset AP for the Sindit build")
+    ]
+    assert milestones(ROGUE, sindit, 31) == []
+
+
+def test_advance_ready_only_at_its_level():
+    assert advance_ready(ROGUE, ROGUE.builds[0], 29) is None
+    assert advance_ready(ROGUE, ROGUE.builds[0], 30).level == 30
+
+
+def test_short_name():
+    assert short_name("Kerning City Subway / Transfer Area") == "Transfer Area"
+    assert short_name("Henesys") == "Henesys"
