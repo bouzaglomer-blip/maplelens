@@ -32,6 +32,34 @@ def test_box_tabs_switch(monkeypatch):
     assert b.isVisibleTo(box) and not a.isVisibleTo(box)
 
 
+def test_a_hidden_tall_tab_never_stretches_the_current_one(monkeypatch):
+    """Wrapped text on the current tab once sized it by the tallest tab, hidden ones too."""
+    from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+
+    def page(text):
+        p = QWidget()
+        p.setFixedWidth(overlay.TAB_W)
+        label = QLabel(text)
+        label.setWordWrap(True)
+        QVBoxLayout(p).addWidget(label)
+        return p, label
+
+    def settle():
+        for _ in range(20):
+            QApplication.processEvents()
+
+    box = _box(monkeypatch)
+    current, line = page("Not in the map list yet, so no route from here")
+    line.hide()
+    box.add_tab("A", current)
+    box.add_tab("B", page("word " * 120)[0])
+    box.show()
+    settle()
+    line.show()  # the current tab's first wrapped line
+    settle()
+    assert current.height() == current.heightForWidth(overlay.TAB_W)
+
+
 def test_tab_dot(monkeypatch):
     from PySide6.QtWidgets import QLabel
 
