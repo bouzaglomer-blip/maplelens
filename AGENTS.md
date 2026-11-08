@@ -34,20 +34,21 @@ The build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup --scope user`
 - `src/maplelens/` — the package
   - `capture.py` (shared: `pick_window`) + `capture_win.py` / `capture_mac.py` — find the game window, grab its pixels
   - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`), `stat_window`, `skill_window`; `read_all` in `__init__`); numbers via glyph templates, words (map, class, skill names) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`. The draggable game windows (`window.py`, shared) are read differently: scaled from the window's own corner, digits by correlation with a margin, since exact templates miss at most sub-pixel offsets
-  - `overlay.py` — the see-through `Layer` and draggable `Box`; `overlay_mac.py` — the macOS panels
-  - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures
+  - `overlay.py` — the see-through `Layer` and draggable `Box` (its ••• menu button, `attach_menu`); `overlay_mac.py` — the macOS panels
+  - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures; `data/icon.ico` — the app icon (the exe, Setup and the tray)
   - `data/classes.json` — per-job advice (training maps, AP/SP plans, gear)
   - `store.py` — settings file and data folder
   - `update.py` — the update check's pure part: GitHub's latest-release reply → `Release`, version compare, digest check (`MAPLELENS_UPDATE_REPO` overrides the repo)
-  - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`)
+  - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`), the Windows tray icon (`make_tray`), Hide / Show (`Shown`) and the tick (`Tick`)
   - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`
   - `tools/path_arrow/` — the path arrow: `maps`, `route`, `camera`, `ui`
   - `tools/class_helper/` — the class helper: `data`, `plan`, `ui` (the Class tab and the marks on the stat and skill windows)
 - `scripts/check_screen_only.py` — the guard; banned lists live there, with reasons
 - `scripts/grab.py` — save a cropped fixture screenshot of the game
 - `scripts/make_level_font.py` — build the level digit templates from `scripts/level_sprites/`
+- `scripts/make_icon.py` — draw the icon: `src/maplelens/data/icon.ico`, `packaging/mac/icon.icns` (for the future Mac app), `docs/icon.png` (README), `docs/social-preview.png` (uploaded by hand: repo Settings → Social preview)
 - `scripts/build_installer.py` — the Windows build: freeze, check the bundle, `MapleLens.exe --self-check`, Inno Setup; run locally and by `release.yml`
-- `packaging/windows/` — `maplelens.spec` (PyInstaller), `maplelens.iss` (Inno Setup; its `AppId` never changes), the icon, `NOTICE.txt` and the license texts the build ships
+- `packaging/windows/` — `maplelens.spec` (PyInstaller), `maplelens.iss` (Inno Setup; its `AppId` never changes), `NOTICE.txt` and the license texts the build ships
 - `.github/workflows/` — `ci.yml` (the checks), `prepare-release.yml` (started by hand: bumps the version, opens the release PR), `release.yml` (on push to `main`: publishes a version that has no tag yet)
 - `tests/` — pytest; `tests/fixtures/screens/` holds cropped PNG screenshots, `tests/fixtures/github/` saved `releases/latest` replies
 - `docs/superpowers/specs/`, `docs/superpowers/plans/` — designs and plans
