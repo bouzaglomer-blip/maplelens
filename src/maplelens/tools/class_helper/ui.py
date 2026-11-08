@@ -104,8 +104,16 @@ class Row(QWidget):
         if self._on_click:
             self._on_click()
 
+    # A clickable row takes its press, as a button does, so the box doesn't start a drag;
+    # any other row leaves press and release to the box, which drags.
+    def mousePressEvent(self, event):
+        event.setAccepted(self.clickable and event.button() == Qt.LeftButton)
+
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton and self.rect().contains(event.position().toPoint()):
+        if not (self.clickable and event.button() == Qt.LeftButton):
+            event.ignore()
+            return
+        if self.rect().contains(event.position().toPoint()):
             self.click()
 
 
@@ -341,7 +349,7 @@ class ClassHelperTool:
 
     def _items(self, r: Reading | None):  # -> (items, dot key)
         """Items are tuples, drawn in order: ("info", text), ("label", text, colour),
-        ("header", text, chip), ("row", name, sub, go map, best, outline), ("divider",)."""
+        ("header", job, level, chip), ("row", name, sub, go map, best, outline), ("divider",)."""
         if self._job is None or self._level is None:
             return [("info", NO_CLASS)], None
         job, level = self._job, self._level
@@ -353,7 +361,7 @@ class ClassHelperTool:
         build = plan.build(self._choices().get(plan.job))
         ap, sp = self._points()
         chip = " · ".join(f"{n} {w}" for n, w in ((ap, "AP"), (sp, "SP")) if n)
-        out = [("header", f"{job} · Lv {level}", chip)]
+        out = [("header", job, level, chip)]
         adv = advance_ready(plan, build, level)
         if adv:
             where = short_name(adv.where.name) if adv.where else None
@@ -445,12 +453,13 @@ class ClassHelperTool:
             _, name, sub, map_id, best, outline = item
             go = (lambda m=map_id: self._go(m)) if map_id else None
             return Row(name, sub, go, best=best, outline=outline)
-        _, text, chip = item  # the header
+        _, job, level, chip = item  # the header
         head = QWidget()
         row = QHBoxLayout(head)
         row.setContentsMargins(0, 0, 0, 2)
-        row.addWidget(text_label(text, LABEL_PT, LABEL_COLOR))
-        row.addStretch()
+        row.setSpacing(6)
+        room = TAB_W
+        badge = None
         if chip:
             badge = text_label(chip, LABEL_PT, ACCENT, bold=True)
             badge.setObjectName("chip")
@@ -458,6 +467,14 @@ class ClassHelperTool:
                 f"#chip {{ color: {ACCENT}; background: {CHIP_BG}; border-radius: 8px;"
                 " padding: 0 7px; }"
             )
+            room -= badge.sizeHint().width() + row.spacing()
+        label = text_label("", LABEL_PT, LABEL_COLOR)
+        fm, tail = label.fontMetrics(), f" · Lv {level}"  # the level always shows; the job is cut
+        label.setText(fm.elidedText(job, Qt.ElideRight, room - fm.horizontalAdvance(tail)) + tail)
+        label.setToolTip(job)
+        row.addWidget(label)
+        row.addStretch()
+        if badge:
             row.addWidget(badge)
         return head
 

@@ -404,14 +404,23 @@ def box_with_tools(monkeypatch, tmp_path):
     return box, cls
 
 
+def settle(box, cls=None, job=None, level=None):
+    """Feed the class tool, then let Qt show the widgets it built, as the running app does."""
+    from PySide6.QtWidgets import QApplication
+
+    if cls is not None:
+        cls.update(R(job=job, level=level), RECT, 0)
+    QApplication.processEvents()  # a visible parent shows new children on the next pass
+    box.adjustSize()
+
+
 def test_box_width_is_the_same_on_every_tab(box_with_tools):
     box, cls = box_with_tools
     widths = {}
     for job, level in STATES:
-        cls.update(R(job=job, level=level), RECT, 0)
         for i in range(3):
             box.select(i)
-            box.adjustSize()
+            settle(box, cls, job, level)
             widths[(job, level, i)] = box.width()
     assert set(widths.values()) == {210}, widths
 
@@ -423,9 +432,9 @@ def test_class_tab_text_never_overlaps(box_with_tools):
     box, cls = box_with_tools
     box.select(2)
     for job, level in STATES:
-        cls.update(R(job=job, level=level), RECT, 0)
-        box.adjustSize()
+        settle(box, cls, job, level)
         shown = [w for w in cls.tab.findChildren(QLabel) if w.isVisibleTo(cls.tab) and w.text()]
+        assert len(shown) >= 3, (job, level)  # the check below really looked at something
         rects = [w.geometry().translated(w.parentWidget().mapTo(cls.tab, QPoint())) for w in shown]
         for i, a in enumerate(rects):
             for j in range(i + 1, len(rects)):
@@ -437,6 +446,42 @@ def test_box_width_holds_with_an_info_line_on_the_path_tab(box_with_tools):
     box.select(1)
     for t in (0.0, 0.5):  # read twice: confirmed, not in the map data
         box.path.update(Reading(t, None, None, None, "Road / Nowhere"), RECT, t)
-    box.adjustSize()
+    settle(box)
     assert box.path._info.isVisibleTo(box.path.tab)
     assert box.width() == 210
+
+
+def test_a_row_click_never_leaves_the_box_dragging(box_with_tools):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    box, cls = box_with_tools
+    box.select(2)
+    settle(box, cls, "Rogue", 28)
+    clickable = next(r for r in rows(cls) if r.clickable)
+    plain = next(r for r in rows(cls) if not r.clickable)
+    for row in (clickable, plain):
+        QTest.mousePress(row, Qt.LeftButton)
+        QTest.mouseRelease(row, Qt.LeftButton)
+        assert box._drag_from is None, row.name  # the box still follows the game window
+
+
+def test_header_keeps_the_level_when_points_crowd_it(make):
+    from PySide6.QtWidgets import QLabel
+
+    tool = make()
+    tool.update(R(level=12, stats=SW(level=12, ap=12), skills=KW(sp=10, rows=ALL_ROGUE)), RECT, 0)
+    (head,) = [w for w in tool.tab.findChildren(QLabel) if w.text().endswith("Lv 12")]
+    (chip,) = [w for w in tool.tab.findChildren(QLabel) if w.objectName() == "chip"]
+    assert chip.text() == "12 AP · 10 SP"
+    assert head.sizeHint().width() + 6 + chip.sizeHint().width() <= 186  # 6: the row's spacing
+
+
+def test_a_long_job_name_is_cut_not_the_level(make):
+    tool = make()
+    tool._data.jobs["Wizard (Ice, Lightning) Wizard"] = tool._data.jobs["Rogue"]
+    tool.update(
+        R(job="Wizard (Ice, Lightning) Wizard", level=34, stats=SW(level=34, ap=12)), RECT, 0
+    )
+    (head,) = [t for t in texts(tool) if t.endswith(" · Lv 34")]
+    assert "…" in head
