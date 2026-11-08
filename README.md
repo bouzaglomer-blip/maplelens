@@ -87,8 +87,10 @@ Apple silicon (M1 or newer) only.
    settings…** and tick MapleLens. Then quit MapleLens (right-click its Dock icon and
    choose **Quit**, or press ⌘Q) and click MapleLens in the Dock or open it from
    Applications again: macOS doesn't give a running app the permission, and it doesn't
-   offer to restart it. If MapleLens is
-   already listed but not working, remove it with "−" and add it again with "+".
+   offer to restart it. If MapleLens is already switched on there but the box keeps
+   asking (an older copy's permission), quit MapleLens, run
+   `tccutil reset ScreenCapture io.github.or-keren.maplelens` in Terminal, then open
+   MapleLens and allow it again.
 5. Start MapleStory Classic **windowed** (the Mac launcher's fullscreen hides overlays),
    then use the box as on Windows. If it says "Looking for MapleStory…", click **•••** on
    the box and choose **Pick game window…**. Right-clicking MapleLens in the Dock opens
