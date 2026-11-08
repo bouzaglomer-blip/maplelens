@@ -32,6 +32,13 @@ def test_self_check_fails_without_templates(tmp_path, monkeypatch, no_cache):
     assert app.self_check() == 1
 
 
+def test_self_check_fails_without_classes_json(monkeypatch, no_cache):
+    from maplelens.tools.class_helper import data
+
+    monkeypatch.setattr(data, "load", lambda: (_ for _ in ()).throw(FileNotFoundError()))
+    assert app.self_check() == 1
+
+
 def test_self_check_fails_without_ocr(monkeypatch, no_cache):
     monkeypatch.setattr(ocr, "engine", lambda: None)
     assert app.self_check() == 1
@@ -139,8 +146,12 @@ class _Raises:
 
 class _Quiet:
     running = False
+    dot = False
 
     def update(self, *_):
+        pass
+
+    def hide_marks(self):
         pass
 
 
@@ -166,7 +177,7 @@ def test_a_tool_error_is_logged_once(log, monkeypatch):
     monkeypatch.setattr(sys, "stderr", None)  # a windowed exe has no console
     seen: set[str] = set()
     for _ in range(3):
-        app.update_tools(_Box(), _Raises(), _Quiet(), None, None, 0.0, seen)
+        app.update_tools(_Box(), _Raises(), _Quiet(), _Quiet(), None, None, 0.0, seen)
     text = log.read_text(encoding="utf-8")
     assert text.count("ValueError: bad frame") == 1
     assert "Traceback" in text
@@ -1133,6 +1144,7 @@ class _Recorder:
     """A tool that keeps what each update got."""
 
     running = False
+    dot = False
 
     def __init__(self):
         self.updates = []
@@ -1158,7 +1170,7 @@ READING = object()
 def _tick(box, layer, shown, updates=None):
     from PySide6.QtWidgets import QLabel
 
-    for title in ("EXP", "Path"):  # the tick sets the Path tab's dot
+    for title in ("EXP", "Path", "Class"):  # the tick sets the Path and Class tabs' dots
         box.add_tab(title, QLabel())
     exp, path = _Recorder(), _Recorder()
     tick = app.Tick(
@@ -1168,6 +1180,7 @@ def _tick(box, layer, shown, updates=None):
         layer=layer,
         exp=exp,
         path=path,
+        cls=_Recorder(),
         updates=updates,
         seen=set(),
         shown=shown,

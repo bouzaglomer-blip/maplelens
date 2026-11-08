@@ -20,6 +20,10 @@ CHAR_NAMES = {
     "pct": "%",
     "lbr": "[",
     "rbr": "]",
+    "plus": "+",
+    "lpar": "(",
+    "rpar": ")",
+    "slash": "/",
 }
 
 Font = list[tuple[str, np.ndarray]]  # (char, ink mask) per template file
@@ -37,7 +41,7 @@ def clear_cache() -> None:
     _last_hit.clear()
 
 
-def _imread(path: Path, flags: int) -> np.ndarray | None:
+def imread(path: Path, flags: int) -> np.ndarray | None:
     """Image at `path`, or None if missing or unreadable.
 
     fromfile + imdecode: imread fails on non-ASCII paths on Windows.
@@ -50,7 +54,7 @@ def _imread(path: Path, flags: int) -> np.ndarray | None:
 def load(name: str) -> np.ndarray:
     """templates/<name>.png as BGR, cached."""
     if name not in _images:
-        img = _imread(TEMPLATES / f"{name}.png", cv2.IMREAD_COLOR)
+        img = imread(TEMPLATES / f"{name}.png", cv2.IMREAD_COLOR)
         if img is None:
             raise FileNotFoundError(TEMPLATES / f"{name}.png")
         _images[name] = img
@@ -127,7 +131,7 @@ def _font(font: str) -> Font:
             raise FileNotFoundError(f"no glyph PNGs in {TEMPLATES / font}")
         glyphs = []
         for p in paths:
-            img = _imread(p, cv2.IMREAD_GRAYSCALE)
+            img = imread(p, cv2.IMREAD_GRAYSCALE)
             if img is None:
                 raise FileNotFoundError(f"cannot read glyph {p}")
             name = p.stem.split("_")[0]

@@ -42,3 +42,13 @@ def history(conn: sqlite3.Connection) -> list[HistoryRow]:
         " GROUP BY map, job, level ORDER BY MAX(end) DESC"
     )
     return [HistoryRow(*r) for r in rows]
+
+
+def best_rate(conn: sqlite3.Connection, title: str) -> float | None:
+    """The highest per-level EXP/min on one map, grouped as `history` does."""
+    (best,) = conn.execute(
+        "SELECT MAX(r) FROM (SELECT SUM(exp) / SUM(active_s) * 60 AS r FROM exp_segments"
+        " WHERE map = ? AND active_s > 0 GROUP BY job, level)",
+        (title,),
+    ).fetchone()
+    return best

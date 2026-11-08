@@ -42,3 +42,10 @@ def test_layout_lists_the_build_and_release_files():
     assert "update_mac.py" in layout
     for workflow in ["ci.yml", "release.yml", "prepare-release.yml"]:
         assert workflow in layout, workflow
+
+
+def test_readme_credits_each_guide_page():
+    from maplelens.tools.class_helper.data import load
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert [p.source for p in load().jobs.values() if p.source not in readme] == []

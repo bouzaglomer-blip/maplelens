@@ -1,6 +1,6 @@
 from pytest import approx
 
-from maplelens.tools.exp_meter.history import history, open_db, save_segment
+from maplelens.tools.exp_meter.history import best_rate, history, open_db, save_segment
 from maplelens.tools.exp_meter.meter import Segment
 
 
@@ -45,3 +45,11 @@ def test_zero_active_excluded(tmp_path):
     conn = open_db(tmp_path / "t.db")
     save_segment(conn, _seg(0, active_s=0.0))
     assert history(conn) == []
+
+
+def test_best_rate(tmp_path):
+    conn = open_db(tmp_path / "t.db")
+    save_segment(conn, _seg(0, exp=600, level=44))
+    save_segment(conn, _seg(100, exp=900, level=45))
+    assert best_rate(conn, "Henesys") == approx(900)
+    assert best_rate(conn, "Nowhere") is None

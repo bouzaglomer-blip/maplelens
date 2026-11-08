@@ -24,7 +24,9 @@ from maplelens import capture, update, update_mac
 from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
 from maplelens.readers import glyphs, ocr, read_all
 from maplelens.store import data_dir, load_settings, save_settings
-from maplelens.tools.exp_meter.history import open_db
+from maplelens.tools.class_helper import data as class_data
+from maplelens.tools.class_helper.ui import MARKS, ClassHelperTool
+from maplelens.tools.exp_meter.history import best_rate, open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
 from maplelens.tools.path_arrow import maps
 from maplelens.tools.path_arrow.ui import PathArrowTool
@@ -153,11 +155,11 @@ def poll_updates(updates: "UpdateCheck | None", now: float, seen: set[str]) -> N
 
 
 def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bundle would hide them
-    box: Box, exp, path, reading, rect, now: float, seen: set[str]
+    box: Box, exp, path, cls, reading, rect, now: float, seen: set[str]
 ) -> None:
-    """Feed both tools the same reading; the Path tab shows a dot while a trip runs.
+    """Feed the tools the same reading; the Path tab shows a dot while a trip runs.
 
-    Each tool runs on its own: one raising doesn't stop the other.
+    Each tool runs on its own: one raising doesn't stop the others.
     """
     try:
         exp.update(reading, rect, now)
@@ -168,7 +170,13 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
     except Exception as e:
         report_once(e, seen)
         path.arrow.hide()  # never leave it pointing from a stale spot
-    box.set_tab_dot(1, path.running)  # the Path tab's index in build_box's tools list
+    try:
+        cls.update(reading, rect, now)
+    except Exception as e:
+        report_once(e, seen)
+        cls.hide_marks()  # never leave marks from a tick that failed
+    box.set_tab_dot(1, path.running)  # the tabs' indexes in build_box's tools list
+    box.set_tab_dot(2, cls.dot)
 
 
 def self_check() -> int:
@@ -181,6 +189,7 @@ def self_check() -> int:
     try:
         glyphs.load_all()
         maps.load()
+        class_data.load()
         pictures = sorted(maps.PICTURES.glob("*.png"))
         if not pictures or any(maps.picture(p.stem) is None for p in pictures):
             return 1
@@ -680,6 +689,7 @@ class Tick:
     layer: Layer
     exp: ExpMeterTool
     path: PathArrowTool
+    cls: ClassHelperTool
     updates: "UpdateCheck | None"
     seen: set[str]  # error types/messages already logged
     shown: Shown
@@ -697,7 +707,7 @@ class Tick:
         if rect is None:
             self.hwnd = None  # gone or minimized: look again next tick
             self.layer.hide()
-            update_tools(self.box, self.exp, self.path, None, None, now, self.seen)
+            update_tools(self.box, self.exp, self.path, self.cls, None, None, now, self.seen)
             return
         self.layer.follow(rect)
         if self.shown.on:  # hidden by the player: the tools still run, nothing shows
@@ -707,7 +717,7 @@ class Tick:
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, self.seen)
             reading = None
-        update_tools(self.box, self.exp, self.path, reading, rect, now, self.seen)
+        update_tools(self.box, self.exp, self.path, self.cls, reading, rect, now, self.seen)
         self.box.place(rect)
 
 
@@ -765,7 +775,8 @@ def main() -> int:
     def save() -> None:
         save_settings(path, settings)
 
-    tool = ExpMeterTool(settings, open_db(data_dir() / "maplelens.db"))
+    conn = open_db(data_dir() / "maplelens.db")
+    tool = ExpMeterTool(settings, conn)
     # the lambda defers the lookup: `box` is built from path_tool on the next line
     path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))  # noqa: PLW0108
     seen: set[str] = set()  # error types/messages already logged
@@ -774,14 +785,21 @@ def main() -> int:
         choose_window(settings, save, title)
         tick.hwnd = None  # the next tick finds the chosen window
 
-    box = build_box(settings, save, [tool, path_tool], pick)
+    def go(map_id: str) -> None:
+        path_tool.go(map_id)
+        box.select(1)
+
+    cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t))
+    box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
     setup_screen_recording(box)
+    marks = box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)
+    cls_tool.marks_changed = marks.setChecked  # the Class tab's box changes it too
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     dock = make_dock(box, available=dock_available())  # the box, its parent, holds it
     shown = add_hide(box, layer, tray, app if dock is not None else None)
     add_about(box, updates)  # after Hide: just before Quit
-    tick = Tick(settings, save, box, layer, tool, path_tool, updates, seen, shown)
+    tick = Tick(settings, save, box, layer, tool, path_tool, cls_tool, updates, seen, shown)
     timer = QTimer()
     timer.timeout.connect(lambda: tick.run(time.time()))
     timer.start(_TICK_MS)

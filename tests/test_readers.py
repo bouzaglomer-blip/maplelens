@@ -4,12 +4,14 @@ import cv2
 import numpy as np
 import pytest
 
-from maplelens.readers import ExpValue, Reading, glyphs, job, map_name, ocr, read_all
+from maplelens.readers import ExpValue, Reading, glyphs, job, map_name, ocr, read_all, skill_window
 from maplelens.readers.exp import EXP_DX, EXP_DY, EXP_H, EXP_INK_HI, EXP_INK_LO, EXP_W, read_exp
 from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
+from maplelens.readers.skill_window import SkillRow, SkillWindow, read_skill_window
+from maplelens.readers.stat_window import UNREADABLE, StatWindow, parse_stat, read_stat_window
 
 SCREENS = Path(__file__).parent / "fixtures" / "screens"
 
@@ -96,6 +98,47 @@ EXPECTED_POS = {
     "pos_nominimap_1920x1080_100.png": None,  # game scene, no minimap
 }
 
+# Stat window crops are native (not normalized): the window plus 3 px of margin. Level 28,
+# AP 5, STR 4 / DEX 25 / INT 4 / LUK 122 (+2 gear). `plus`: the single-arrow + button
+# centres in the normalized frame, measured at 768 and within 1 px at the other sizes.
+_STAT = {
+    "level": 28,
+    "ap": 5,
+    "base": {"STR": 4, "DEX": 25, "INT": 4, "LUK": 122},
+    "total": {"STR": 4, "DEX": 25, "INT": 4, "LUK": 124},
+}
+_PLUS = {"STR": (155, 184), "DEX": (155, 202), "INT": (155, 220), "LUK": (155, 238)}
+EXPECTED_STAT = {
+    "stat_a_1366x768_100.png": StatWindow(**_STAT, plus=_PLUS),
+    "stat_a_1920x1080_100.png": StatWindow(
+        **_STAT, plus={k: (x + 1, y) for k, (x, y) in _PLUS.items()}
+    ),
+    "stat_a_2560x1440_100.png": StatWindow(**_STAT, plus=_PLUS),
+    "stat_covered_1366x768_100.png": UNREADABLE,  # inventory over the left half of the rows
+    "stat_edge_1366x768_100.png": None,  # window mostly off the left edge: no anchor found
+}
+
+# Skill window crops: native, window plus 3 px of margin. Rogue tab, 3 SP; `plus`: the
+# single-arrow + centres in the normalized frame (768 measured, within 1 px elsewhere).
+_SKILL_ROWS = (
+    (4000000, 15),
+    (4000001, 15),
+    (4001000, 2),
+    (4001001, 0),
+    (4001002, 0),
+    (4001003, 20),
+)
+_SKILL = SkillWindow(
+    "Rogue", 3, tuple(SkillRow(i, lv, (148, 125 + 40 * n)) for n, (i, lv) in enumerate(_SKILL_ROWS))
+)
+EXPECTED_SKILL = {
+    "skill_a_1366x768_100.png": _SKILL,
+    "skill_a_1920x1080_100.png": _SKILL,
+    "skill_a_2560x1440_100.png": _SKILL,
+    "skill_covered_2560x1440_100.png": UNREADABLE,  # title covered, SKILL POINT label visible
+    "skill_edge_2560x1440_100.png": None,  # window mostly off the left edge
+}
+
 
 def screen(name: str):
     return cv2.imread(str(SCREENS / name), cv2.IMREAD_COLOR)
@@ -168,7 +211,9 @@ def test_level_reads_every_digit(d):
 
 
 def test_expected_matches_fixture_files():
-    assert set(EXPECTED) | set(EXPECTED_POS) == {p.name for p in SCREENS.glob("*.png")}
+    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(EXPECTED_SKILL) == {
+        p.name for p in SCREENS.glob("*.png")
+    }
 
 
 def test_exp_one_px_noise_is_never_another_value():
@@ -496,3 +541,236 @@ def test_mac_vision_request_failure_raises(monkeypatch):
     monkeypatch.setattr(vision, "VNImageRequestHandler", Failing)
     with pytest.raises(RuntimeError, match="boom"):
         ocr_mac.recognize(np.full((40, 40), 255, np.uint8))
+
+
+@pytest.mark.parametrize(
+    "text, want",
+    [
+        ("25", (25, 25)),
+        ("124(122+2)", (122, 124)),
+        ("4(4+0)", (4, 4)),
+        ("25(20+4)", None),
+        ("", None),
+        ("2a", None),
+        ("25(20+", None),
+    ],
+)
+def test_parse_stat(text, want):
+    assert parse_stat(text) == want
+
+
+def _window_args(name):
+    """(frame, native, scale) of a native stat crop: frame is the 768-scale resize."""
+    native = screen(name)
+    scale = int(name.split("_")[2].split("x")[1]) / 768
+    return _scaled(native, scale), native, scale
+
+
+def _scaled(native, scale):
+    if scale == 1:
+        return native
+    return cv2.resize(native, None, fx=1 / scale, fy=1 / scale, interpolation=cv2.INTER_AREA)
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("stat_*.png")))
+def test_read_stat_window(name):
+    got, want = read_stat_window(*_window_args(name)), EXPECTED_STAT[name]
+    if isinstance(want, StatWindow) and isinstance(got, StatWindow):
+        assert (got.level, got.ap, got.base, got.total) == (
+            want.level,
+            want.ap,
+            want.base,
+            want.total,
+        )
+        for k, (x, y) in want.plus.items():
+            assert abs(got.plus[k][0] - x) <= 1 and abs(got.plus[k][1] - y) <= 1, (k, got.plus)
+    else:
+        assert got == want
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("exp_a_*.png")))
+def test_no_stat_window_reads_none(name):
+    assert read_stat_window(*_window_args_any(name)) is None
+
+
+def _window_args_any(name):
+    native = screen(name)
+    scale = native.shape[0] / 768
+    return _scaled(native, scale), native, scale
+
+
+@pytest.mark.parametrize(
+    "name, ks",
+    [
+        ("stat_a_2560x1440_100.png", range(0, 15, 2)),
+        ("stat_a_1920x1080_100.png", range(0, 12, 2)),  # to ceil(2s) = 3 frame px
+    ],
+)
+def test_stat_reads_at_every_offset(name, ks):
+    """Dropping native rows and columns moves the window to another sub-pixel offset."""
+    scale = int(name.split("_")[2].split("x")[1]) / 768
+    want = EXPECTED_STAT[name]
+    for k in ks:
+        native = screen(name)[k:, k:]
+        got = read_stat_window(_scaled(native, scale), native, scale)
+        assert isinstance(got, StatWindow), k
+        assert (got.level, got.ap, got.base, got.total) == (
+            want.level,
+            want.ap,
+            want.base,
+            want.total,
+        )
+        for key, (x, y) in want.plus.items():
+            assert abs(got.plus[key][0] - (x - k / scale)) <= 1, (k, key, got.plus)
+            assert abs(got.plus[key][1] - (y - k / scale)) <= 1, (k, key, got.plus)
+
+
+def test_stat_ap_check(monkeypatch):
+    from maplelens.readers import stat_window
+
+    args = _window_args("stat_a_1366x768_100.png")
+    assert isinstance(read_stat_window(*args), StatWindow)
+    real = stat_window.window.read_number_text
+    monkeypatch.setattr(
+        stat_window.window,
+        "read_number_text",
+        lambda win, box: "7" if box[0] == stat_window.AP_X else real(win, box),
+    )
+    assert read_stat_window(*args) == UNREADABLE  # 4 + 25 + 4 + 122 + 7 > 25 + 5 * 27
+
+
+def test_stat_light_overlay_over_a_tail_is_not_read():
+    """A light, borderless patch over "(122+2)" must not read as a plain "124" LUK."""
+    native = screen("stat_a_1366x768_100.png")
+    native[3 + 228 : 3 + 243, 3 + 90 : 3 + 140] = 222  # the LUK strip's tail, field grey
+    assert read_stat_window(native) == UNREADABLE
+
+
+def test_stat_plus_off_frame_is_unreadable():
+    """Fields all read, but the frame's right edge cuts through the + buttons."""
+    native = screen("stat_a_1366x768_100.png")[:, :155]
+    assert read_stat_window(native) == UNREADABLE
+
+
+def test_number_text_ambiguous_glyph_is_none(monkeypatch):
+    """Two chars that match a glyph about equally: no guess."""
+    from maplelens.readers import window
+
+    win = np.full((20, 40, 3), 222, np.uint8)
+    g = next(t for c, t in window._glyphs() if c == "8")
+    win[3:16, 5 : 5 + g.shape[1]] = g[..., None].astype(np.uint8)
+    box = (0, 0, 40, 20)
+    assert window.read_number_text(win, box) == "8"
+    # An "8" that is mostly a "0": blend the middle row in.
+    win[3 + 6, 5:12] = 222
+    assert window.read_number_text(win, box) in (None, "0")  # never a confident wrong read
+    monkeypatch.setattr(window, "_font", [("8", g), ("B", g)])
+    assert window.read_number_text(win, box) is None  # identical scores: no margin
+
+
+def test_number_text_light_patch_off_the_glyphs_is_none():
+    """The background check: a non-ink patch that differs from the field voids the read."""
+    from maplelens.readers import window
+
+    win = np.full((20, 40, 3), 222, np.uint8)
+    g = next(t for c, t in window._glyphs() if c == "8")
+    win[3:16, 5 : 5 + g.shape[1]] = g[..., None].astype(np.uint8)
+    box = (0, 0, 40, 20)
+    assert window.read_number_text(win, box) == "8"
+    win[2:4, 30:36] = 222 - window.BG_TOL - 8  # darker than the field, but above INK
+    assert window.read_number_text(win, box) is None
+
+
+def test_every_known_skill_name_snaps_to_itself():
+    from maplelens.readers import skill_window
+
+    names = list(skill_window.known_skills())
+    assert [n for n in names if skill_window._snap(n, names) != n] == []
+
+
+def test_skill_name_near_twins_do_not_snap():
+    from maplelens.readers import skill_window
+
+    twins = ["Blunt Weapon Mastery", "Blunt Weapon Booster"]
+    assert skill_window._snap("Blunt Weapon Maoster", twins) is None  # 0.95 vs 0.90
+    assert skill_window._snap("Blunt Weapon Mastery", twins) == twins[0]  # clean read
+    assert skill_window._snap(
+        "Final Attack: Spear", ["Final Attack: Spear", "Final Attack: Polearm"]
+    )
+
+
+def _same_skills(got, want, k=0, scale=1):
+    assert isinstance(got, SkillWindow), got
+    assert (got.tab, got.sp) == (want.tab, want.sp)
+    assert [(r.skill, r.level) for r in got.rows] == [(r.skill, r.level) for r in want.rows]
+    for g, w in zip(got.rows, want.rows, strict=True):
+        assert abs(g.plus[0] - (w.plus[0] - k / scale)) <= 1, (k, g)
+        assert abs(g.plus[1] - (w.plus[1] - k / scale)) <= 1, (k, g)
+
+
+@needs_ocr
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("skill_*.png")))
+def test_read_skill_window(name, monkeypatch):
+    read, seen = skill_window.ocr.read_lines, []
+    monkeypatch.setattr(skill_window.ocr, "read_lines", lambda m: seen.append(read(m)) or seen[-1])
+    got, want = read_skill_window(*_window_args(name)), EXPECTED_SKILL[name]
+    if isinstance(want, SkillWindow):
+        assert isinstance(got, SkillWindow), (got, seen)  # seen: the names as the OCR read them
+        _same_skills(got, want)
+    else:
+        assert got == want, seen
+
+
+def test_a_name_with_ink_read_as_nothing_is_unreadable(monkeypatch):
+    """A covered name the OCR reads as nothing is not a blank row."""
+    calls = []
+    monkeypatch.setattr(skill_window.ocr, "read_lines", lambda m: calls.append(m) and [])
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+    assert len(calls) == 1  # the first row's ink, and no further
+
+
+@needs_ocr
+def test_unknown_skill_name_is_unreadable(monkeypatch):
+    monkeypatch.setattr(skill_window, "known_skills", dict)
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+
+
+@needs_ocr
+def test_skill_level_over_max_is_unreadable(monkeypatch):
+    real = skill_window.known_skills()
+    monkeypatch.setattr(skill_window, "known_skills", lambda: real)
+    monkeypatch.setattr(skill_window, "_max", lambda skill: 14 if skill == 4000000 else 20)
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+
+
+@needs_ocr
+def test_skill_tab_is_the_job_every_row_shares(monkeypatch):
+    names = {"Nimble Body": [(1, "A")], "Keen Eyes": [(2, "B")]}
+    monkeypatch.setattr(skill_window, "known_skills", lambda: names)
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+
+
+@needs_ocr
+@pytest.mark.parametrize(
+    "name, ks",
+    [
+        ("skill_a_2560x1440_100.png", range(0, 15, 2)),
+        ("skill_a_1920x1080_100.png", range(0, 12, 2)),
+    ],
+)
+def test_skill_reads_at_every_offset(name, ks):
+    scale = int(name.split("_")[2].split("x")[1]) / 768
+    for k in ks:
+        native = screen(name)[k:, k:]
+        got = read_skill_window(_scaled(native, scale), native, scale)
+        _same_skills(got, EXPECTED_SKILL[name], k, scale)
+
+
+def test_skill_plus_off_frame_is_unreadable():
+    native = screen("skill_a_1366x768_100.png")[:, :140]
+    assert read_skill_window(native) == UNREADABLE
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("stat_a_*.png")))
+def test_no_skill_window_in_a_stat_window(name):
+    assert read_skill_window(*_window_args(name)) is None
