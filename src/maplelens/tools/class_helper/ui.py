@@ -44,6 +44,7 @@ SKILL_UNREAD = "Can't read your skill window: move it fully into view"
 SCROLL = "scroll the list once"
 TIERS = {0: "Beginner", 1: "1st job", 2: "2nd job"}
 RING_R, TAG_GAP = 11, 26  # ring radius; the tag starts this far right of the + centre
+MARK_PT = 9  # the tags over the game's windows keep their size; the box's labels grew
 
 DASH = "\u2013"
 _FIELD, _DARK = "#0b0f15", "#2a1d00"
@@ -63,7 +64,7 @@ class _Mark(QWidget):
         super().__init__(layer)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFont(QFont(FONT, LABEL_PT, QFont.Bold))
+        self.setFont(QFont(FONT, MARK_PT, QFont.Bold))
         self.tag, self.centre, self.ring = "", (0, 0), False
         self.hide()
 

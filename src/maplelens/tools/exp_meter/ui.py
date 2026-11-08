@@ -8,7 +8,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QLabel,
-    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -22,6 +21,7 @@ from maplelens.overlay import (
     VALUE_COLOR,
     VALUE_PT,
     native_setup,
+    secondary_button,
     text_label,
 )
 from maplelens.readers import Reading
@@ -97,10 +97,7 @@ class ExpMeterTool:
         self._lines = QVBoxLayout(self.tab)
         self._lines.setContentsMargins(0, 4, 0, 0)
         self._lines.setSpacing(0)
-        button = QPushButton("History")
-        button.setFocusPolicy(Qt.NoFocus)
-        button.clicked.connect(self._show_history)
-        self._button_row = button
+        self._button_row = secondary_button("History", self._show_history)
         self._shape: list[int] | None = None  # values per row of what's shown
         self._texts: list[QLabel] = []
         self._show(box_lines(None, True))

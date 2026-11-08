@@ -116,3 +116,15 @@ def test_tick_updates_labels_in_place(monkeypatch, tmp_path):
     before = tool.tab.findChildren(QLabel)
     tool.update(None, None, 1.0)
     assert tool.tab.findChildren(QLabel) == before
+
+
+def test_history_is_a_secondary_button(monkeypatch, tmp_path):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QPushButton
+
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+
+    QApplication.instance() or QApplication([])
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"))
+    (button,) = [b for b in tool.tab.findChildren(QPushButton) if b.text() == "History"]
+    assert button.property("kind") == "secondary"

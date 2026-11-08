@@ -440,3 +440,30 @@ def test_about_at_the_longest_version_keeps_the_box_width(monkeypatch):
     box.adjustSize()
     assert box._about.sizeHint().width() <= overlay.TAB_W
     assert box.width() == width
+
+
+def test_buttons_have_kinds_and_never_take_focus(monkeypatch):
+    from PySide6.QtCore import Qt
+
+    from maplelens.overlay import primary_button, secondary_button
+
+    _box(monkeypatch)  # the app
+    hits = []
+    p = primary_button("Start", lambda: hits.append("p"))
+    s = secondary_button("Stop", lambda: hits.append("s"))
+    assert (p.property("kind"), s.property("kind")) == ("primary", "secondary")
+    assert p.focusPolicy() == s.focusPolicy() == Qt.NoFocus
+    p.click()
+    s.click()
+    assert hits == ["p", "s"]
+
+
+def test_info_line_text_and_height(monkeypatch):
+    from maplelens.overlay import LABEL_COLOR, LABEL_PT, InfoLine, text_label
+
+    _box(monkeypatch)
+    line = InfoLine()
+    line.setText("No route")  # short: offscreen fonts are wide, and a wrap isn't the point
+    assert line.text() == "No route"
+    plain = text_label("No route", LABEL_PT, LABEL_COLOR)
+    assert line.sizeHint().height() <= plain.sizeHint().height() + 2  # no taller fallback font
