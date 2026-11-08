@@ -11,7 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO = os.environ.get("MAPLELENS_UPDATE_REPO") or "or-keren/maplelens"
+HOME_REPO = "or-keren/maplelens"  # the project's own page; never follows the override
+REPO = os.environ.get("MAPLELENS_UPDATE_REPO") or HOME_REPO
 
 _VERSION = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)")
 

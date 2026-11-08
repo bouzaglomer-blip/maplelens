@@ -1314,7 +1314,7 @@ def test_the_about_item_opens_the_view_with_the_version_and_the_repo(qt_box, mon
     monkeypatch.setattr(qt_box, "show_about", lambda *a, **kw: opened.append((a, kw)))
     app.add_about(qt_box, None)
     qt_box.actions()[0].trigger()
-    url = "https://github.com/someone/fork"
+    url = "https://github.com/or-keren/maplelens"  # not the fork the update check asks
     assert opened == [(("0.1.0", "Running from source", url), {"accent": False})]
 
 

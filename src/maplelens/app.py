@@ -686,7 +686,7 @@ def add_about(box: Box, updates: "UpdateCheck | None") -> None:
 
     def show() -> None:
         text, accent = about_line(updates)
-        url = f"https://github.com/{update.REPO}"  # the repo the update check asks
+        url = f"https://github.com/{update.HOME_REPO}"
         box.show_about(version("maplelens"), text, url, accent=accent)
 
     box.add_menu_item(ABOUT, show, at=-1)
