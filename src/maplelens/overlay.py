@@ -20,8 +20,6 @@ from PySide6.QtWidgets import (
     QLayout,
     QMenu,
     QPushButton,
-    QSizePolicy,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -200,10 +198,7 @@ class Box(QWidget):
         self._strip.setContentsMargins(0, 0, 0, 0)
         self._strip.setSpacing(14)
         self._strip.addStretch()
-        self._pages = QStackedWidget()
-        # Every tab is TAB_W wide, but the stack sizes from its pages' raw hints, which a
-        # page's fixed width doesn't bound (wrapped text hints wider): fix the stack instead.
-        self._pages.setFixedWidth(TAB_W)
+        self._build_pages()
         self._status = QLabel()
         self._status.setFont(QFont(FONT, 10))
         self._status.setStyleSheet(f"color: {VALUE_COLOR};")
@@ -242,6 +237,18 @@ class Box(QWidget):
         layout.addWidget(self._about)
         layout.addWidget(self._notice)
 
+    def _build_pages(self) -> None:
+        """The tabs' pages in a column, only the current one shown: hidden pages never size
+        the box. (A QStackedWidget sizes wrapped text by its tallest page, hidden ones too.)
+        """
+        self._pages = QWidget()
+        self._page_col = QVBoxLayout(self._pages)
+        self._page_col.setContentsMargins(0, 0, 0, 0)
+        # Every tab is TAB_W wide, but the column sizes from its pages' raw hints, which a
+        # page's fixed width doesn't bound (wrapped text hints wider): fix the column instead.
+        self._pages.setFixedWidth(TAB_W)
+        self._current = 0
+
     def _build_about(self) -> None:
         """The About view: a title and a close mark for the top row, and the panel under it."""
         self._about_title = text_label(ABOUT, 10, VALUE_COLOR, bold=True)  # the tabs' size
@@ -264,7 +271,8 @@ class Box(QWidget):
 
     def add_tab(self, title: str, widget: QWidget) -> int:
         """Add a tab; the first one added is shown. Returns its index."""
-        i = self._pages.addWidget(widget)
+        i = self._page_col.count()
+        self._page_col.addWidget(widget)
         button = QPushButton(title)
         button.setFlat(True)
         button.setFocusPolicy(Qt.NoFocus)
@@ -280,20 +288,19 @@ class Box(QWidget):
         at = self._strip.count() - 1  # before the trailing stretch
         self._strip.insertWidget(at, button)
         self._strip.insertWidget(at + 1, dot, 0, Qt.AlignVCenter)
-        self.select(self._pages.currentIndex())
+        self.select(self._current)
         return i
 
     def select(self, index: int) -> None:
-        self._pages.setCurrentIndex(index)
+        self._current = index
         for j, b in enumerate(self._tab_buttons):
             color, line = (VALUE_COLOR, ACCENT) if j == index else (LABEL_COLOR, "transparent")
             b.setStyleSheet(
                 f"QPushButton {{ color: {color}; border: 0; border-bottom: 2px solid {line};"
                 " padding: 2px 0; }"
             )
-        for j in range(self._pages.count()):  # only the current page sizes the box
-            policy = QSizePolicy.Preferred if j == index else QSizePolicy.Ignored
-            self._pages.widget(j).setSizePolicy(policy, policy)
+        for j in range(self._page_col.count()):
+            self._page_col.itemAt(j).widget().setVisible(j == index)
 
     def set_status(self, text: str | None) -> None:
         """Show `text` in place of the tabs; None brings the tabs back.

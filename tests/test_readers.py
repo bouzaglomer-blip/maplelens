@@ -331,6 +331,7 @@ V = "Victoria Road / "
         ),
         (V + "kerning City", V + "Kerning City"),
         ("Hidden Street / ist Accompaniment <Bonus>", "Hidden Street / 1st Accompaniment <Bonus>"),
+        (V + "The Forest North of", V + "The Forest North of Ellinia"),  # last word dropped
     ],
 )
 def test_snap_misreads(text, want):
@@ -350,7 +351,9 @@ def test_snap_roman_siblings(text, want):
     assert snap_title(text, known_titles()) == want
 
 
-@pytest.mark.parametrize("text", [V + "Zzyzx Hollow", "A b / C"])
+@pytest.mark.parametrize(
+    "text", [V + "Zzyzx Hollow", "A b / C", V + "Tree Dungeon, Forest Up North", V + "The Forest"]
+)
 def test_snap_unknown_map_keeps_text(text):
     assert snap_title(text, known_titles()) == text
 
