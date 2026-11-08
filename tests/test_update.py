@@ -24,7 +24,7 @@ def release(version: str) -> Release:
 
 
 def test_newer_release_picks_the_setup_exe_by_name():
-    r = parse_latest(reply("newer.json"))
+    r = parse_latest(reply("newer.json"), "win32")
     assert r == Release(
         "0.2.0",
         "https://github.com/or-keren/maplelens/releases/download/v0.2.0/MapleLens-Setup-0.2.0.exe",
@@ -33,7 +33,7 @@ def test_newer_release_picks_the_setup_exe_by_name():
 
 
 def test_same_version_still_parses():
-    assert parse_latest(reply("same.json")).version == "0.1.0"
+    assert parse_latest(reply("same.json"), "win32").version == "0.1.0"
 
 
 @pytest.mark.parametrize(
@@ -47,11 +47,11 @@ def test_same_version_still_parses():
     ],
 )
 def test_no_update(name):
-    assert parse_latest(reply(name)) is None
+    assert parse_latest(reply(name), "win32") is None
 
 
 def test_missing_digest_gives_a_release_that_cant_be_verified():
-    r = parse_latest(reply("no_digest.json"))
+    r = parse_latest(reply("no_digest.json"), "win32")
     assert r.version == "0.2.0"
     assert r.digest is None
 
@@ -72,13 +72,26 @@ def test_missing_digest_gives_a_release_that_cant_be_verified():
     ],
 )
 def test_junk_reply_is_no_update(junk):
-    assert parse_latest(junk) is None
+    assert parse_latest(junk, "win32") is None
 
 
 def test_non_string_digest_is_treated_as_missing():
     data = reply("newer.json")
     data["assets"][1]["digest"] = 5
-    assert parse_latest(data).digest is None
+    assert parse_latest(data, "win32").digest is None
+
+
+def test_mac_picks_the_dmg_and_windows_the_exe():
+    data = reply("both_assets.json")
+    assert parse_latest(data, "darwin").url.endswith("MapleLens-0.2.0.dmg")
+    assert parse_latest(data, "darwin").digest == "sha256:" + "b" * 64
+    assert parse_latest(data, "win32").url.endswith("MapleLens-Setup-0.2.0.exe")
+
+
+def test_a_release_without_the_dmg_is_no_update_on_the_mac():
+    data = reply("no_dmg.json")
+    assert parse_latest(data, "darwin") is None
+    assert parse_latest(data, "win32") is not None
 
 
 # is_newer
@@ -168,7 +181,7 @@ def test_repo_can_point_at_a_fork(monkeypatch):
         importlib.reload(update)
 
 
-# can_update: only the installed Windows app; the toggle is read by the app on each tick
+# can_update: only the installed apps (Windows and Mac); the toggle is read by the app on each tick
 
 
 @pytest.mark.parametrize(
@@ -176,7 +189,7 @@ def test_repo_can_point_at_a_fork(monkeypatch):
     [
         (True, "win32", True),
         (False, "win32", False),  # from source
-        (True, "darwin", False),
+        (True, "darwin", True),
         (True, "linux", False),
     ],
 )

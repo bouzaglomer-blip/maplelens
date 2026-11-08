@@ -172,7 +172,8 @@ def test_notice_stays_while_the_status_line_shows(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "which", ["update", "downloading", "failed", "up to date", "couldn't check"]
+    "which",
+    ["update", "downloading", "failed", "up to date", "couldn't check", "move", "allow"],
 )
 def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch, which):
     from maplelens import app
@@ -183,6 +184,8 @@ def test_notice_fits_the_tab_width_at_the_longest_version(monkeypatch, which):
         "failed": app.UPDATE_FAILED,
         "up to date": app.UP_TO_DATE,
         "couldn't check": app.COULDNT_CHECK,
+        "move": app.MOVE_TO_APPLICATIONS,
+        "allow": app.ALLOW_UPDATES,
     }[which]
     box = _box(monkeypatch)
     box.set_notice(text, lambda: None)

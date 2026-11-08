@@ -101,3 +101,12 @@ def test_crop_bgr_keeps_top_without_doubling():
     rgb[40:60] = 0  # flat rows are equal in both phases
     out = capture_mac.crop_bgr(rgb, (0, 0, 60, 80))
     assert np.array_equal(out, rgb[10:, :, ::-1])
+
+
+def test_has_access_and_request_access_wrap_quartz(monkeypatch):
+    calls = []
+    monkeypatch.setattr(Quartz, "CGPreflightScreenCaptureAccess", lambda: True)
+    monkeypatch.setattr(Quartz, "CGRequestScreenCaptureAccess", lambda: calls.append(1))
+    assert capture_mac.has_access() is True
+    capture_mac.request_access()
+    assert calls == [1]

@@ -7,6 +7,7 @@ reads the reply, compares versions and checks the downloaded file's digest.
 import hashlib
 import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,7 +19,7 @@ _VERSION = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)")
 @dataclass(frozen=True)
 class Release:
     version: str  # "X.Y.Z", without the "v"
-    url: str  # the setup exe's browser_download_url
+    url: str  # the platform's asset's browser_download_url
     digest: str | None  # "sha256:<hex>" as GitHub gives it; None means it can't be verified
 
 
@@ -27,8 +28,13 @@ def _version(text) -> tuple[int, int, int] | None:
     return tuple(int(g) for g in m.groups()) if m else None
 
 
-def parse_latest(reply) -> Release | None:
-    """A `releases/latest` reply -> its setup exe, or None when there's nothing to offer."""
+def asset_name(version: str, platform: str) -> str:
+    return f"MapleLens-{version}.dmg" if platform == "darwin" else f"MapleLens-Setup-{version}.exe"
+
+
+def parse_latest(reply, platform: str | None = None) -> Release | None:
+    """A `releases/latest` reply -> this platform's asset, or None when there's nothing to offer."""
+    platform = platform or sys.platform
     if not isinstance(reply, dict):
         return None
     tag = reply.get("tag_name")
@@ -39,7 +45,7 @@ def parse_latest(reply) -> Release | None:
     if not isinstance(assets, list):
         return None
     for asset in assets:
-        if not isinstance(asset, dict) or asset.get("name") != f"MapleLens-Setup-{version}.exe":
+        if not isinstance(asset, dict) or asset.get("name") != asset_name(version, platform):
             continue
         url = asset.get("browser_download_url")
         if not isinstance(url, str):
@@ -70,5 +76,5 @@ def digest_ok(path: Path, digest) -> bool:
 
 
 def can_update(frozen: bool, platform: str) -> bool:
-    """Only the installed Windows app updates itself: source runs and the Mac never ask."""
-    return bool(frozen) and platform == "win32"
+    """Only the installed app (Windows or Mac) updates itself: source runs never ask."""
+    return bool(frozen) and platform in ("win32", "darwin")

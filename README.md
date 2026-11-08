@@ -46,7 +46,7 @@ is what matters, and pull requests that break it are not accepted.
 
 - Windows 10/11, or macOS with MapleStory Classic from Nexon's Mac launcher
 - The game running **windowed or borderless** (windowed only on the Mac). True fullscreen hides overlay windows.
-- On the Mac, the first run asks for Screen Recording for the app you start MapleLens from (Terminal, say).
+- On the Mac, MapleLens needs Screen Recording. Running from source, that is the app you start it from (Terminal, say).
 
 ## Download (Windows)
 
@@ -82,12 +82,50 @@ MapleLens sends one HTTPS request to GitHub's API for the latest release. The re
 carries `MapleLens/<version>` as its User-Agent and nothing about you or the game; the
 update itself is downloaded from GitHub too. To turn the check off, click **•••** on the box
 and untick **Check for updates automatically**. **Check for updates now** still works
-when you want it. Only the installed Windows app checks; running from source never does.
+when you want it. Only the installed app checks (Windows or Mac); running from source
+never does.
 
 **Uninstalling:** Settings → Apps → MapleLens. Your settings and history stay in
 `%APPDATA%\MapleLens`; delete that folder to remove them too. If something goes wrong,
 attach `%APPDATA%\MapleLens\maplelens.log` (MapleLens writes its errors there) to a bug
 report.
+
+## Download (Mac)
+
+Apple silicon (M1 or newer) only.
+
+1. Open the [latest release](https://github.com/or-keren/maplelens/releases/latest) and
+   download `MapleLens-X.Y.Z.dmg` under **Assets**.
+2. Open the dmg and drag **MapleLens** onto **Applications**.
+3. Open MapleLens from Applications. It isn't notarized by Apple, so macOS refuses the
+   first time. Open **System Settings → Privacy & Security**, scroll down and click
+   **Open Anyway** next to MapleLens, then confirm. You only do this once.
+4. MapleLens needs Screen Recording to see the game. If the box says "Allow, then
+   reopen: click •••", click **•••** on the box, choose **Open Screen Recording
+   settings…** and tick MapleLens. Then quit MapleLens (right-click its Dock icon and
+   choose **Quit**, or press ⌘Q) and click MapleLens in the Dock or open it from
+   Applications again: macOS doesn't give a running app the permission, and it doesn't
+   offer to restart it. If MapleLens is already switched on there but the box keeps
+   asking (an older copy's permission), quit MapleLens, run
+   `tccutil reset ScreenCapture io.github.or-keren.maplelens` in Terminal, then open
+   MapleLens and allow it again.
+5. Start MapleStory Classic **windowed** (the Mac launcher's fullscreen hides overlays),
+   then use the box as on Windows. If it says "Looking for MapleStory…", click **•••** on
+   the box and choose **Pick game window…**. Right-clicking MapleLens in the Dock opens
+   the same menu; **Hide MapleLens** there hides the box and the arrow, and clicking the
+   Dock icon brings them back.
+
+**Updating:** same as Windows: click **•••** on the box and choose **Update to X.Y.Z…**.
+MapleLens downloads the new dmg, checks its SHA-256 checksum, and swaps itself in. You
+keep Screen Recording and don't see Open Anyway again. If the box says "Move to
+Applications to update", drag MapleLens into Applications and open it from there. Rarely,
+macOS blocks the swap and the box says "Allow updates: click •••"; then click **•••**,
+choose **Allow MapleLens to update…** and accept the macOS prompt.
+
+**Removing:** drag MapleLens from Applications to the Trash. Your settings and history stay
+in `~/Library/Application Support/MapleLens`; delete that folder to remove them too. If
+something goes wrong, attach `~/Library/Application Support/MapleLens/maplelens.log` to a
+bug report.
 
 ## Roadmap
 
