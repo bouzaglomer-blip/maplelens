@@ -43,6 +43,8 @@ BG_TOL = 6
 SNAP_MIN, SNAP_LEAD = 0.9, 0.1
 # Vision reads a trailing roman numeral as digits.
 ROMAN = {"1": "I", "11": "II", "111": "III"}
+# What tells numbered sibling maps apart: digits and roman numerals.
+NUMBERS = re.compile(r"\d+|\b[IVX]+\b")
 
 
 @cache
@@ -72,7 +74,9 @@ def snap_title(text: str, titles: Collection[str]) -> str:
         return cut[0]
     # Similarity can't part titles that nearly contain each other: "The Rafn-Forest East of
     # Henesys" scores 0.98 on The Rain-Forest East of Henesys, 0.94 on The Forest East of.
-    near = [t for t in titles if _one_letter_apart(text, t)]
+    # Never across a number: "Ice Valley U" is one letter from Ice Valley I but may be II.
+    numbers = NUMBERS.findall(text)
+    near = [t for t in titles if _one_letter_apart(text, t) and NUMBERS.findall(t) == numbers]
     if len(near) == 1:
         return near[0]
     scored = sorted(((SequenceMatcher(None, text, t).ratio(), t) for t in titles), reverse=True)

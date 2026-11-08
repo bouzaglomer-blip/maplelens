@@ -346,6 +346,23 @@ def test_snap_misreads(text, want):
     assert snap_title(text, known_titles()) == want
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "El Nath / Ice Valley U",  # could be II: one letter from I must not make it I
+        "Dungeon / Ant Tunnel N",  # could be IV
+        "El Nath / Ice Valley 2",
+        "Dungeon / Ant Tunnel 3",
+        "El Nath / Ice Valley III",  # not in the map data: not II either
+        "Hidden Street / Free Market <27",  # could be <12>
+        "Orbis / Orbis Tower <4th Floor7",  # could be <14th Floor>
+        "Kerning City Subway / Line 1 <Area 13",
+    ],
+)
+def test_snap_one_letter_never_changes_a_number(text):
+    assert snap_title(text, known_titles()) == text
+
+
 def test_snap_one_letter_from_two_titles_is_kept():
     text = "Dungeon / Ant Tunnel Il"  # one letter from both Ant Tunnel I and Ant Tunnel II
     assert snap_title(text, known_titles()) == text
