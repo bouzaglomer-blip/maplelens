@@ -18,8 +18,6 @@ CHAR_NAMES = {
     "comma": ",",
     "dot": ".",
     "pct": "%",
-    "lbr": "[",
-    "rbr": "]",
     "plus": "+",
     "lpar": "(",
     "rpar": ")",
