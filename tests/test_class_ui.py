@@ -399,6 +399,7 @@ def box_with_tools(monkeypatch, tmp_path):
     for t in tools:
         box.add_tab(t.title, t.tab)
     box.show()  # a shown box's pages size from their raw hints
+    box.path = tools[1]
     return box, cls
 
 
@@ -428,3 +429,15 @@ def test_class_tab_text_never_overlaps(box_with_tools):
         for i, a in enumerate(rects):
             for j in range(i + 1, len(rects)):
                 assert not a.intersects(rects[j]), (job, level, shown[i].text(), shown[j].text())
+
+
+def test_box_width_holds_with_an_info_line_on_the_path_tab(box_with_tools):
+    box, _ = box_with_tools
+    box.select(1)
+    for t in (0.0, 0.5):  # read twice: confirmed, not in the map data
+        box.path.update(
+            R(job=None, level=None).__class__(t, None, None, None, "Road / Nowhere"), RECT, t
+        )
+    box.adjustSize()
+    assert box.path._info.isVisibleTo(box.path.tab)
+    assert box.width() == 210

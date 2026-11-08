@@ -201,6 +201,9 @@ class Box(QWidget):
         self._strip.setSpacing(14)
         self._strip.addStretch()
         self._pages = QStackedWidget()
+        # Every tab is TAB_W wide, but the stack sizes from its pages' raw hints, which a
+        # page's fixed width doesn't bound (wrapped text hints wider): fix the stack instead.
+        self._pages.setFixedWidth(TAB_W)
         self._status = QLabel()
         self._status.setFont(QFont(FONT, 10))
         self._status.setStyleSheet(f"color: {VALUE_COLOR};")

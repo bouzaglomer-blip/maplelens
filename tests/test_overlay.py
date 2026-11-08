@@ -475,3 +475,18 @@ def test_add_submenu_returns_its_action_and_can_go_before_an_item(monkeypatch):
     action = box.add_submenu("Pick", lambda: ["a"], lambda t: None, at=-1)
     assert action.text() == "Pick"
     assert [a.text() for a in box.actions()] == ["Pick", "Quit"]
+
+
+def test_a_tab_with_a_wide_hint_keeps_the_box_width(monkeypatch):
+    from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+    box = _box(monkeypatch)
+    tab = QWidget()
+    tab.setFixedWidth(overlay.TAB_W)  # every tab is this wide; its wrapped text hints wider
+    text = QLabel("a long line that wraps " * 20)
+    text.setWordWrap(True)
+    QVBoxLayout(tab).addWidget(text)
+    box.add_tab("A", tab)
+    box.show()  # a shown box's pages size from their raw hints
+    box.adjustSize()
+    assert box.width() == overlay.TAB_W + 24  # the box's 12 px side margins
