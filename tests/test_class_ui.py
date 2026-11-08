@@ -194,6 +194,23 @@ def test_marks_can_be_turned_off(make):
     assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
 
 
+def test_the_tab_box_and_the_menu_follow_each_other(make):
+    from PySide6.QtWidgets import QCheckBox
+
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30))), RECT, 0)
+    (box,) = tool.tab.findChildren(QCheckBox)
+    menu = []
+    tool.marks_changed = menu.append
+    assert box.isChecked()
+    box.click()  # the player unticks it in the tab
+    assert tool.marks() == [] and menu == [False]
+    tool.set_marks(True)  # the menu item
+    assert box.isChecked() and menu == [False, True] and tool.marks()
+    tool.set_marks(True)  # the box following the menu: nothing new
+    assert menu == [False, True]
+
+
 def test_marks_follow_and_hide(make):
     tool = make()
     tool.update(R(level=20, stats=SW(level=20, ap=5)), RECT, 0)

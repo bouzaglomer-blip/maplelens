@@ -665,7 +665,8 @@ def main() -> int:
 
     cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t))
     box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
-    box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)  # above Quit
+    marks = box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)
+    cls_tool.marks_changed = marks.setChecked  # the Class tab's box changes it too
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     shown = add_hide(box, layer, tray)

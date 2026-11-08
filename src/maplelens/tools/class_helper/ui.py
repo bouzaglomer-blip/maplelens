@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 from shiboken6 import delete
 
 from maplelens.overlay import (
@@ -35,7 +35,7 @@ from maplelens.tools.class_helper.plan import (
     training,
 )
 
-MARKS = "Show AP/SP marks on game windows"
+MARKS = "AP/SP marks on game windows"
 NO_CLASS = "Can't read your class yet"
 NO_PLAN = "No plan for {} yet"
 OPEN_STATS = "Open your stat window once"
@@ -50,6 +50,7 @@ _FIELD, _DARK = "#0b0f15", "#2a1d00"
 _STYLE = f"""
 QComboBox {{ background: {_FIELD}; color: {VALUE_COLOR}; border: 1px solid {ACCENT};
     border-radius: 4px; padding: 1px 6px; }}
+QCheckBox {{ color: {LABEL_COLOR}; }}
 QPushButton#go {{ background: {ACCENT}; color: {_DARK}; font-weight: bold; border: 0;
     border-radius: 4px; padding: 2px 8px; }}
 """
@@ -111,6 +112,7 @@ class ClassHelperTool:
     ):
         self.title = "Class"
         self.dot = False
+        self.marks_changed: Callable[[bool], None] = lambda _on: None  # the menu item follows
         self._settings, self._changed = settings, on_settings_changed
         self._layer, self._go, self._best_rate = layer, go, best_rate
         self._data = load() if data is None else data
@@ -139,11 +141,16 @@ class ClassHelperTool:
         self._builds.hide()
         self._builds.currentTextChanged.connect(self._on_build)
         self._body = QWidget()
+        self._marks_box = QCheckBox(MARKS)
+        self._marks_box.setFocusPolicy(Qt.NoFocus)
+        self._marks_box.setChecked(self._settings.get("class_marks", True))
+        self._marks_box.toggled.connect(self.set_marks)
         col = QVBoxLayout(tab)
         col.setContentsMargins(0, 4, 0, 0)
         col.setSpacing(6)
         col.addWidget(self._builds)
         col.addWidget(self._body)
+        col.addWidget(self._marks_box)
         return tab
 
     def hide_marks(self) -> None:
@@ -151,9 +158,16 @@ class ClassHelperTool:
             m.hide()
 
     def set_marks(self, on: bool) -> None:
-        """Turn the marks on the game's windows on or off; the Class tab stays."""
+        """Turn the marks on the game's windows on or off; the Class tab stays.
+
+        The tab's box and the menu's item both call it, and it sets both, so they agree.
+        """
+        if self._settings.get("class_marks", True) == on:
+            return  # the other one, following: nothing new
         self._settings["class_marks"] = on
         self._changed()
+        self._marks_box.setChecked(on)
+        self.marks_changed(on)
         self._draw_marks()
 
     def marks(self) -> list[tuple[str, tuple[int, int]]]:
@@ -419,6 +433,6 @@ class ClassHelperTool:
             row.addWidget(button)
             col.addWidget(line)
         parent = self.tab.layout()
+        parent.insertWidget(parent.indexOf(old), self._body)  # above the marks box
         parent.removeWidget(old)
-        parent.addWidget(self._body)
         delete(old)  # at once: a widget left to deleteLater still shows in the tab's children

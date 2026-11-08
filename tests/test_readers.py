@@ -710,12 +710,23 @@ def _same_skills(got, want, k=0, scale=1):
 
 @needs_ocr
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("skill_*.png")))
-def test_read_skill_window(name):
+def test_read_skill_window(name, monkeypatch):
+    read, seen = skill_window.ocr.read_lines, []
+    monkeypatch.setattr(skill_window.ocr, "read_lines", lambda m: seen.append(read(m)) or seen[-1])
     got, want = read_skill_window(*_window_args(name)), EXPECTED_SKILL[name]
     if isinstance(want, SkillWindow):
+        assert isinstance(got, SkillWindow), (got, seen)  # seen: the names as the OCR read them
         _same_skills(got, want)
     else:
-        assert got == want
+        assert got == want, seen
+
+
+def test_a_name_with_ink_read_as_nothing_is_unreadable(monkeypatch):
+    """A covered name the OCR reads as nothing is not a blank row."""
+    calls = []
+    monkeypatch.setattr(skill_window.ocr, "read_lines", lambda m: calls.append(m) and [])
+    assert read_skill_window(*_window_args("skill_a_1366x768_100.png")) == UNREADABLE
+    assert len(calls) == 1  # the first row's ink, and no further
 
 
 @needs_ocr

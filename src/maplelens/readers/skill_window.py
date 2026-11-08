@@ -100,10 +100,10 @@ def read_skill_window(
     for i in range(ROWS):
         cy = ROW_Y0 + ROW_DY * i
         box = (wx + NAME_X, wy + cy - 26, NAME_W, 14)
-        lines = ocr.read_lines(glyphs.mask(ocr.crop(frame, native, box), NAME_INK_LO, NAME_INK_HI))
-        if not lines:
-            continue
-        name = _snap(" ".join(lines), names)
+        ink = glyphs.mask(ocr.crop(frame, native, box), NAME_INK_LO, NAME_INK_HI)
+        if not ink.any():
+            continue  # a blank row
+        name = _snap(" ".join(ocr.read_lines(ink) or []), names)  # ink read as nothing: covered
         level = window.read_number_text(win, (LEVEL_X, cy - 7, LEVEL_W, 15))
         if name is None or level is None or not level.isdigit():
             return UNREADABLE
