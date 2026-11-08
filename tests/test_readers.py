@@ -212,7 +212,10 @@ def test_level_reads_every_digit(d):
 
 
 def test_expected_matches_fixture_files():
-    native_map = {"title_ellinia_1920x1080_100.png"}  # test_map_name_native_ellinia
+    native_map = {  # test_map_name_native_ellinia, test_map_name_native_rain_forest
+        "title_ellinia_1920x1080_100.png",
+        "title_rainforest_1920x1080_100.png",
+    }
     assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(
         EXPECTED_SKILL
     ) | native_map == {p.name for p in SCREENS.glob("*.png")}
@@ -334,10 +337,35 @@ V = "Victoria Road / "
         ("Hidden Street / ist Accompaniment <Bonus>", "Hidden Street / 1st Accompaniment <Bonus>"),
         (V + "The Forest North of", V + "The Forest North of Ellinia"),  # last word dropped
         (V + "The field Up North of", V + "The Field Up North of Ellinia"),  # and a case slip
+        # One wrong letter, with a very similar title next to the right one.
+        (V + "The Rafn-Forest East of Henesys", V + "The Rain-Forest East of Henesys"),
+        ("Dungeon / Ant Tunmel II", "Dungeon / Ant Tunnel II"),
     ],
 )
 def test_snap_misreads(text, want):
     assert snap_title(text, known_titles()) == want
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "El Nath / Ice Valley U",  # could be II: one letter from I must not make it I
+        "Dungeon / Ant Tunnel N",  # could be IV
+        "El Nath / Ice Valley 2",
+        "Dungeon / Ant Tunnel 3",
+        "El Nath / Ice Valley III",  # not in the map data: not II either
+        "Hidden Street / Free Market <27",  # could be <12>
+        "Orbis / Orbis Tower <4th Floor7",  # could be <14th Floor>
+        "Kerning City Subway / Line 1 <Area 13",
+    ],
+)
+def test_snap_one_letter_never_changes_a_number(text):
+    assert snap_title(text, known_titles()) == text
+
+
+def test_snap_one_letter_from_two_titles_is_kept():
+    text = "Dungeon / Ant Tunnel Il"  # one letter from both Ant Tunnel I and Ant Tunnel II
+    assert snap_title(text, known_titles()) == text
 
 
 @pytest.mark.parametrize(
@@ -381,6 +409,13 @@ def test_map_name_native_ellinia():
     """Native crop: Windows OCR reads 'Eflinia' from it; the snap fixes it."""
     frame, native, _ = _window_args("title_ellinia_1920x1080_100.png")
     assert read_map_name(frame, native) == V + "Ellinia"
+
+
+@needs_ocr
+def test_map_name_native_rain_forest():
+    """Native crop: Windows OCR reads 'Rafn-Forest' from it; the snap fixes it."""
+    frame, native, _ = _window_args("title_rainforest_1920x1080_100.png")
+    assert read_map_name(frame, native) == V + "The Rain-Forest East of Henesys"
 
 
 def _job_box(img):
