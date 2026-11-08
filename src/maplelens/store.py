@@ -11,6 +11,7 @@ DEFAULTS = {
     "idle_cutoff_s": 90,
     "jump_factor": 5,
     "boxes": {},
+    "tab_width": None,  # the box's tabs, once the player has dragged its corner
     "path_taxi": True,
     "class_builds": {},  # job -> the build name picked in the Class tab
     "class_marks": True,  # the AP/SP marks on the game's stat and skill windows

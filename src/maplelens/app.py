@@ -66,6 +66,7 @@ def build_box(
     box = Box("exp_meter", settings, save)
     for tool in tools:
         box.add_tab(tool.title, tool.tab)
+        box.on_tab_w(tool.set_tab_w)
     if pick:
         box.add_submenu("Pick game window…", game_choices, pick)
     # quit() runs aboutToQuit, where main() saves through shutdown()

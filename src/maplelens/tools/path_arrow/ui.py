@@ -123,13 +123,19 @@ class PathArrowTool:
         self._rect: tuple | None = None
         self._now = 0.0
         self.arrow = _Arrow(layer)
+        self._tab_w = TAB_W
         self.tab = self._build_tab(settings["path_taxi"])
         self._render()
+
+    def set_tab_w(self, width: int) -> None:
+        self._tab_w = width
+        self.tab.setFixedWidth(width)
+        self._render()  # the names are cut to the width
 
     def _build_tab(self, taxi: bool) -> QWidget:
         tab = QWidget()
         tab.setStyleSheet(_STYLE)
-        tab.setFixedWidth(TAB_W)  # long names elide instead of widening the box
+        tab.setFixedWidth(self._tab_w)  # long names elide instead of widening the box
         self._header = text_label("", LABEL_PT, LABEL_COLOR)
         self._message = text_label("", LABEL_PT, ACCENT)
         self._message.setWordWrap(True)
@@ -140,7 +146,7 @@ class PathArrowTool:
         self._matches.setFocusPolicy(Qt.NoFocus)
         self._matches.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # names elide
         self._matches.setTextElideMode(Qt.ElideMiddle)  # keeps a repeated name's street
-        # Its own 256 px width hint would widen the box past TAB_W (the box's page stack
+        # Its own 256 px width hint would widen the box past the tab (the box's page stack
         # sizes from raw hints, ignoring the tab's fixed width).
         self._matches.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self._matches.currentItemChanged.connect(lambda *_: self._render())
@@ -333,7 +339,7 @@ class PathArrowTool:
     def _fit(self, template: str, name: str) -> str:
         """The header line, `name` elided so the line fits the tab."""
         fm = self._header.fontMetrics()
-        room = TAB_W - fm.horizontalAdvance(template.format(""))
+        room = self._tab_w - fm.horizontalAdvance(template.format(""))
         return template.format(fm.elidedText(name, Qt.ElideRight, max(room, 0)))
 
     def _route_html(self) -> str:
@@ -342,7 +348,7 @@ class PathArrowTool:
         fm = QFontMetrics(bold)
         rows = []
         for i, s in enumerate(self.trip.steps):
-            room = TAB_W - fm.horizontalAdvance("00  " + (" taxi" if s.cab else ""))
+            room = self._tab_w - fm.horizontalAdvance("00  " + (" taxi" if s.cab else ""))
             name = escape(fm.elidedText(self.maps[s.map_id].name, Qt.ElideRight, room))
             if i < self.trip.index:
                 row = f'<span style="color:{_DONE}"><s>{i + 1}&nbsp;&nbsp;{name}</s></span>'

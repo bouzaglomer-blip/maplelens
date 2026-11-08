@@ -485,3 +485,17 @@ def test_a_long_job_name_is_cut_not_the_level(make):
     )
     (head,) = [t for t in texts(tool) if t.endswith(" · Lv 34")]
     assert "…" in head
+
+
+def test_a_wider_tab_shows_more_of_a_long_row_name(make):
+    from PySide6.QtWidgets import QLabel
+
+    def title(tool):
+        return rows(tool)[0].findChild(QLabel).text()
+
+    tool = make()
+    tool._render([("row", "A very long training map name " * 4, "", None, False, False)])
+    narrow = title(tool)
+    tool.set_tab_w(480)  # the same items: drawn again all the same
+    assert len(title(tool)) > len(narrow)
+    assert tool.tab.maximumWidth() == 480

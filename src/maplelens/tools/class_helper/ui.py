@@ -61,7 +61,7 @@ class Row(QWidget):
     """One line to act on: a name, a grey line under it, and a yellow \u203a when a click goes
     somewhere. Names never wrap: they're cut to fit, the full one is the tooltip."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - what the row shows, and the width its names are cut to
         self,
         name: str,
         sub: str,
@@ -69,6 +69,7 @@ class Row(QWidget):
         *,
         best: bool = False,
         outline: bool = False,
+        width: int = TAB_W,
     ):
         super().__init__()
         self.name, self.sub, self.best = name, sub, best
@@ -87,7 +88,7 @@ class Row(QWidget):
         col = QVBoxLayout()
         col.setSpacing(0)
         arrow = text_label("\u203a", LABEL_PT + 2, ACCENT, bold=True)  # single right angle
-        room = TAB_W - 2 * _PAD - 2 - (arrow.sizeHint().width() + 6 if self.clickable else 0)
+        room = width - 2 * _PAD - 2 - (arrow.sizeHint().width() + 6 if self.clickable else 0)
         title = text_label(name, LABEL_PT, VALUE_COLOR, bold=best or outline)
         title.setText(QFontMetrics(title.font()).elidedText(name, Qt.ElideRight, room))
         title.setToolTip(name)
@@ -191,13 +192,22 @@ class ClassHelperTool:
         self._rect: tuple | None = None
         self._pool: list[_Mark] = []  # the layer owns them; they are hidden and reused
         self._marks: list[tuple[str, tuple[float, float], bool]] = []
+        self._tab_w = TAB_W
         self.tab = QWidget()
-        self.tab.setFixedWidth(TAB_W)
+        self.tab.setFixedWidth(self._tab_w)
         self._body = QWidget()
         col = QVBoxLayout(self.tab)
         col.setContentsMargins(0, 4, 0, 0)
         col.addWidget(self._body)
         self._render([("info", NO_CLASS)])
+
+    def set_tab_w(self, width: int) -> None:
+        if width == self._tab_w:
+            return  # the box tells each tab its width at the start: nothing to redraw yet
+        self._tab_w = width
+        self.tab.setFixedWidth(width)
+        items, self._shown = self._shown, None  # the names are cut to the width
+        self._render(items)
 
     def hide_marks(self) -> None:
         for m in self._pool:
@@ -452,13 +462,13 @@ class ClassHelperTool:
         if kind == "row":
             _, name, sub, map_id, best, outline = item
             go = (lambda m=map_id: self._go(m)) if map_id else None
-            return Row(name, sub, go, best=best, outline=outline)
+            return Row(name, sub, go, best=best, outline=outline, width=self._tab_w)
         _, job, level, chip = item  # the header
         head = QWidget()
         row = QHBoxLayout(head)
         row.setContentsMargins(0, 0, 0, 2)
         row.setSpacing(6)
-        room = TAB_W
+        room = self._tab_w
         badge = None
         if chip:
             badge = text_label(chip, LABEL_PT, ACCENT, bold=True)
