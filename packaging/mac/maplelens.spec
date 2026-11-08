@@ -70,5 +70,6 @@ app = BUNDLE(
         "CFBundleShortVersionString": VERSION,
         "CFBundleVersion": VERSION,
         "LSMinimumSystemVersion": "14.4",
+        "LSUIElement": True,  # in the menu bar, not the Dock
     },
 )

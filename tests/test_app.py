@@ -6,7 +6,7 @@ import types
 from typing import ClassVar
 
 import pytest
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Signal
 
 import maplelens
 from maplelens import app, overlay, update_mac
@@ -979,20 +979,20 @@ def test_no_tray_where_there_is_none(qt_box, fake_tray):
     assert fake_tray.made == []
 
 
-@pytest.mark.parametrize("platform", ["darwin", "linux"])
-def test_the_tray_is_windows_only(monkeypatch, platform):
+def test_no_tray_on_linux(monkeypatch):
     from PySide6.QtWidgets import QSystemTrayIcon
 
-    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: True))
     assert not app.tray_available()
 
 
+@pytest.mark.parametrize("platform", ["win32", "darwin"])
 @pytest.mark.parametrize("there", [True, False])
-def test_on_windows_the_tray_needs_a_notification_area(monkeypatch, there):
+def test_the_tray_needs_a_notification_area_or_menu_bar(monkeypatch, platform, there):
     from PySide6.QtWidgets import QSystemTrayIcon
 
-    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: there))
     assert app.tray_available() is there
 
@@ -1052,92 +1052,25 @@ def test_with_no_tray_there_is_no_hide_item(qt_box):
     assert _menu(qt_box) == ["Quit MapleLens"]
 
 
-def test_the_dock_menu_is_the_box_menu_with_items_added_later(qt_box):
-    docked = []  # stands in for QMenu.setAsDockMenu, which needs the real Dock
-    menu = app.make_dock(qt_box, available=True, as_dock=docked.append)
-    assert docked == [menu]
-    assert menu.parent() is qt_box  # lives as long as the box
-    qt_box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)  # the update check, later
-    menu.aboutToShow.emit()  # what Qt does as the Dock menu opens
-    assert menu.actions() == qt_box.actions()
-    assert [a.text() for a in menu.actions()] == ["Update to 0.2.0…", "Quit MapleLens"]
+def test_on_the_mac_a_tray_click_opens_the_menu_and_doesnt_toggle(qt_box, fake_tray):
+    from PySide6.QtWidgets import QSystemTrayIcon
 
-
-def test_no_dock_menu_off_the_mac(qt_box):
-    assert app.make_dock(qt_box, available=False, as_dock=pytest.fail) is None
-
-
-class _FakeQApp(QObject):
-    """Stands in for the QApplication: its applicationStateChanged, which the Dock click
-    sends (Qt::ApplicationActive, even when MapleLens is already active)."""
-
-    applicationStateChanged = Signal(object)  # a Qt.ApplicationState
-
-
-@pytest.fixture
-def dock_hide(qt_box):
-    """hide's Mac version: no tray; the Dock click is the way back."""
     from maplelens.overlay import Layer
 
-    layer = Layer()
-    qt_box.show()
-    layer.show()
-    qt = _FakeQApp()
-    return qt_box, layer, qt, app.add_hide(qt_box, layer, None, qt)
+    tray = app.make_tray(qt_box, app.ICON, available=True, tray_cls=fake_tray)
+    shown = app.add_hide(qt_box, Layer(), tray, click=False)
+    assert _menu(qt_box) == ["Hide MapleLens", "Quit MapleLens"]  # the way back
+    tray.activated.emit(QSystemTrayIcon.Trigger)
+    assert shown.on
 
 
-def test_on_the_mac_the_hide_item_sits_just_before_quit(dock_hide):
-    box, *_ = dock_hide
-    assert _menu(box) == ["Hide MapleLens", "Quit MapleLens"]
-
-
-def test_a_dock_click_brings_a_hidden_box_back(dock_hide):
-    box, _, qt, shown = dock_hide
-    shown.toggle()
-    qt.applicationStateChanged.emit(Qt.ApplicationActive)
-    assert shown.on and box.isVisible()
-    assert _menu(box)[0] == "Hide MapleLens"
-
-
-def test_activation_while_shown_changes_nothing(dock_hide):
-    box, _, qt, shown = dock_hide
-    qt.applicationStateChanged.emit(Qt.ApplicationActive)  # Cmd-Tab, or a Dock click
-    assert shown.on and box.isVisible()
-    shown.toggle()
-    qt.applicationStateChanged.emit(Qt.ApplicationInactive)  # the game comes back
-    assert not shown.on and not box.isVisible()
-
-
-@pytest.mark.parametrize(
-    ("platform", "there"), [("darwin", True), ("win32", False), ("linux", False)]
-)
-def test_the_dock_is_mac_only(monkeypatch, platform, there):
-    """Off the Mac make_dock makes nothing, so add_hide gets no Dock: on Windows only the
-    tray brings the box back, and on Linux with no tray there's no Hide item."""
-    monkeypatch.setattr(sys, "platform", platform)
-    assert app.dock_available() is there
-
-
-@pytest.mark.parametrize("frozen", [False, True])
-def test_on_the_mac_maplelens_is_in_the_dock_with_the_maple_leaf(
-    qt_box, monkeypatch, request, frozen
-):
-    from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import QApplication
-
+def test_on_the_mac_maplelens_leaves_the_dock(monkeypatch):
     calls = []  # never the real activation policy
-    fake = types.SimpleNamespace(make_regular=lambda: calls.append("regular"))
+    fake = types.SimpleNamespace(make_accessory=lambda: calls.append("accessory"))
     monkeypatch.setitem(sys.modules, "maplelens.overlay_mac", fake)
     monkeypatch.setattr(maplelens, "overlay_mac", fake, raising=False)
-    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
-    qt = QApplication.instance()
-    before = qt.windowIcon()  # every test shares this QApplication: put its icon back
-    request.addfinalizer(lambda: qt.setWindowIcon(before))
-    qt.setWindowIcon(QIcon())
-    app.show_in_dock(qt)
-    assert calls == ["regular"]
-    # from source the icon is ICON, not Python's; the installed app has its icon.icns
-    assert qt.windowIcon().isNull() is frozen
+    app.hide_from_dock()
+    assert calls == ["accessory"]
 
 
 class _Recorder:
