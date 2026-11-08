@@ -662,6 +662,22 @@ def about_line(updates: "UpdateCheck | None") -> tuple[str, bool]:
     return text, release is not None and text == update_available(release.version)
 
 
+def add_build_menu(box: Box, tool) -> QAction:
+    """The class tool's build choice, above Quit: "Build: <name>", shown when there's a choice.
+
+    `tool` has build_names(), build_name(), pick_build(name) and a builds_changed hook.
+    """
+    action = box.add_submenu("Build", tool.build_names, tool.pick_build, at=-1)
+    action.setVisible(False)
+
+    def follow() -> None:
+        action.setText(f"Build: {tool.build_name()}")
+        action.setVisible(bool(tool.build_names()))
+
+    tool.builds_changed = follow
+    return action
+
+
 def add_about(box: Box, updates: "UpdateCheck | None") -> None:
     """The About item, just before Quit: the version, updates and the GitHub page.
 
@@ -792,8 +808,8 @@ def main() -> int:
     cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t))
     box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
     setup_screen_recording(box)
-    marks = box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)
-    cls_tool.marks_changed = marks.setChecked  # the Class tab's box changes it too
+    add_build_menu(box, cls_tool)
+    box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     dock = make_dock(box, available=dock_available())  # the box, its parent, holds it

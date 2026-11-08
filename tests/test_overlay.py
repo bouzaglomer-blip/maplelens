@@ -467,3 +467,11 @@ def test_info_line_text_and_height(monkeypatch):
     assert line.text() == "No route"
     plain = text_label("No route", LABEL_PT, LABEL_COLOR)
     assert line.sizeHint().height() <= plain.sizeHint().height() + 2  # no taller fallback font
+
+
+def test_add_submenu_returns_its_action_and_can_go_before_an_item(monkeypatch):
+    box = _box(monkeypatch)
+    box.add_menu_item("Quit", lambda: None)
+    action = box.add_submenu("Pick", lambda: ["a"], lambda t: None, at=-1)
+    assert action.text() == "Pick"
+    assert [a.text() for a in box.actions()] == ["Pick", "Quit"]

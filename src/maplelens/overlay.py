@@ -425,9 +425,17 @@ class Box(QWidget):
         self.setContextMenuPolicy(Qt.ActionsContextMenu)
 
     def add_submenu(
-        self, label: str, choices: Callable[[], list[str]], on_pick: Callable[[str], None]
-    ) -> None:
-        """A submenu in the box's menu listing `choices()`, read again each time it opens."""
+        self,
+        label: str,
+        choices: Callable[[], list[str]],
+        on_pick: Callable[[str], None],
+        *,
+        at: int | None = None,
+    ) -> QAction:
+        """A submenu in the box's menu listing `choices()`, read again each time it opens.
+
+        Placed as add_menu_item places an item; returns its action, so it can change.
+        """
         menu = QMenu(label, self)
 
         def fill() -> None:
@@ -436,8 +444,8 @@ class Box(QWidget):
                 menu.addAction(text).triggered.connect(lambda _=False, t=text: on_pick(t))
 
         menu.aboutToShow.connect(fill)
-        self.addAction(menu.menuAction())
-        self.setContextMenuPolicy(Qt.ActionsContextMenu)
+        self._insert(menu.menuAction(), at)
+        return menu.menuAction()
 
     def place(self, game_rect: tuple[int, int, int, int]) -> None:
         if self._drag_from is not None:
