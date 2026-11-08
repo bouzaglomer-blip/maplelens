@@ -38,6 +38,7 @@ EXPECTED = {
     "exp_d_1920x1080_100.png": ExpValue(409, 1.01),
     "exp_e_1920x1080_100.png": ExpValue(33133, 96.54),
     "exp_f_1920x1080_100.png": ExpValue(506, 1.25),
+    "exp_g_1920x1080_100.png": ExpValue(8931, 12.22),  # its "]" sits on the ink cutoff
     "exp_covered_1920x1080_100.png": None,  # grey rectangle pasted over the value
     "level_a_1920x1080_100.png": 23,
     "level_b_1920x1080_100.png": 24,
