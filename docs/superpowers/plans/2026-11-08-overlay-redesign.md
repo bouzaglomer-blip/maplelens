@@ -56,15 +56,22 @@
 def test_buttons_have_kinds_and_never_take_focus(app):
     from PySide6.QtCore import Qt
     from maplelens.overlay import primary_button, secondary_button
+
     hits = []
-    p, s = primary_button("Start", lambda: hits.append("p")), secondary_button("Stop", lambda: hits.append("s"))
+    p, s = (
+        primary_button("Start", lambda: hits.append("p")),
+        secondary_button("Stop", lambda: hits.append("s")),
+    )
     assert (p.property("kind"), s.property("kind")) == ("primary", "secondary")
     assert p.focusPolicy() == s.focusPolicy() == Qt.NoFocus
-    p.click(); s.click()
+    p.click()
+    s.click()
     assert hits == ["p", "s"]
+
 
 def test_info_line_text_and_height(app):
     from maplelens.overlay import LABEL_COLOR, LABEL_PT, InfoLine, text_label
+
     line = InfoLine()
     line.setText("No minimap on this map")
     assert line.text() == "No minimap on this map"
@@ -117,11 +124,13 @@ git commit -m "feat(overlay): shared colours, buttons and info line"
 ```python
 def test_read_but_unlisted_map_names_itself(make):
     from maplelens.tools.path_arrow.ui import NOT_LISTED
+
     tool = make()
     feed(tool, "Road / Nowhere")  # read twice: confirmed, not in the data
     assert tool._header.text() == "From: Nowhere"
     assert tool._info.text() == NOT_LISTED and tool._info.isVisibleTo(tool.tab)
     assert not tool._message.isVisibleTo(tool.tab)
+
 
 def test_start_and_stop_kinds(make):
     tool = make()
@@ -176,14 +185,19 @@ def test_milestones_in_level_order(small):
     rogue = small.jobs["Rogue"]
     luk, sindit = rogue.builds
     assert [(m.level, m.text) for m in milestones(rogue, luk, 12)] == [
-        (15, "Gear: Second Claw"), (30, "Advance: Assassin or Bandit")]
+        (15, "Gear: Second Claw"),
+        (30, "Advance: Assassin or Bandit"),
+    ]
     assert [(m.level, m.text) for m in milestones(rogue, sindit, 30)] == [
-        (30, "Reset AP for the Sindit build")]  # ready advance left out; no gear
+        (30, "Reset AP for the Sindit build")
+    ]  # ready advance left out; no gear
+
 
 def test_advance_ready_only_at_its_level(small):
     rogue = small.jobs["Rogue"]
     assert advance_ready(rogue, rogue.builds[0], 29) is None
     assert advance_ready(rogue, rogue.builds[0], 30).level == 30
+
 
 def test_short_name():
     assert short_name("Kerning City Subway / Transfer Area") == "Transfer Area"
@@ -266,7 +280,8 @@ def test_training_rows_click_to_go_and_best_rate(make):
     first.click()
     assert tool.gone == ["000000001"]
 
-def test_row_without_a_map_is_not_clickable(make):           # Review Focus 3
+
+def test_row_without_a_map_is_not_clickable(make):  # Review Focus 3
     tool = make()
     tool.update(R(level=15), RECT, 0)
     plain = [r for r in rows(tool) if r.name == "A map not in maps.json"]
@@ -274,12 +289,14 @@ def test_row_without_a_map_is_not_clickable(make):           # Review Focus 3
     plain[0].click()
     assert tool.gone == []
 
-def test_chip_counts_points(make):                            # Review Focus 4
+
+def test_chip_counts_points(make):  # Review Focus 4
     tool = make()
     tool.update(R(level=12, stats=SW(level=12, ap=5), skills=KW(sp=3, rows=ALL_ROGUE)), RECT, 0)
     assert "5 AP · 3 SP" in texts(tool)
     tool.update(R(level=13), RECT, 1)
     assert not any(t.endswith(("AP", "SP")) for t in texts(tool))
+
 
 def test_advance_ready_row_on_top_and_out_of_footer(make):
     tool = make()
@@ -288,6 +305,7 @@ def test_advance_ready_row_on_top_and_out_of_footer(make):
     assert not any("Advance:" in t for t in texts(tool))
     assert not any(r.best for r in rows(tool))
 
+
 def test_footer_lists_milestones(make):
     tool = make()
     tool.update(R(level=12), RECT, 0)
@@ -295,22 +313,28 @@ def test_footer_lists_milestones(make):
     assert "Lv 15 · Gear: Second Claw" in texts(tool) + [r.name for r in rows(tool)]
     assert "Lv 30 · Advance: Assassin or Bandit" in texts(tool)
 
+
 def test_no_spots_says_so(make):
     tool = make()
-    tool.update(R(level=25), RECT, 0)   # no Rogue training row covers 25 in the small data
+    tool.update(R(level=25), RECT, 0)  # no Rogue training row covers 25 in the small data
     assert NO_SPOTS.format(25) in texts(tool)
 
-def test_long_name_stays_one_line(make):                     # Review Focus 2
+
+def test_long_name_stays_one_line(make):  # Review Focus 2
     from maplelens.tools.class_helper.ui import Row
+
     row = Row("Victoria Road / " + "X" * 60, "mobs Lv 1–2", None)
     row.setFixedWidth(186)
     assert row.sizeHint().height() == Row("Short", "mobs Lv 1–2", None).sizeHint().height()
 
+
 def test_no_build_picker_or_marks_box_in_the_tab(make):
     from PySide6.QtWidgets import QCheckBox, QComboBox
+
     tool = make()
     tool.update(R(level=12), RECT, 0)
     assert not tool.tab.findChildren(QComboBox) and not tool.tab.findChildren(QCheckBox)
+
 
 def test_pick_build_saves_and_tells(make):
     saved, told = [], []
@@ -361,6 +385,7 @@ git commit -m "feat(class): tab built around where to train"
 ```python
 STATES = [("Rogue", 28), ("Beginner", 8), ("Rogue", 30), (None, None)]
 
+
 def test_box_width_is_the_same_on_every_tab(box_with_tools):
     box, cls = box_with_tools  # a Box holding EXP, Path and Class tools, offscreen
     widths = set()
@@ -372,15 +397,24 @@ def test_box_width_is_the_same_on_every_tab(box_with_tools):
             widths.add(box.width())
     assert widths == {210}
 
+
 def test_class_tab_text_never_overlaps(box_with_tools):
     box, cls = box_with_tools
     for job, level in STATES:
         cls.update(R(job=job, level=level), RECT, 0)
-        box.select(2); box.adjustSize()
-        rects = [w.geometry().translated(w.parentWidget().mapTo(cls.tab, QPoint()))
-                 for w in cls.tab.findChildren(QLabel) if w.isVisibleTo(cls.tab)]
-        assert not any(a.intersects(b) for i, a in enumerate(rects) for b in rects[i + 1:]
-                       if not (a.contains(b) or b.contains(a)))
+        box.select(2)
+        box.adjustSize()
+        rects = [
+            w.geometry().translated(w.parentWidget().mapTo(cls.tab, QPoint()))
+            for w in cls.tab.findChildren(QLabel)
+            if w.isVisibleTo(cls.tab)
+        ]
+        assert not any(
+            a.intersects(b)
+            for i, a in enumerate(rects)
+            for b in rects[i + 1 :]
+            if not (a.contains(b) or b.contains(a))
+        )
 ```
 
 Build the `box_with_tools` fixture as `test_class_ui.py`'s `make` does, using the real `classes.json` (`load()`) so that Beginner 8 and Rogue 28 have their real content.
@@ -427,14 +461,22 @@ def test_add_submenu_returns_its_action(app):
     action = box.add_submenu("Pick", lambda: ["a"], lambda t: None)
     assert action in box.actions() and action.text() == "Pick"
 
+
 # tests/test_app.py
-def test_build_menu_follows_the_class_tool(qt):            # Review Focus 5
+def test_build_menu_follows_the_class_tool(qt):  # Review Focus 5
     class Tool:
         names, name, picked = ["LUK", "Sindit"], "LUK", []
         builds_changed = None
-        def build_names(self): return self.names
-        def build_name(self): return self.name
-        def pick_build(self, n): self.picked.append(n)
+
+        def build_names(self):
+            return self.names
+
+        def build_name(self):
+            return self.name
+
+        def pick_build(self, n):
+            self.picked.append(n)
+
     box, tool = Box("b", {}, lambda: None), Tool()
     action = app.add_build_menu(box, tool)
     assert not action.isVisible()
@@ -513,6 +555,7 @@ No commit, unless it turns up a fix (which then goes in the task that owns the c
 ```python
 def test_screen_crop_picks_the_screen_and_offsets():
     from grab import screen_crop  # tests add scripts/ to sys.path the way test_build_installer does
+
     screens = [(0, 0, 2048, 1152, 1.25), (2560, 0, 1920, 1080, 1.0)]
     assert screen_crop((320, 180, 1920, 1080), screens) == (0, (320, 180, 1920, 1080))
     assert screen_crop((2660, 50, 800, 600), screens) == (1, (100, 50, 800, 600))
