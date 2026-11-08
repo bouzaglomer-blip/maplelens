@@ -211,9 +211,10 @@ def test_level_reads_every_digit(d):
 
 
 def test_expected_matches_fixture_files():
-    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(EXPECTED_SKILL) == {
-        p.name for p in SCREENS.glob("*.png")
-    }
+    native_map = {"title_ellinia_1920x1080_100.png"}  # test_map_name_native_ellinia
+    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(
+        EXPECTED_SKILL
+    ) | native_map == {p.name for p in SCREENS.glob("*.png")}
 
 
 def test_exp_one_px_noise_is_never_another_value():
@@ -365,11 +366,16 @@ def test_snap_needs_a_lead_over_runner_up():
     assert snap_title(text, known_titles()) == text
 
 
-@pytest.mark.parametrize("snap, want", [(True, V + "Sunset Sky"), (False, V + "Sumset Sky")])
-def test_map_name_snaps_only_on_mac(monkeypatch, snap, want):
+def test_map_name_snaps_misreads(monkeypatch):
     monkeypatch.setattr(map_name.ocr, "read_lines", lambda m: ["Victoria Road", "Sumset Sky"])
-    monkeypatch.setattr(map_name, "SNAP", snap)
-    assert read_map_name(screen("minimap_a_1366x768_100.png")) == want
+    assert read_map_name(screen("minimap_a_1366x768_100.png")) == V + "Sunset Sky"
+
+
+@needs_ocr
+def test_map_name_native_ellinia():
+    """Native crop: Windows OCR reads 'Eflinia' from it; the snap fixes it."""
+    frame, native, _ = _window_args("title_ellinia_1920x1080_100.png")
+    assert read_map_name(frame, native) == V + "Ellinia"
 
 
 def _job_box(img):
