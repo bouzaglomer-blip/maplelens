@@ -144,7 +144,7 @@ def test_milestones_in_level_order():
     assert gear_step.item.name == "Second Claw" and gear_step.where is not None
     # a ready advance is left out; Sindit has no gear
     assert [(m.level, m.text) for m in milestones(ROGUE, sindit, 30)] == [
-        (30, "Reset AP for the Sindit build")
+        (30, "Reset AP: Sindit build")
     ]
     assert milestones(ROGUE, sindit, 31) == []
 

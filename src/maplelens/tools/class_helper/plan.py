@@ -148,7 +148,7 @@ def milestones(plan: JobPlan, build: Build, level: int) -> list[Milestone]:
     if nxt := gear(build, level)[1]:
         out.append(Milestone(nxt.from_level, f"Gear: {nxt.item.name}", nxt.where, nxt.item))
     if build.reset_at is not None and level <= build.reset_at:
-        out.append(Milestone(build.reset_at, f"Reset AP for the {build.name} build"))
+        out.append(Milestone(build.reset_at, f"Reset AP: {build.name} build"))
     return sorted(out, key=lambda m: m.level)  # stable: ties keep this order
 
 

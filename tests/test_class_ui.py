@@ -103,7 +103,7 @@ def test_no_plan_for_job(make):
 def test_training_rows_click_to_go_and_best_rate(make):
     tool = make(best_rate=lambda t: 1234.0 if t else None)
     tool.update(R(level=12), RECT, 0)
-    first, *rest = rows(tool)
+    first, *rest = [r for r in rows(tool) if not r.name.startswith("Lv ")]  # not the footer
     assert first.sub == "your best · 1,234/min" and first.clickable and first.best
     assert rest and all(r.sub.startswith("mobs Lv ") and not r.best for r in rest)
     first.click()
@@ -143,8 +143,9 @@ def test_footer_lists_milestones(make):
     tool = make()
     tool.update(R(level=12), RECT, 0)
     assert NEXT in texts(tool)
-    assert "Lv 15 · Gear: Second Claw" in texts(tool) + [r.name for r in rows(tool)]
-    assert "Lv 30 · Advance: Assassin or Bandit" in texts(tool)
+    steps = [(r.name, r.sub) for r in rows(tool)]
+    assert ("Lv 15 · Gear", "Second Claw") in steps  # a short line each: never cut off
+    assert ("Lv 30 · Advance", "Assassin or Bandit") in steps
 
 
 def test_no_spots_says_so(make):
@@ -435,9 +436,7 @@ def test_box_width_holds_with_an_info_line_on_the_path_tab(box_with_tools):
     box, _ = box_with_tools
     box.select(1)
     for t in (0.0, 0.5):  # read twice: confirmed, not in the map data
-        box.path.update(
-            R(job=None, level=None).__class__(t, None, None, None, "Road / Nowhere"), RECT, t
-        )
+        box.path.update(Reading(t, None, None, None, "Road / Nowhere"), RECT, t)
     box.adjustSize()
     assert box.path._info.isVisibleTo(box.path.tab)
     assert box.width() == 210

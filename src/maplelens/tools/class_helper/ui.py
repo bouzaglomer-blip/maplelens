@@ -387,10 +387,9 @@ class ClassHelperTool:
             return []
         out = [("divider",), ("label", NEXT, LABEL_COLOR)]
         st = self._stats_now()
-        for m in steps:
-            text = f"Lv {m.level} · {m.text}"
-            go = _go_map(m.where)
-            out.append(("row", text, "", go, False, False) if go else ("label", text, VALUE_COLOR))
+        for m in steps:  # "Lv 30 · Advance" over "Assassin or Bandit": short lines, never cut
+            kind, _, detail = m.text.partition(": ")
+            out.append(("row", f"Lv {m.level} · {kind}", detail, _go_map(m.where), False, False))
             lack = short(m.item, st.total if st else None) if m.item else {}
             if lack:
                 out.append(
