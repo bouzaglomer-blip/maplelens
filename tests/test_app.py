@@ -2,12 +2,14 @@ import hashlib
 import re
 import sys
 import threading
+import types
 from typing import ClassVar
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 
-from maplelens import app
+import maplelens
+from maplelens import app, overlay, update_mac
 from maplelens.readers import glyphs, ocr
 from maplelens.tools.path_arrow import maps
 
@@ -277,14 +279,15 @@ def test_installer_knows_the_update_flag():
 # --- the update check ---------------------------------------------------------------
 
 
-def _latest(v, digest="sha256:" + "0" * 64):
-    """A releases/latest reply for version `v`."""
+def _latest(v, digest="sha256:" + "0" * 64, name=None):
+    """A releases/latest reply for version `v`, its one asset the Windows setup or `name`."""
+    name = name or f"MapleLens-Setup-{v}.exe"
     return {
         "tag_name": f"v{v}",
         "assets": [
             {
-                "name": f"MapleLens-Setup-{v}.exe",
-                "browser_download_url": f"https://example.invalid/MapleLens-Setup-{v}.exe",
+                "name": name,
+                "browser_download_url": f"https://example.invalid/{name}",
                 "digest": digest,
             }
         ],
@@ -320,13 +323,21 @@ class _Fetch:
         return self.reply
 
 
+@pytest.fixture(autouse=True)
+def _screen_access(monkeypatch):
+    """Screen Recording allowed, as it always is on Windows; a test that needs it off says so."""
+    monkeypatch.setattr(app.capture, "has_access", lambda: True)
+
+
 @pytest.fixture
 def make_check(qt_box, tmp_path):
-    """make_check(fetch, settings, save, **kw): an UpdateCheck on qt_box, running 0.1.0."""
+    """make_check(fetch, settings, save, **kw): an UpdateCheck on qt_box, running 0.1.0
+    on Windows unless kw says platform="darwin"."""
 
     def make(fetch, settings=None, save=lambda: None, **kw):
         settings = {"update_dismissed": None} if settings is None else settings
         kw.setdefault("folder", tmp_path / "updates")
+        kw.setdefault("platform", "win32")
         return app.UpdateCheck(qt_box, settings, save, fetch, "0.1.0", set(), now=0.0, **kw)
 
     return make
@@ -479,13 +490,8 @@ def installed(monkeypatch, tmp_path):
     monkeypatch.setattr(app, "version", lambda name: "0.1.0")
 
 
-@pytest.mark.parametrize("where", ["source", "mac"])
-def test_from_source_or_on_the_mac_there_is_no_update_check(qt_box, monkeypatch, where):
-    if where == "source":
-        monkeypatch.delattr(sys, "frozen", raising=False)
-    else:
-        monkeypatch.setattr(sys, "frozen", True, raising=False)
-        monkeypatch.setattr(sys, "platform", "darwin")
+def test_from_source_there_is_no_update_check(qt_box, monkeypatch):
+    monkeypatch.delattr(sys, "frozen", raising=False)
     fetch = _Fetch(NEWER)
     assert app.update_check(qt_box, {"update_check": True}, lambda: None, set(), 0.0, fetch) is None
     assert fetch.calls == 0
@@ -772,6 +778,109 @@ def test_clear_updates_skips_what_it_cant_delete(tmp_path, monkeypatch):
     app.clear_updates(tmp_path)  # Setup may still be running; the next start clears it
 
 
+# --- the Mac: the dmg, where the app lives, what the last update left -----------------
+
+DMG = _latest("0.2.0", GOOD, name="MapleLens-0.2.0.dmg")
+
+
+def test_the_installed_mac_app_gets_an_update_check(qt_box, monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "stderr", None)
+    monkeypatch.setattr(app, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(app, "version", lambda name: "0.1.0")
+    folder = tmp_path / "updates"
+    folder.mkdir()
+    (folder / "MapleLens-0.1.0.dmg").write_bytes(b"last update's dmg")
+    (folder / update_mac.RESULT).write_text("failed\n")
+    settings = {"update_check": True, "update_dismissed": None}
+    check = app.update_check(qt_box, settings, lambda: None, set(), 0.0, _Fetch(DMG))
+    assert isinstance(check, app.UpdateCheck)
+    assert _menu(qt_box) == [
+        "Check for updates now",
+        "Check for updates automatically",
+        "Quit MapleLens",
+    ]
+    assert list(folder.iterdir()) == []  # the old dmg cleared, the result read once
+    assert qt_box._notice_text.text() == app.UPDATE_FAILED
+    assert check._install is update_mac.install_update
+    assert check._can_install() == app.MOVE_TO_APPLICATIONS  # pytest isn't inside a .app
+    app_exe = tmp_path / "MapleLens.app" / "Contents" / "MacOS" / "MapleLens"
+    monkeypatch.setattr(sys, "executable", str(app_exe))
+    assert check._can_install() is None  # a writable folder
+    _run(check, 10.0)
+    assert check.release is not None and check.release.version == "0.2.0"  # found the dmg
+
+
+def test_mac_downloads_the_dmg_checks_it_and_hands_over(qt_box, make_check, tmp_path):
+    installs, download = [], _Download()
+    check = make_check(_Fetch(DMG), download=download, install=installs.append, platform="darwin")
+    _run(check, 10.0)
+    qt_box.actions()[0].trigger()  # "Update to 0.2.0…"
+    _finish_download(check)
+    dmg = tmp_path / "updates" / "MapleLens-0.2.0.dmg"
+    assert installs == [dmg]
+    assert dmg.read_bytes() == SETUP
+    [(_, dest)] = download.calls
+    assert dest.name == "MapleLens-0.2.0.dmg.part"
+
+
+def test_mac_refuses_to_download_from_the_dmg(qt_box, make_check):
+    download = _Download()
+    check = make_check(
+        _Fetch(DMG),
+        download=download,
+        platform="darwin",
+        can_install=lambda: app.MOVE_TO_APPLICATIONS,
+    )
+    _run(check, 10.0)
+    qt_box.actions()[0].trigger()
+    assert check._download_thread is None
+    assert download.calls == []
+    assert qt_box._notice_text.text() == app.MOVE_TO_APPLICATIONS
+    check.poll(10.0 + app.UpdateCheck.REPLY_S)
+    assert not qt_box._notice.isVisibleTo(qt_box)
+    assert _menu(qt_box)[0] == "Update to 0.2.0…"  # the item stays for after the move
+    assert check.status() == app.update_available("0.2.0")  # About says so too
+
+
+def test_a_blocked_update_asks_to_allow_it(qt_box, make_check, log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+    opened = []
+    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    check = make_check(_Fetch(DMG), platform="darwin")
+    check.show_result("blocked")
+    assert qt_box._notice_text.text() == app.ALLOW_UPDATES
+    assert _menu(qt_box) == [app.ALLOW_UPDATES_ITEM, "Quit MapleLens"]
+    qt_box.actions()[0].trigger()
+    assert opened == [app.APP_MANAGEMENT_URL]
+    assert "blocked" in log.read_text(encoding="utf-8")
+    _run(check, 10.0)  # the first check finds 0.2.0: the line stays until it's closed
+    assert qt_box._notice_text.text() == app.ALLOW_UPDATES
+    qt_box._notice_close.click()
+    _run(check, 10.0 + app.UpdateCheck.EVERY_S)
+    assert qt_box._notice_text.text() == app.update_notice("0.2.0")
+
+
+def test_a_failed_mac_update_says_so_on_the_next_start(qt_box, make_check, log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+    check = make_check(_Fetch(), platform="darwin")
+    check.show_result(None)  # no update last time
+    assert not qt_box._notice.isVisibleTo(qt_box)
+    assert log.read_text(encoding="utf-8") == ""
+    check.show_result("failed")
+    assert qt_box._notice_text.text() == app.UPDATE_FAILED
+    assert "failed" in log.read_text(encoding="utf-8")
+
+
+def test_clear_updates_keeps_the_result(tmp_path):
+    names = ["MapleLens-0.1.0.dmg", "MapleLens-0.2.0.dmg.part", "MapleLens-Setup-0.1.0.exe"]
+    for name in [*names, update_mac.RESULT]:
+        (tmp_path / name).write_bytes(b"x")
+    app.clear_updates(tmp_path)
+    assert [p.name for p in tmp_path.iterdir()] == [update_mac.RESULT]
+
+
 def test_download_file_saves_the_reply_with_the_user_agent(tmp_path, monkeypatch):
     import io
 
@@ -795,7 +904,8 @@ def test_the_box_text_points_at_the_menu_button():
     assert app.LOOKING == "Looking for MapleStory…"  # the ••• beside it is the hint
     assert app.update_notice("1.2.3") == f"Update to 1.2.3: click {MENU_MARK}"
     assert app.UPDATE_FAILED == f"Update failed: click {MENU_MARK}"
-    for text in (app.LOOKING, app.update_notice("1.2.3"), app.UPDATE_FAILED):
+    mac = (app.MOVE_TO_APPLICATIONS, app.ALLOW_UPDATES)
+    for text in (app.LOOKING, app.update_notice("1.2.3"), app.UPDATE_FAILED, *mac):
         assert "right" not in text.lower()
 
 
@@ -931,6 +1041,94 @@ def test_with_no_tray_there_is_no_hide_item(qt_box):
     assert _menu(qt_box) == ["Quit MapleLens"]
 
 
+def test_the_dock_menu_is_the_box_menu_with_items_added_later(qt_box):
+    docked = []  # stands in for QMenu.setAsDockMenu, which needs the real Dock
+    menu = app.make_dock(qt_box, available=True, as_dock=docked.append)
+    assert docked == [menu]
+    assert menu.parent() is qt_box  # lives as long as the box
+    qt_box.add_menu_item("Update to 0.2.0…", lambda: None, at=0)  # the update check, later
+    menu.aboutToShow.emit()  # what Qt does as the Dock menu opens
+    assert menu.actions() == qt_box.actions()
+    assert [a.text() for a in menu.actions()] == ["Update to 0.2.0…", "Quit MapleLens"]
+
+
+def test_no_dock_menu_off_the_mac(qt_box):
+    assert app.make_dock(qt_box, available=False, as_dock=pytest.fail) is None
+
+
+class _FakeQApp(QObject):
+    """Stands in for the QApplication: its applicationStateChanged, which the Dock click
+    sends (Qt::ApplicationActive, even when MapleLens is already active)."""
+
+    applicationStateChanged = Signal(object)  # a Qt.ApplicationState
+
+
+@pytest.fixture
+def dock_hide(qt_box):
+    """hide's Mac version: no tray; the Dock click is the way back."""
+    from maplelens.overlay import Layer
+
+    layer = Layer()
+    qt_box.show()
+    layer.show()
+    qt = _FakeQApp()
+    return qt_box, layer, qt, app.add_hide(qt_box, layer, None, qt)
+
+
+def test_on_the_mac_the_hide_item_sits_just_before_quit(dock_hide):
+    box, *_ = dock_hide
+    assert _menu(box) == ["Hide MapleLens", "Quit MapleLens"]
+
+
+def test_a_dock_click_brings_a_hidden_box_back(dock_hide):
+    box, _, qt, shown = dock_hide
+    shown.toggle()
+    qt.applicationStateChanged.emit(Qt.ApplicationActive)
+    assert shown.on and box.isVisible()
+    assert _menu(box)[0] == "Hide MapleLens"
+
+
+def test_activation_while_shown_changes_nothing(dock_hide):
+    box, _, qt, shown = dock_hide
+    qt.applicationStateChanged.emit(Qt.ApplicationActive)  # Cmd-Tab, or a Dock click
+    assert shown.on and box.isVisible()
+    shown.toggle()
+    qt.applicationStateChanged.emit(Qt.ApplicationInactive)  # the game comes back
+    assert not shown.on and not box.isVisible()
+
+
+@pytest.mark.parametrize(
+    ("platform", "there"), [("darwin", True), ("win32", False), ("linux", False)]
+)
+def test_the_dock_is_mac_only(monkeypatch, platform, there):
+    """Off the Mac make_dock makes nothing, so add_hide gets no Dock: on Windows only the
+    tray brings the box back, and on Linux with no tray there's no Hide item."""
+    monkeypatch.setattr(sys, "platform", platform)
+    assert app.dock_available() is there
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+def test_on_the_mac_maplelens_is_in_the_dock_with_the_maple_leaf(
+    qt_box, monkeypatch, request, frozen
+):
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QApplication
+
+    calls = []  # never the real activation policy
+    fake = types.SimpleNamespace(make_regular=lambda: calls.append("regular"))
+    monkeypatch.setitem(sys.modules, "maplelens.overlay_mac", fake)
+    monkeypatch.setattr(maplelens, "overlay_mac", fake, raising=False)
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+    qt = QApplication.instance()
+    before = qt.windowIcon()  # every test shares this QApplication: put its icon back
+    request.addfinalizer(lambda: qt.setWindowIcon(before))
+    qt.setWindowIcon(QIcon())
+    app.show_in_dock(qt)
+    assert calls == ["regular"]
+    # from source the icon is ICON, not Python's; the installed app has its icon.icns
+    assert qt.windowIcon().isNull() is frozen
+
+
 class _Recorder:
     """A tool that keeps what each update got."""
 
@@ -1006,6 +1204,19 @@ def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypa
     assert not layer.isVisible()
     assert box._status.text() == app.LOOKING
     assert exp.updates == [(None, None, 5.0)]
+
+
+def test_a_tick_without_screen_recording_asks_for_it_and_never_looks(hide, game_found, monkeypatch):
+    box, layer, _, shown = hide
+    monkeypatch.setattr(app.capture, "has_access", lambda: False)
+    monkeypatch.setattr(app, "find_game", lambda settings, save: pytest.fail("looked"))
+    tick, exp = _tick(box, layer, shown)
+    tick.hwnd = 42  # found before the permission was revoked
+    tick.run(5.0)
+    assert not layer.isVisible()
+    assert box._status.text() == app.NEEDS_SCREEN_RECORDING
+    assert exp.updates == [(None, None, 5.0)]
+    assert tick.hwnd is None
 
 
 class _Gate:
@@ -1113,3 +1324,67 @@ def test_the_about_line_follows_a_check_on_each_tick(qt_box, make_check, monkeyp
     tick.run(6.0)
     assert qt_box._about_updates.text() == "Update to 0.2.0 available"
     assert qt_box.about_open  # still open: the line changed in place
+
+
+def test_screen_status_asks_for_the_permission_before_looking():
+    assert app.screen_status(False, None) == app.NEEDS_SCREEN_RECORDING
+    assert app.screen_status(False, 42) == app.NEEDS_SCREEN_RECORDING  # revoked mid-run
+    assert app.screen_status(True, None) == app.LOOKING
+    assert app.screen_status(True, 42) is None
+
+
+def test_permission_line_fits_the_box(qt_box):
+    qt_box.set_status(app.NEEDS_SCREEN_RECORDING)
+    assert qt_box._status.sizeHint().width() <= overlay.TAB_W
+    assert "right" not in app.NEEDS_SCREEN_RECORDING.lower()  # the ••• is the way in
+
+
+@pytest.fixture
+def no_prompt(monkeypatch):
+    """Screen Recording already allowed: the real calls could show the system prompt."""
+    monkeypatch.setattr(app.capture, "has_access", lambda: True)
+    monkeypatch.setattr(app.capture, "request_access", lambda: pytest.fail("prompted"))
+
+
+def test_the_mac_box_has_the_screen_recording_item(qt_box, monkeypatch, no_prompt):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    opened = []
+    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    app.setup_screen_recording(qt_box)
+    assert _menu(qt_box) == ["Open Screen Recording settings…", "Quit MapleLens"]
+    qt_box.actions()[0].trigger()
+    assert opened == [app.SCREEN_RECORDING_URL]
+
+
+def test_windows_box_has_no_screen_recording_item(qt_box, monkeypatch, no_prompt):
+    monkeypatch.setattr(sys, "platform", "win32")
+    app.setup_screen_recording(qt_box)
+    assert _menu(qt_box) == ["Quit MapleLens"]
+
+
+def test_main_no_longer_exits_without_screen_recording(monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QApplication
+
+    real = QApplication.instance() or QApplication([])
+
+    class Proxy:  # the one QApplication a process allows, with exec() ending at once
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def exec(self):
+            return 0
+
+    fake = lambda argv: Proxy()  # noqa: E731
+    fake.quit = QApplication.quit
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setattr(sys, "argv", ["maplelens"])
+    monkeypatch.setattr(app, "QApplication", fake)
+    monkeypatch.setattr(app, "mark_running", lambda: True)
+    monkeypatch.setattr(app, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(app, "update_check", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_log_path", None)
+    requests = []
+    monkeypatch.setattr(app.capture, "has_access", lambda: False)
+    monkeypatch.setattr(app.capture, "request_access", lambda: requests.append(1))
+    assert app.main() == 0
+    assert requests == [1]
