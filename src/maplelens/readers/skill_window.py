@@ -22,8 +22,9 @@ NAME_X, NAME_W = 44, 120
 SP_BOX = (83, 346, 26, 15)
 # Centre of the single-arrow + button (the left of the pair), relative to the top-left.
 PLUS_DX = 145
-# Name ink: dark letters on the pale rows.
-NAME_INK_LO, NAME_INK_HI = (0, 0, 0), (110, 110, 110)
+# Name ink: dark letters on the pale rows. Up to 130, not 110: at 2560x1440 the scaled
+# letters' soft edges sit between the two, and strokes broken there lost Windows OCR a word.
+NAME_INK_LO, NAME_INK_HI = (0, 0, 0), (130, 130, 130)
 
 
 @dataclass(frozen=True)
