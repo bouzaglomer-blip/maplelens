@@ -62,11 +62,8 @@ JOB_DX, JOB_DY, JOB_W, JOB_H = 70, -6, 128, 13
 JOB_INK_LO, JOB_INK_HI = (128, 128, 128), (255, 255, 255)
 
 
-def read_job(frame: np.ndarray, native: np.ndarray | None = None) -> str | None:
-    """Job name from a normalized frame, or None if unreadable or not close to a known job.
-
-    `native` is the same shot before normalizing (default: `frame`); OCR reads its pixels.
-    """
+def read_job(frame: np.ndarray) -> str | None:
+    """Job name from a normalized frame, or None if unreadable or not close to a known job."""
     y0 = max(0, frame.shape[0] - glyphs.STATUS_BAND)
     hit = glyphs.find_anchor(frame[y0:], "lv_label")
     if hit is None:
@@ -74,7 +71,7 @@ def read_job(frame: np.ndarray, native: np.ndarray | None = None) -> str | None:
     x, y = hit[0] + JOB_DX, y0 + hit[1] + JOB_DY
     if y < 0:
         return None
-    img = ocr.crop(frame, frame if native is None else native, (x, y, JOB_W, JOB_H))
+    img = ocr.crop(frame, (x, y, JOB_W, JOB_H))
     lines = ocr.read_lines(glyphs.mask(img, JOB_INK_LO, JOB_INK_HI))
     if not lines:
         return None

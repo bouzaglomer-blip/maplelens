@@ -44,16 +44,15 @@ def read_all(frame: np.ndarray, t: float) -> Reading:
     )
 
     img = glyphs.normalize(frame)
-    scale = frame.shape[0] / glyphs.BASE_H
     view = minimap_pos.read_view(img)
     return Reading(
         t,
         exp.read_exp(img),
         level.read_level(img),
-        job.read_job(img, frame),
-        map_name.read_map_name(img, frame),
+        job.read_job(img),
+        map_name.read_map_name(img),
         None if view is None else view.fraction,
         view,
-        stat_window.read_stat_window(img, frame, scale),
-        skill_window.read_skill_window(img, frame, scale),
+        stat_window.read_stat_window(img),
+        skill_window.read_skill_window(img),
     )

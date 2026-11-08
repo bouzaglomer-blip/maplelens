@@ -493,16 +493,13 @@ def test_hidden_portal_hint(make):
 
 def test_arrow_on_forest_north_middle_by_picture(make):
     # Real data and a real frame: mid-map, too few markers, so only the picture places us.
-    from pathlib import Path
-
-    import cv2
+    from screens import screen
 
     from maplelens.readers.minimap_pos import read_view
     from maplelens.tools.path_arrow import ui
     from maplelens.tools.path_arrow.maps import load
 
-    shot = Path(__file__).parent / "fixtures" / "screens" / "pos_fne_mid_2560x1440_100.png"
-    view = read_view(cv2.imread(str(shot)))
+    view = read_view(screen("pos_fne_mid_2560x1440_100_x0_y0.png"))
     maps = load()
     tool = make()
     tool.maps = maps

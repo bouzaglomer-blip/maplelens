@@ -86,13 +86,13 @@ def _ink_rows(m: np.ndarray) -> int:
     return 0 if rows.size == 0 else 1 + int(np.count_nonzero(np.diff(rows) > 1))
 
 
-def _lines(frame, native, box, lo, hi) -> list[str] | None:
-    lines = ocr.read_lines(glyphs.mask(ocr.crop(frame, native, box), lo, hi))
+def _lines(frame, box, lo, hi) -> list[str] | None:
+    lines = ocr.read_lines(glyphs.mask(ocr.crop(frame, box), lo, hi))
     # OCR marks what it cannot read with replacement or control characters.
     return lines if lines and all(t.isprintable() and "\ufffd" not in t for t in lines) else None
 
 
-def _normal(frame: np.ndarray, native: np.ndarray, x: int, y: int) -> str | None:
+def _normal(frame: np.ndarray, x: int, y: int) -> str | None:
     x, y = x + TITLE_DX, y + TITLE_DY
     w = _plain(frame[y, x:], PANEL)
     if w == 0:
@@ -100,16 +100,16 @@ def _normal(frame: np.ndarray, native: np.ndarray, x: int, y: int) -> str | None
     # A window over the title merges the text rows; then OCR could read the window's title.
     if _ink_rows(glyphs.mask(frame[y : y + TITLE_H, x : x + w], TITLE_INK_LO, TITLE_INK_HI)) != 2:
         return None
-    lines = _lines(frame, native, (x, y, w, TITLE_H), TITLE_INK_LO, TITLE_INK_HI)
+    lines = _lines(frame, (x, y, w, TITLE_H), TITLE_INK_LO, TITLE_INK_HI)
     return " / ".join(lines) if lines and len(lines) == 2 else None
 
 
-def _bar(frame: np.ndarray, native: np.ndarray, x: int, y: int) -> str | None:
+def _bar(frame: np.ndarray, x: int, y: int) -> str | None:
     y += BAR_DY
     w = _plain(frame[y, x - 2 :: -1], BAR) if x >= 2 else 0
     if w == 0:
         return None
-    lines = _lines(frame, native, (x - 1 - w, y, w, BAR_H), BAR_INK_LO, BAR_INK_HI)
+    lines = _lines(frame, (x - 1 - w, y, w, BAR_H), BAR_INK_LO, BAR_INK_HI)
     text = " ".join(lines or [])
     if text.count(":") != 1:
         return None
@@ -117,17 +117,13 @@ def _bar(frame: np.ndarray, native: np.ndarray, x: int, y: int) -> str | None:
     return f"{region} / {name}" if region and name else None
 
 
-def read_map_name(frame: np.ndarray, native: np.ndarray | None = None) -> str | None:
-    """Map as "<region> / <name>" from a normalized frame, or None if unreadable.
-
-    `native` is the same shot before normalizing (default: `frame`); OCR reads its pixels.
-    """
-    native = frame if native is None else native
+def read_map_name(frame: np.ndarray) -> str | None:
+    """Map as "<region> / <name>" from a normalized frame, or None if unreadable."""
     band = frame[:BAND_H, :BAND_W]
     hit = glyphs.find_anchor(band, "minimap_title")
     if hit is not None:
-        name = _normal(frame, native, *hit)
+        name = _normal(frame, *hit)
     else:
         hit = glyphs.find_anchor(band, "minimap_bar")
-        name = None if hit is None else _bar(frame, native, *hit)
+        name = None if hit is None else _bar(frame, *hit)
     return None if name is None else _snap(name)

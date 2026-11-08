@@ -36,7 +36,7 @@ with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
 
 - `src/maplelens/` — the package
   - `capture.py` (shared: `pick_window`) + `capture_win.py` / `capture_mac.py` — find the game window, grab its pixels
-  - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`), `stat_window`, `skill_window`; `read_all` in `__init__`); numbers via glyph templates, words (map, class, skill names) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`. The draggable game windows (`window.py`, shared) are read differently: scaled from the window's own corner, digits by correlation with a margin, since exact templates miss at most sub-pixel offsets
+  - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`), `stat_window`, `skill_window`; `read_all` in `__init__`); `glyphs.normalize` first undoes the game's stretch of its 768-row picture to the window, so every reader sees the same pixels at any window size; numbers via glyph templates, words (map, class, skill names) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`. The draggable game windows (`window.py`, shared): found by their anchors, digits by correlation with a margin
   - `overlay.py` — the see-through `Layer` and draggable `Box` (its ••• menu button, `attach_menu`); `overlay_mac.py` — the macOS panels
   - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures; `data/icon.ico` — the app icon (the exe, Setup and the tray)
   - `data/classes.json` — per-job advice (training maps, AP/SP plans, gear)
@@ -49,7 +49,7 @@ with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
   - `tools/class_helper/` — the class helper: `data`, `plan`, `ui` (the Class tab and the marks on the stat and skill windows)
 - `scripts/check_screen_only.py` — the guard; banned lists live there, with reasons
 - `scripts/grab.py` — save a cropped fixture screenshot of the game
-- `scripts/make_level_font.py` — build the level digit templates from `scripts/level_sprites/`
+- `scripts/level_sprites/` — the game's level digit images (`level_font` holds their ink)
 - `scripts/make_icon.py` — draw the icon: `src/maplelens/data/icon.ico`, `packaging/mac/icon.icns` (the Mac app), `docs/icon.png` (README), `docs/social-preview.png` (uploaded by hand: repo Settings → Social preview)
 - `scripts/build_installer.py` — the Windows build (also the Mac freeze, sign and dmg stages): freeze, check the bundle, `MapleLens.exe --self-check`, Inno Setup; run locally and by `release.yml`
 - `packaging/mac/` — `maplelens.spec` (PyInstaller), `icon.icns`; the bundle id `io.github.or-keren.maplelens` never changes
@@ -78,3 +78,6 @@ Planned, **not yet** created: `tools/<name>/` for prices.
 - Crop to the region the reader needs (EXP bar, minimap…), never the full screen.
 - Never commit character names, chat, or other players' info.
 - Put resolution and UI scale in the filename, e.g. `exp_bar_1366x768_100.png`.
+- Crop the window as captured (never resized). At any size but 1366x768, add the crop's
+  top-left in the window, e.g. `exp_a_1920x1080_100_x1008_y1029.png`: the stretch can only
+  be undone knowing where the crop sat. `tests/screens.py` loads them.

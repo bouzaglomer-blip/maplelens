@@ -22,8 +22,7 @@ NAME_X, NAME_W = 44, 120
 SP_BOX = (83, 346, 26, 15)
 # Centre of the single-arrow + button (the left of the pair), relative to the top-left.
 PLUS_DX = 145
-# Name ink: dark letters on the pale rows. Up to 130, not 110: at 2560x1440 the scaled
-# letters' soft edges sit between the two, and strokes broken there lost Windows OCR a word.
+# Name ink: dark letters on the pale rows (the 3x OCR crop's soft edges reach 130).
 NAME_INK_LO, NAME_INK_HI = (0, 0, 0), (130, 130, 130)
 
 
@@ -78,18 +77,14 @@ def _snap(text: str, names) -> str | None:
     return near[0]
 
 
-def read_skill_window(
-    frame: np.ndarray, native: np.ndarray | None = None, scale: float | None = None
-) -> SkillWindow | str | None:
-    """The skill window in `frame` (normalized), read from `native` (default `frame`).
+def read_skill_window(frame: np.ndarray) -> SkillWindow | str | None:
+    """The skill window in `frame` (normalized).
 
     None if no window is found; UNREADABLE if one is but a field is covered or misread,
     a name is unknown, the rows share no single job, or a level exceeds its skill's max.
     Rows whose name line is blank are left out.
     """
-    native = frame if native is None else native
-    scale = native.shape[0] / frame.shape[0] if scale is None else scale
-    hit = window.align(frame, native, scale, ANCHORS, (WIN_W, WIN_H))
+    hit = window.find(frame, ANCHORS, (WIN_W, WIN_H))
     if hit is None:
         return None
     win, (wx, wy) = hit
@@ -101,7 +96,7 @@ def read_skill_window(
     for i in range(ROWS):
         cy = ROW_Y0 + ROW_DY * i
         box = (wx + NAME_X, wy + cy - 26, NAME_W, 14)
-        ink = glyphs.mask(ocr.crop(frame, native, box), NAME_INK_LO, NAME_INK_HI)
+        ink = glyphs.mask(ocr.crop(frame, box), NAME_INK_LO, NAME_INK_HI)
         if not ink.any():
             continue  # a blank row
         name = _snap(" ".join(ocr.read_lines(ink) or []), names)  # ink read as nothing: covered

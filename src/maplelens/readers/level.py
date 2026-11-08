@@ -9,9 +9,9 @@ from maplelens.readers import glyphs
 LV_DX, LV_DY, LV_W, LV_H = 24, 1, 47, 14
 # Ink: the light digits; the orange boxes behind them stay below about 60 in blue.
 LV_INK_LO, LV_INK_HI = (100, 100, 100), (255, 255, 255)
-# Strict (R17): real digits match their templates pixel-exactly at every resolution;
-# 1 px of noise reads None, never a wrong level. The templates for all ten digits are
-# made by scripts/make_level_font.py, for 1366x768, 1920x1080 and 2560x1440 only.
+# Strict (R17): real digits match their templates pixel-exactly (glyphs.normalize gives
+# back the game's own picture at any window size); 1 px of noise reads None, never a wrong
+# level. The templates are the ink of the game's digit images, scripts/level_sprites/.
 
 
 def parse_level(text: str) -> int | None:

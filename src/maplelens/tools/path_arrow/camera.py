@@ -40,8 +40,10 @@ PIC_RATIO = 2.0
 PIC_MARGIN = 0.003
 PIC_MIN_SOLID = 600  # solid picture px under the window, markers left out
 MARK_R = 6  # px left out around each marker centre
-# Other players' red and party orange dot fills (BGR).
+# Other players' red and party orange dot fills (BGR), and their size: about our own dot's
+# (6x6 of 24 px), loosely, since leaving out a bit of map art by mistake costs little.
 OTHER_LO, OTHER_HI = (0, 0, 170), (90, 160, 255)
+OTHER_SIDE, OTHER_AREA = (5, 7), (18, 28)
 
 
 def to_world(f: tuple[float, float], mm: Minimap) -> tuple[float, float]:
@@ -118,10 +120,10 @@ def picture_scroll(view: MinimapView, pic: np.ndarray) -> tuple[float, float] | 
     # map art can be red or orange too (Perion's rocks).
     for bw, bh, area, (x, y) in minimap_pos._blobs(view.pixels, OTHER_LO, OTHER_HI):
         if (
-            minimap_pos.DOT_SIDE[0] <= min(bw, bh)
-            and max(bw, bh) <= minimap_pos.DOT_SIDE[1]
-            and abs(bw - bh) <= minimap_pos.DOT_SQUARE
-            and minimap_pos.DOT_AREA[0] <= area <= minimap_pos.DOT_AREA[1]
+            OTHER_SIDE[0] <= min(bw, bh)
+            and max(bw, bh) <= OTHER_SIDE[1]
+            and abs(bw - bh) <= 1
+            and OTHER_AREA[0] <= area <= OTHER_AREA[1]
         ):
             m[
                 max(0, int(y) - MARK_R) : int(y) + MARK_R, max(0, int(x) - MARK_R) : int(x) + MARK_R

@@ -6,8 +6,9 @@ from functools import cache, lru_cache
 import cv2
 import numpy as np
 
-# OCR input: the text cut from the native shot at 3x the 768 look, masked, trimmed to
-# its ink, black on white, padded 12 px. Measured on the owner's grabs: 2x, 4x, colour
+# OCR input: the text cut from the normalized frame at 3x (bilinear: on the owner's 304
+# grabs cubic read "III" as "Ill" and "VII" as "W", Lanczos "HenesyS"), masked, trimmed
+# to its ink, black on white, padded 12 px. Measured on the owner's grabs: 2x, 4x, colour
 # crops, or the empty rest of a box left in all missed words.
 SCALE = 3
 PAD = 12
@@ -39,18 +40,11 @@ def engine():
     return backend.engine() if backend else None
 
 
-def crop(frame: np.ndarray, native: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
-    """Box (x, y, w, h) of the normalized `frame` (the 768 look), cut from `native` (the
-    same shot at any size) with MARGIN around it, and scaled to SCALE x the 768 look.
-
-    Native pixels keep detail the downscale to 768 loses: masks of normalized crops
-    dropped a trailing 'I' or '1>' on the grabs.
-    """
+def crop(frame: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
+    """Box (x, y, w, h) of the normalized `frame` with MARGIN around it, scaled to SCALE x."""
     x, y, w, h = box
-    s = native.shape[0] / frame.shape[0]
-    x0, y0 = max(0, int((x - MARGIN) * s)), max(0, int((y - MARGIN) * s))
-    c = native[y0 : int((y + h + MARGIN) * s), x0 : int((x + w + MARGIN) * s)]
-    return cv2.resize(c, None, fx=SCALE / s, fy=SCALE / s, interpolation=cv2.INTER_CUBIC)
+    c = frame[max(0, y - MARGIN) : y + h + MARGIN, max(0, x - MARGIN) : x + w + MARGIN]
+    return cv2.resize(c, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_LINEAR)
 
 
 @lru_cache(maxsize=64)

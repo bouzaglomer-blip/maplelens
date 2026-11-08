@@ -25,22 +25,20 @@ EDGE_STEP = 60
 # Left and right padding may differ by this much (odd widths, resizing).
 EDGE_SLACK = 2
 # The dot's yellow fill (BGR); the party marker's orange has green under 160, its "+"
-# blue under 25. Normalized, the fill is a 6x6 disc of 23-24 px at every resolution;
-# yellow map art (Henesys roofs: 7x5, 6x4) fails the size or the squareness.
+# blue under 25. The fill is a 6x6 disc of 24 px: once on each of the 291 minimaps on the
+# owner's grabs, and nothing else had that shape (Henesys roofs: 6x5 of 20, 5x5 of 17).
 DOT_LO, DOT_HI = (25, 180, 200), (110, 255, 255)
-DOT_SIDE = (5, 7)
-DOT_SQUARE = 1  # max width - height difference
-DOT_AREA = (18, 28)
+DOT_SIDE, DOT_AREA = 6, 24
 # NPC markers: green (BGR) ovals, 4x7 px of 20-23 px normalized at 2560 (Kerning City,
 # Henesys, Perion, Lith Harbor). Partly covered ones (3x7) are dropped.
 NPC_LO, NPC_HI = (0, 170, 0), (90, 255, 90)
 NPC_W, NPC_H = 4, (6, 7)
 NPC_AREA = (18, 24)
 # Portal spirals: a grey ring round a blue centre. The blue (B at least PORTAL_B and
-# PORTAL_BR over R), closed by 3x3, is an 8x8 blob of 51-52 px normalized at 1366, 1920
-# and 2560; Lith Harbor's sea gives only smaller bits.
+# PORTAL_BR over R) is one 8x8 blob of 34 px: all 316 whole spirals on the owner's grabs
+# (1366, 1920, 2560) had that very shape. Lith Harbor's sea gives only other bits.
 PORTAL_B, PORTAL_BR = 140, 80
-PORTAL_SIDE, PORTAL_AREA = 8, (48, 56)
+PORTAL_SIDE, PORTAL_AREA = 8, 34
 
 
 @dataclass(frozen=True)
@@ -100,13 +98,13 @@ def _blobs(img, lo, hi) -> list[tuple[int, int, int, np.ndarray]]:
 def _portals(img: np.ndarray) -> tuple[tuple[float, float], ...]:
     b, r = img[:, :, 0].astype(int), img[:, :, 2].astype(int)
     blue = ((b >= PORTAL_B) & (b - r >= PORTAL_BR)).astype(np.uint8)
-    blue = cv2.morphologyEx(blue, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-    n, _, stats, centres = cv2.connectedComponentsWithStats(blue, connectivity=8)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(blue, connectivity=8)
+    # The bounding box's centre: the blob's own centroid leans to its heavier side.
     return tuple(
-        (float(centres[i][0] + 0.5), float(centres[i][1] + 0.5))
+        (float(stats[i, 0] + PORTAL_SIDE / 2), float(stats[i, 1] + PORTAL_SIDE / 2))
         for i in range(1, n)
         if stats[i, cv2.CC_STAT_WIDTH] == PORTAL_SIDE == stats[i, cv2.CC_STAT_HEIGHT]
-        and PORTAL_AREA[0] <= stats[i, cv2.CC_STAT_AREA] <= PORTAL_AREA[1]
+        and stats[i, cv2.CC_STAT_AREA] == PORTAL_AREA
     )
 
 
@@ -123,12 +121,7 @@ def read_view(frame: np.ndarray) -> MinimapView | None:
     x0, y0, x1, y1 = area
     img = frame[y0:y1, x0:x1]
     dots = [
-        c
-        for w, h, px, c in _blobs(img, DOT_LO, DOT_HI)
-        if DOT_SIDE[0] <= min(w, h)
-        and max(w, h) <= DOT_SIDE[1]
-        and abs(w - h) <= DOT_SQUARE
-        and DOT_AREA[0] <= px <= DOT_AREA[1]
+        c for w, h, px, c in _blobs(img, DOT_LO, DOT_HI) if w == DOT_SIDE == h and px == DOT_AREA
     ]
     if len(dots) != 1:
         return None

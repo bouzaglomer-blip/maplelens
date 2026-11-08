@@ -1,5 +1,7 @@
 """Template matching on screenshots: find an anchor, read bitmap-font text."""
 
+import math
+from functools import lru_cache
 from pathlib import Path
 
 import cv2
@@ -7,13 +9,16 @@ import numpy as np
 
 TEMPLATES = Path(__file__).parent / "templates"
 BASE_H = 768
+# Re-stretching with the right picture width misses the shot by under 1 grey level (p99,
+# measured at 1920x1080, 1920x1200, 2560x1440); a width 1 px off misses by 14-32.
+WRONG_WIDTH = 5.0
 # A cached anchor spot is trusted only on a pixel-exact match.
 EXACT = 0.9999
 # Bottom rows of a normalized frame that hold the status bar (EXP, level, job):
 # anchors there are searched in this band only.
 STATUS_BAND = 60
 # Glyph file stems that are not the character itself. A stem may carry a variant
-# suffix after '_' (e.g. 3_1366.png): one char can have several templates.
+# suffix after '_' (e.g. 3_b.png): one char can have several templates.
 CHAR_NAMES = {
     "comma": ",",
     "dot": ".",
@@ -32,6 +37,7 @@ _images: dict[str, np.ndarray] = {}
 _fonts: dict[str, Font] = {}
 _anchors: dict[str, list[str]] = {}
 _last_hit: dict[str, tuple[int, tuple[int, int]]] = {}  # name -> (variant, spot)
+_widths: dict[tuple[int, int], int] = {}  # window (w, h) -> width of the game's picture
 
 
 def clear_cache() -> None:
@@ -39,6 +45,7 @@ def clear_cache() -> None:
     _fonts.clear()
     _anchors.clear()
     _last_hit.clear()
+    _widths.clear()
 
 
 def imread(path: Path, flags: int) -> np.ndarray | None:
@@ -76,12 +83,78 @@ def load_all() -> int:
     return n
 
 
-def normalize(frame: np.ndarray) -> np.ndarray:
-    """Resize to height BASE_H, keeping aspect. A frame already that high is returned as is."""
+def _stretch(n: int, m: int, j0: int, size: int) -> np.ndarray:
+    """Rows j0..j0+size of the game's stretch of n samples to m (bilinear, half-pixel
+    centres, edges clamped), over just the source samples those rows touch."""
+    u = np.clip((np.arange(j0, j0 + size) + 0.5) * n / m - 0.5, 0, n - 1)
+    i0 = np.floor(u).astype(int)
+    f = u - i0
+    i1 = np.minimum(i0 + 1, n - 1)
+    lo, hi = i0[0], (i1[-1] if f[-1] > 0 else i0[-1])
+    a = np.zeros((size, hi - lo + 1))
+    np.add.at(a, (np.arange(size), i0 - lo), 1 - f)
+    np.add.at(a, (np.arange(size), np.minimum(i1, hi) - lo), np.where(i1 > hi, 0, f))
+    return a
+
+
+@lru_cache(maxsize=16)
+def _undo(n: int, m: int, j0: int, size: int) -> tuple[np.ndarray, np.ndarray]:
+    """(least-squares inverse, forward matrix) of _stretch, float32. The normal equations,
+    not pinv: A'A is tridiagonal and well-conditioned, and pinv's SVD takes ~5 s at 1080p."""
+    a = _stretch(n, m, j0, size)
+    return np.linalg.solve(a.T @ a, a.T).astype(np.float32), a.astype(np.float32)
+
+
+def _source_width(w: int, h: int, x0: int, crop: np.ndarray) -> int:
+    """Width of the picture the game stretches to a w x h window: it is BASE_H rows high,
+    and as wide as the window's shape allows, rounded either way (1366 at 16:9, 1228 at
+    16:10, both even). The rounding that re-stretches `crop` (cut at column x0) back best
+    wins, the even one on a tie (a flat frame); it is kept per window size once the other
+    is clearly wrong."""
+    if (w, h) in _widths:
+        return _widths[w, h]
+    cands = sorted({math.floor(w * BASE_H / h), math.ceil(w * BASE_H / h)}, key=lambda n: n % 2)
+    if len(cands) == 1:
+        return cands[0]
+    rows = crop[::8, :, 1].astype(np.float32)
+    errs = []
+    for n in cands:
+        inv, a = _undo(n, w, x0, crop.shape[1])
+        errs.append(float(np.percentile(np.abs(rows @ inv.T @ a.T - rows), 99)))
+    best = cands[int(np.argmin(errs))]
+    if max(errs) > WRONG_WIDTH:
+        _widths[w, h] = best
+    return best
+
+
+def normalize(
+    frame: np.ndarray, origin: tuple[int, int] = (0, 0), client: tuple[int, int] | None = None
+) -> np.ndarray:
+    """The game's own picture (BASE_H rows high) under `frame`, a shot of its window.
+
+    The game draws that picture and stretches it to the window (bilinear); this solves
+    the stretch backwards (least squares), so text and anchors come out pixel-exact at
+    any window size. `frame` may be a part of the window: its top-left at `origin` in a
+    window of size `client` (w, h; default: the frame is the whole window).
+    """
     h, w = frame.shape[:2]
-    if h == BASE_H:
+    cw, ch = client or (w, h)
+    if ch == BASE_H:
         return frame
-    return cv2.resize(frame, (round(w * BASE_H / h), BASE_H), interpolation=cv2.INTER_AREA)
+    if ch < BASE_H:
+        # ponytail: below BASE_H the game shrinks its picture and the detail is gone;
+        # plain resize, read only where templates happen to match.
+        return cv2.resize(frame, (round(w * BASE_H / h), BASE_H), interpolation=cv2.INTER_AREA)
+    x0, y0 = origin
+    sw = _source_width(cw, ch, x0, frame)
+    py, _ = _undo(BASE_H, ch, y0, h)
+    px, _ = _undo(sw, cw, x0, w)
+    c = frame.shape[2]
+    # ponytail: dense matrices, ~70 ms at 1080p; both are banded (~20 taps) if it matters
+    out = py @ frame.reshape(h, -1).astype(np.float32)
+    out = out.reshape(-1, w, c).transpose(0, 2, 1).reshape(-1, w) @ px.T
+    out = out.reshape(-1, c, px.shape[0]).transpose(0, 2, 1)
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8)
 
 
 def _anchor_names(name: str) -> list[str]:

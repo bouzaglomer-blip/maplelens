@@ -1,12 +1,9 @@
-"""Shared by the draggable-window readers (stat, skill): align on the window, read digits.
+"""Shared by the draggable-window readers (stat, skill): find the window, read digits.
 
-The game draws these windows at screen-pixel positions, so after glyphs.normalize a
-window's glyphs differ at every sub-pixel offset and exact-mask templates fail. Instead:
-align() finds the native start that makes the window land on the 768-scale pixel grid,
-and read_number_text() correlates grey glyph templates (templates/window_font/).
+glyphs.normalize gives back the game's own picture, so a window lands on whole pixels:
+find() cuts it out at its best anchor, and read_number_text() correlates grey glyph
+templates (templates/window_font/).
 """
-
-import math
 
 import cv2
 import numpy as np
@@ -15,23 +12,16 @@ from maplelens.readers import glyphs
 
 UNREADABLE = "unreadable"  # a window was found but a field could not be read
 
-# An anchor is first found on the normalized frame (grey TM_CCOEFF_NORMED): it must score
-# COARSE_MIN there, then ANCHOR_MIN at its exact spot after alignment. Stat fixtures, coarse:
-# 1.00 at 768, 0.60-0.97 at 1080/1440 depending on the sub-pixel offset; covered or
-# off-screen 0.2-0.3; the best score on any non-stat fixture 0.42. At its exact spot after
-# alignment: 0.88 (1080), 0.91 (1440), 1.00 (768).
-COARSE_MIN = 0.5
-ANCHOR_MIN = 0.7
-# A glyph needs this score. Accepted glyphs scored 1.0 at 768 and 0.825-0.97 at 1080/1440.
+# An anchor must score this (grey TM_CCOEFF_NORMED): 1.00 where it shows; another
+# window's title bar scored 0.76 for skill_title on the owner's grabs.
+ANCHOR_MIN = 0.9
+# A glyph needs this score. Accepted glyphs scored 1.0 on the fixtures.
 GLYPH_MIN = 0.8
 # No other char may score within this of an accepted glyph within 1 px, at any score.
-# Smallest runner-up gaps measured on the stat fixtures: 0.157 (768), 0.116 (1080),
-# 0.090 (1440, the level's glyphs). 0.07 leaves 0.02 of slack at 1440: thin, so a
-# new resolution's fixtures need their gaps checked.
+# Smallest runner-up gap measured on the stat fixtures: 0.157.
 GLYPH_MARGIN = 0.07
 # Outside the glyphs a strip must be its background: within BG_TOL of the median grey.
-# Measured on the stat fixtures: 0 at every scale (flat 222 fields, 255 for the AP box),
-# so 12 only leaves room for resampling noise at other offsets.
+# Measured on the stat fixtures: 0 (flat 222 fields, 255 for the AP box).
 BG_TOL = 12
 GLYPH_H = 13
 INK = 90  # grey below this is ink (dark digits on a light field)
@@ -52,60 +42,26 @@ def _cut(img: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
     return out
 
 
-def align(
-    frame: np.ndarray,
-    native: np.ndarray,
-    scale: float,
-    anchors: list[tuple[str, tuple[int, int]]],
-    size: tuple[int, int],
+def find(
+    frame: np.ndarray, anchors: list[tuple[str, tuple[int, int]]], size: tuple[int, int]
 ) -> tuple[np.ndarray, tuple[int, int]] | None:
-    """The window as a 768-scale BGR image of `size` (w, h), and its top-left in `frame`.
+    """The window as a BGR image of `size` (w, h), and its top-left in `frame`.
 
-    `frame` is the normalized frame, `native` the pixels it came from (`scale` = native /
-    frame). The window is found on `frame` by its best anchor (template name, offset from
-    the window's top-left); then each native start within 2 frame px is tried, the native
-    crop scaled by exactly 1/scale, and the start whose anchor matches best at its exact
-    spot wins. None if no anchor scores ANCHOR_MIN.
+    `anchors`: (template name, offset from the window's top-left); the best-scoring one
+    places the window. None if none scores ANCHOR_MIN.
     """
     g = _gray(frame)
-    top = (ANCHOR_MIN, None, 0, 0)  # (score at its exact spot, anchor, native x0, y0)
+    best, spot = ANCHOR_MIN, None
     for name, (ax, ay) in anchors:
         t = _gray(glyphs.load(name))
-        th, tw = t.shape
-        if g.shape[0] < th or g.shape[1] < tw:
+        if g.shape[0] < t.shape[0] or g.shape[1] < t.shape[1]:
             continue
         _, sc, _, loc = cv2.minMaxLoc(cv2.matchTemplate(g, t, cv2.TM_CCOEFF_NORMED))
-        if sc < COARSE_MIN:
-            continue
-        ox, oy = (loc[0] - ax) * scale, (loc[1] - ay) * scale
-        k = 0 if scale == 1 else math.ceil(2 * scale)
-        cw, ch = math.ceil((ax + tw + 1) * scale) + 1, math.ceil((ay + th + 1) * scale) + 1
-        for ky in range(-k, k + 1):
-            for kx in range(-k, k + 1):
-                x0, y0 = int(ox) + kx, int(oy) + ky
-                w = _gray(
-                    cv2.resize(
-                        _cut(native, x0, y0, cw, ch),
-                        None,
-                        fx=1 / scale,
-                        fy=1 / scale,
-                        interpolation=cv2.INTER_AREA,
-                    )
-                )
-                patch = w[ay : ay + th, ax : ax + tw]
-                if patch.shape != t.shape:
-                    continue
-                s = cv2.matchTemplate(patch, t, cv2.TM_CCOEFF_NORMED)[0, 0]
-                if s > top[0]:
-                    top = (s, name, x0, y0)
-    if top[1] is None:
+        if sc >= best:
+            best, spot = sc, (loc[0] - ax, loc[1] - ay)
+    if spot is None:
         return None
-    _, _, x0, y0 = top
-    cw, ch = math.ceil(size[0] * scale) + 1, math.ceil(size[1] * scale) + 1
-    win = cv2.resize(
-        _cut(native, x0, y0, cw, ch), None, fx=1 / scale, fy=1 / scale, interpolation=cv2.INTER_AREA
-    )[: size[1], : size[0]]
-    return win, (round(x0 / scale), round(y0 / scale))
+    return _cut(frame, *spot, *size), spot
 
 
 def _glyphs() -> list[tuple[str, np.ndarray]]:

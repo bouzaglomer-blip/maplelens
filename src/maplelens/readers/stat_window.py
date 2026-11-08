@@ -44,17 +44,13 @@ def _box(x: int, cy: int, w: int) -> tuple[int, int, int, int]:
     return x, cy - 7, w, 15
 
 
-def read_stat_window(
-    frame: np.ndarray, native: np.ndarray | None = None, scale: float | None = None
-) -> StatWindow | str | None:
-    """The stat window in `frame` (normalized), read from `native` (default `frame`).
+def read_stat_window(frame: np.ndarray) -> StatWindow | str | None:
+    """The stat window in `frame` (normalized).
 
     None if no window is found; UNREADABLE if one is but a field is covered or
     misread, or the AP don't add up (R13).
     """
-    native = frame if native is None else native
-    scale = native.shape[0] / frame.shape[0] if scale is None else scale
-    hit = window.align(frame, native, scale, ANCHORS, (WIN_W, WIN_H))
+    hit = window.find(frame, ANCHORS, (WIN_W, WIN_H))
     if hit is None:
         return None
     win, (wx, wy) = hit

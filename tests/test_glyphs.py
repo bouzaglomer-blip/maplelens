@@ -50,11 +50,27 @@ def noise(h, w, seed):
     return np.random.default_rng(seed).integers(0, 256, (h, w, 3), dtype=np.uint8)
 
 
-def test_normalize_scales_to_768():
-    out = glyphs.normalize(np.zeros((1440, 2560, 3), np.uint8))
-    assert out.shape == (768, round(2560 * 768 / 1440), 3)
+def test_normalize_keeps_a_768_frame():
     frame = np.zeros((768, 1366, 3), np.uint8)
     assert glyphs.normalize(frame) is frame
+
+
+@pytest.mark.parametrize("w, h, pw", [(1920, 1080, 1366), (2560, 1440, 1366), (1920, 1200, 1228)])
+def test_normalize_undoes_the_games_stretch(w, h, pw):
+    """The game stretches its picture (768 high, 1366 wide at 16:9, 1228 at 16:10) to
+    the window, bilinear: normalize gets that picture back, also from a part of the shot."""
+    glyphs.clear_cache()
+    pic = noise(768, pw, 3)
+    shot = cv2.resize(pic, (w, h), interpolation=cv2.INTER_LINEAR)
+    # The shot is rounded to whole grey levels; undoing the stretch amplifies that a bit:
+    # on noise (the worst case) 2 levels off at most, for 1 pixel in 30,000.
+    assert np.abs(glyphs.normalize(shot).astype(int) - pic).max() <= 2
+    x0, y0 = 501, 333  # the part's top-left in the window: source column 356 (pw 1366)
+    part = glyphs.normalize(shot[y0 : y0 + 200, x0 : x0 + 300], (x0, y0), (w, h))
+    sx, sy = int((x0 + 0.5) * pw / w - 0.5), int((y0 + 0.5) * 768 / h - 0.5)
+    inner = (slice(2, -2), slice(2, -2))  # its edge pixels see only part of their spread
+    want = pic[sy : sy + part.shape[0], sx : sx + part.shape[1]]
+    assert np.abs(part[inner].astype(int) - want[inner]).max() <= 2
 
 
 def test_find_anchor_recovers_after_move(templates):
@@ -124,7 +140,7 @@ def test_read_text_splits_touching_glyphs(font):
 
 def test_find_anchor_recovers_after_move_fixture():
     glyphs.clear_cache()
-    fix = cv2.imread(str(Path(__file__).parent / "fixtures/screens/exp_a_2560x1440_100.png"))
+    fix = cv2.imread(str(Path(__file__).parent / "fixtures/screens/exp_a_1366x768_100.png"))
     h, w = fix.shape[:2]
     ax, ay = glyphs.find_anchor(fix, "exp_label")
     frame = np.zeros((768, 1366, 3), np.uint8)
