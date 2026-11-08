@@ -92,7 +92,7 @@ def test_search_lists_matches(make):
 def test_no_route_message(make):
     tool = make()
     go(tool, "A", "D")
-    assert tool._message.text() == "No route from here to Date"
+    assert tool._info.text() == "No route from here to Date"
     assert not tool.running
 
 
@@ -177,10 +177,12 @@ def test_dot_missing_message_immediately(make):
 
 
 def test_unknown_map_message(make):
+    from maplelens.tools.path_arrow import ui
+
     tool = make()
     go(tool, "A", "C")
     feed(tool, "Road / Nowhere", 1.0)
-    assert tool._message.text() == "This map isn't in MapleLens's map list yet"
+    assert tool._info.text() == ui.NOT_LISTED
     assert not tool.arrow.isVisible()
     assert tool.running
 
@@ -189,7 +191,7 @@ def test_no_minimap_message(make):
     tool = make()
     go(tool, "N", "C", 0.0)
     assert tool.running and tool._route_list.isVisibleTo(tool.tab)
-    assert tool._message.text() == "No minimap on this map"
+    assert tool._info.text() == "No minimap on this map"
     assert not tool.arrow.isVisible()
 
 
@@ -200,7 +202,7 @@ def test_no_arrow_on_big_map_without_npcs(make):
     tool._search.setText("Cherry")
     tool._start.click()
     assert tool.running
-    assert tool._message.text() == "No arrow on this map yet"
+    assert tool._info.text() == "No arrow on this map yet"
     assert not tool.arrow.isVisible()
 
 
@@ -211,6 +213,7 @@ def test_start_disabled_when_map_unknown(make):
     assert tool._header.text() == "From: (can't read your map yet)"
     feed(tool, "Road / Nowhere")
     assert not tool._start.isEnabled()
+    assert tool._header.text() == "From: Nowhere"
     feed(tool, title("A"), 1.0)
     assert tool._start.isEnabled()
     assert tool._header.text() == "From: Apple (where you are)"
@@ -374,7 +377,7 @@ def test_clipped_map_part_without_markers_says_why(make):
     feed(tool, title("K"), view=clipped)
     tool._search.setText("Cherry")
     tool._start.click()
-    assert tool._message.text() == "No arrow on this part of the map yet"
+    assert tool._info.text() == "No arrow on this part of the map yet"
     assert not tool.arrow.isVisible()
 
 
@@ -383,15 +386,15 @@ def test_unclipped_frame_miss_has_no_line(make):
     go(tool, "A", "C")
     feed(tool, title("A"), 1.0, view=MinimapView((135, 62), (67.5, 31.0), ()), times=1)
     assert not tool.arrow.isVisible()  # player_world None for this frame only
-    assert not tool._message.isVisibleTo(tool.tab)
+    assert not tool._message.isVisibleTo(tool.tab) and not tool._info.isVisibleTo(tool.tab)
 
 
 def test_no_route_note_clears_on_map_change(make):
     tool = make()
     go(tool, "A", "D")
-    assert tool._message.text() == "No route from here to Date"
+    assert tool._info.text() == "No route from here to Date"
     feed(tool, title("B"), 1.0)
-    assert not tool._message.isVisibleTo(tool.tab)
+    assert not tool._message.isVisibleTo(tool.tab) and not tool._info.isVisibleTo(tool.tab)
 
 
 def test_no_reading_starts_the_minimap_clock(make):
@@ -510,3 +513,19 @@ def test_arrow_on_forest_north_middle_by_picture(make):
     feed(tool, here.title, 1.0, view=view)
     assert tool.trip is not None and tool.arrow.isVisible()
     assert tool._message.text() in ("", ui.HIDDEN)
+
+
+def test_read_but_unlisted_map_names_itself(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    feed(tool, "Road / Nowhere")  # read twice: confirmed, not in the data
+    assert tool._header.text() == "From: Nowhere"
+    assert tool._info.text() == ui.NOT_LISTED and tool._info.isVisibleTo(tool.tab)
+    assert not tool._message.isVisibleTo(tool.tab)
+
+
+def test_start_and_stop_kinds(make):
+    tool = make()
+    assert tool._start.property("kind") == "primary"
+    assert tool._stop.property("kind") == "secondary"

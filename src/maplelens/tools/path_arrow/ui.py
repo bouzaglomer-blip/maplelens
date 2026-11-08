@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -19,12 +18,17 @@ from PySide6.QtWidgets import (
 
 from maplelens.overlay import (
     ACCENT,
+    DARK,
+    FIELD_STYLE,
     LABEL_COLOR,
     LABEL_PT,
     TAB_W,
     VALUE_COLOR,
+    InfoLine,
     Layer,
     game_to_layer,
+    primary_button,
+    secondary_button,
     text_label,
 )
 from maplelens.readers import Reading, glyphs
@@ -40,26 +44,11 @@ ARRIVED_S = 5.0  # "Arrived at …" stays this long
 UNREAD_S = 3.0  # map name unreadable this long before asking for the minimap
 OPEN = "Open your minimap to see the arrow"
 HIDDEN = "Hidden portal: stand on it and press ↑"
+NOT_LISTED = "Not in the map list yet, so no route from here"
+ACTIONS = (OPEN, HIDDEN)  # yellow: the player can act on these now; the rest are information
 MATCH_ROWS = 3  # visible matches; the list scrolls for the rest
-# Mockup 3's route list and mockup 2's field.
-_DONE, _AHEAD, _NUM, _HERE_BG, _FIELD, _DARK = (
-    "#6f7d93",
-    "#c9d3e3",
-    "#7b8aa3",
-    "#2c3a50",
-    "#0b0f15",
-    "#2a1d00",
-)
-_STYLE = f"""
-QLineEdit {{ background: {_FIELD}; color: {VALUE_COLOR}; border: 1px solid {ACCENT};
-    border-radius: 4px; padding: 2px 6px; }}
-QListWidget {{ background: {_FIELD}; color: {VALUE_COLOR}; border: 0; border-radius: 4px; }}
-QListWidget::item:selected {{ background: {_HERE_BG}; color: {VALUE_COLOR}; }}
-QCheckBox {{ color: {VALUE_COLOR}; }}
-QPushButton#start {{ background: {ACCENT}; color: {_DARK}; font-weight: bold; border: 0;
-    border-radius: 4px; padding: 4px; }}
-QPushButton#start:disabled {{ background: {_HERE_BG}; color: {LABEL_COLOR}; }}
-"""
+_DONE, _AHEAD, _NUM = "#6f7d93", "#c9d3e3", "#7b8aa3"  # mockup 3's route list
+_STYLE = FIELD_STYLE + f"QCheckBox {{ color: {VALUE_COLOR}; }}"
 
 
 class _Arrow(QWidget):
@@ -79,7 +68,7 @@ class _Arrow(QWidget):
         s = ARROW_SIZE / 2 - 2
         tip = [(s, 0), (0, -0.8 * s), (0, -0.35 * s), (-s, -0.35 * s)]
         tip += [(-s, 0.35 * s), (0, 0.35 * s), (0, 0.8 * s)]
-        p.setPen(QPen(QColor(_DARK), 2))
+        p.setPen(QPen(QColor(DARK), 2))
         p.setBrush(QColor(ACCENT))
         p.drawPolygon(QPolygonF([QPointF(x, y) for x, y in tip]))
 
@@ -106,12 +95,6 @@ class _Search(QLineEdit):
     def focusOutEvent(self, event):
         self._typing(False)
         super().focusOutEvent(event)
-
-
-def _button(text: str) -> QPushButton:
-    b = QPushButton(text)
-    b.setFocusPolicy(Qt.NoFocus)
-    return b
 
 
 class PathArrowTool:
@@ -150,6 +133,7 @@ class PathArrowTool:
         self._header = text_label("", LABEL_PT, LABEL_COLOR)
         self._message = text_label("", LABEL_PT, ACCENT)
         self._message.setWordWrap(True)
+        self._info = InfoLine()
         self._search = _Search(self._set_typing)
         self._search.textChanged.connect(self._on_text)
         self._matches = QListWidget()
@@ -165,13 +149,10 @@ class PathArrowTool:
         self._taxi = QCheckBox("Use taxi")
         self._taxi.setFocusPolicy(Qt.NoFocus)
         self._taxi.setChecked(taxi)
-        self._start = _button("Start")
-        self._start.setObjectName("start")
-        self._start.clicked.connect(self._on_start)
+        self._start = primary_button("Start", self._on_start)
         self._route_list = text_label("", LABEL_PT + 1, _AHEAD)
         self._route_list.setTextFormat(Qt.RichText)
-        self._stop = _button("Stop")
-        self._stop.clicked.connect(self._on_stop)
+        self._stop = secondary_button("Stop", self._on_stop)
 
         self._choose, self._running = QWidget(), QWidget()
         for page, widgets in [
@@ -186,7 +167,7 @@ class PathArrowTool:
         col = QVBoxLayout(tab)
         col.setContentsMargins(0, 4, 0, 0)
         col.setSpacing(6)
-        for w in (self._header, self._message, self._choose, self._running):
+        for w in (self._header, self._message, self._info, self._choose, self._running):
             col.addWidget(w)
         return tab
 
@@ -321,6 +302,8 @@ class PathArrowTool:
             self._route_list.setText(self._route_html())
         elif self._here and not self._unread():
             head = self._fit("From: {} (where you are)", self._here.name)
+        elif self._title and not self._unread():  # read, but not in the map data
+            head = self._fit("From: {}", self._title.rsplit(" / ", 1)[-1])
         else:
             head = "From: (can't read your map yet)"
         self._header.setText(head)
@@ -328,9 +311,13 @@ class PathArrowTool:
         self._running.setVisible(self.trip is not None)
         world = self._world()
         hint = HIDDEN if self.trip and self.trip.hidden_next(world) else ""
-        why = "\n".join(t for t in (self._why(world), hint) if t)
-        self._message.setText(why)
-        self._message.setVisible(bool(why))
+        texts = [t for t in (self._why(world), hint) if t]
+        act = "\n".join(t for t in texts if t in ACTIONS)
+        info = "\n".join(t for t in texts if t not in ACTIONS)
+        self._message.setText(act)
+        self._message.setVisible(bool(act))
+        self._info.setText(info)
+        self._info.setVisible(bool(info))
         known = self._here is not None and not self._unread()
         self._start.setEnabled(known and self._matches.currentItem() is not None)
         self._place_arrow(world)
@@ -375,7 +362,7 @@ class PathArrowTool:
         """One line on why there's no arrow, or ""."""
         r, here = self._r, self._here
         if self._title is not None and here is None and not self._unread():
-            return "This map isn't in MapleLens's map list yet"
+            return NOT_LISTED
         if self.trip is None:
             return "" if self._arrived else self._note
         if self._unread():
