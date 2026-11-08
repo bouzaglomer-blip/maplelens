@@ -369,3 +369,62 @@ def test_marks_hide_when_the_class_tool_raises(make, monkeypatch):
     monkeypatch.setattr(tool, "_draw_marks", lambda: (_ for _ in ()).throw(ValueError("x")))
     app.update_tools(_Box(), _Quiet(), _Quiet(), tool, reading, RECT, 1.0, set())
     assert tool.marks() == []
+
+
+STATES = [("Rogue", 28), ("Beginner", 8), ("Rogue", 30), ("Hunter", 34), (None, None)]
+
+
+@pytest.fixture
+def box_with_tools(monkeypatch, tmp_path):
+    """The box as app.py builds it: EXP, Path and Class, with the real class data."""
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from maplelens.overlay import Box, Layer
+    from maplelens.tools.class_helper.ui import ClassHelperTool
+    from maplelens.tools.exp_meter.history import open_db
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+    from maplelens.tools.path_arrow.ui import PathArrowTool
+
+    QApplication.instance() or QApplication([])
+    settings = dict(DEFAULTS, class_builds={}, boxes={})
+    layer = Layer()
+    box = Box("t", settings, lambda: None)
+    cls = ClassHelperTool(settings, lambda: None, layer, lambda m: None, lambda t: 290.0)
+    tools = [
+        ExpMeterTool(settings, open_db(tmp_path / "h.db")),
+        PathArrowTool(settings, lambda: None, layer, lambda on: None),
+        cls,
+    ]
+    for t in tools:
+        box.add_tab(t.title, t.tab)
+    box.show()  # a shown box's pages size from their raw hints
+    return box, cls
+
+
+def test_box_width_is_the_same_on_every_tab(box_with_tools):
+    box, cls = box_with_tools
+    widths = {}
+    for job, level in STATES:
+        cls.update(R(job=job, level=level), RECT, 0)
+        for i in range(3):
+            box.select(i)
+            box.adjustSize()
+            widths[(job, level, i)] = box.width()
+    assert set(widths.values()) == {210}, widths
+
+
+def test_class_tab_text_never_overlaps(box_with_tools):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QLabel
+
+    box, cls = box_with_tools
+    box.select(2)
+    for job, level in STATES:
+        cls.update(R(job=job, level=level), RECT, 0)
+        box.adjustSize()
+        shown = [w for w in cls.tab.findChildren(QLabel) if w.isVisibleTo(cls.tab) and w.text()]
+        rects = [w.geometry().translated(w.parentWidget().mapTo(cls.tab, QPoint())) for w in shown]
+        for i, a in enumerate(rects):
+            for j in range(i + 1, len(rects)):
+                assert not a.intersects(rects[j]), (job, level, shown[i].text(), shown[j].text())
