@@ -1,19 +1,22 @@
-"""The class helper's Class tab: training maps, gear, the job advance and the next step."""
+"""The class helper's Class tab: where to train now, then what's next."""
 
 from collections.abc import Callable
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
-from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from shiboken6 import delete
 
 from maplelens.overlay import (
     ACCENT,
+    CHIP_BG,
     FONT,
+    HERE_BG,
     LABEL_COLOR,
     LABEL_PT,
     TAB_W,
     VALUE_COLOR,
+    InfoLine,
     Layer,
     game_to_layer,
     text_label,
@@ -24,13 +27,13 @@ from maplelens.readers.stat_window import StatWindow
 from maplelens.readers.window import UNREADABLE
 from maplelens.tools.class_helper.data import ClassData, Place, load
 from maplelens.tools.class_helper.plan import (
-    advance_due,
-    advance_text,
+    advance_ready,
     ap_advice,
     band_at,
     gear,
-    next_step,
+    milestones,
     short,
+    short_name,
     sp_advice,
     training,
 )
@@ -38,6 +41,10 @@ from maplelens.tools.class_helper.plan import (
 MARKS = "AP/SP marks on game windows"
 NO_CLASS = "Can't read your class yet"
 NO_PLAN = "No plan for {} yet"
+TRAIN = "Train here · click to go"
+NO_SPOTS = "No training spots in the guide for Lv {}"
+READY = "Job advance is ready"
+NEXT = "Next"
 OPEN_STATS = "Open your stat window once"
 STAT_UNREAD = "Can't read your stat window: move it fully into view"
 SKILL_UNREAD = "Can't read your skill window: move it fully into view"
@@ -47,14 +54,59 @@ RING_R, TAG_GAP = 11, 26  # ring radius; the tag starts this far right of the + 
 MARK_PT = 9  # the tags over the game's windows keep their size; the box's labels grew
 
 DASH = "\u2013"
-_FIELD, _DARK = "#0b0f15", "#2a1d00"
-_STYLE = f"""
-QComboBox {{ background: {_FIELD}; color: {VALUE_COLOR}; border: 1px solid {ACCENT};
-    border-radius: 4px; padding: 1px 6px; }}
-QCheckBox {{ color: {LABEL_COLOR}; }}
-QPushButton#go {{ background: {ACCENT}; color: {_DARK}; font-weight: bold; border: 0;
-    border-radius: 4px; padding: 2px 8px; }}
-"""
+_PAD = 6  # a row's side padding
+
+
+class Row(QWidget):
+    """One line to act on: a name, a grey line under it, and a yellow \u203a when a click goes
+    somewhere. Names never wrap: they're cut to fit, the full one is the tooltip."""
+
+    def __init__(
+        self,
+        name: str,
+        sub: str,
+        on_click: Callable[[], None] | None,
+        *,
+        best: bool = False,
+        outline: bool = False,
+    ):
+        super().__init__()
+        self.name, self.sub, self.best = name, sub, best
+        self.clickable, self._on_click = on_click is not None, on_click
+        self.setObjectName("row")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setFocusPolicy(Qt.NoFocus)
+        bg = HERE_BG if best or outline else "transparent"
+        edge = f"1px solid {ACCENT}" if outline else f"1px solid {bg}"
+        self.setStyleSheet(f"#row {{ background: {bg}; border: {edge}; border-radius: 4px; }}")
+        if self.clickable:
+            self.setCursor(Qt.PointingHandCursor)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(_PAD, 3, _PAD, 3)
+        row.setSpacing(6)
+        col = QVBoxLayout()
+        col.setSpacing(0)
+        arrow = text_label("\u203a", LABEL_PT + 2, ACCENT, bold=True)  # single right angle
+        room = TAB_W - 2 * _PAD - 2 - (arrow.sizeHint().width() + 6 if self.clickable else 0)
+        title = text_label(name, LABEL_PT, VALUE_COLOR, bold=best or outline)
+        title.setText(QFontMetrics(title.font()).elidedText(name, Qt.ElideRight, room))
+        title.setToolTip(name)
+        col.addWidget(title)
+        if sub:
+            under = text_label(sub, LABEL_PT, LABEL_COLOR)
+            under.setText(QFontMetrics(under.font()).elidedText(sub, Qt.ElideRight, room))
+            col.addWidget(under)
+        row.addLayout(col, 1)
+        if self.clickable:
+            row.addWidget(arrow, 0, Qt.AlignVCenter)
+
+    def click(self) -> None:
+        if self._on_click:
+            self._on_click()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.rect().contains(event.position().toPoint()):
+            self.click()
 
 
 class _Mark(QWidget):
@@ -113,7 +165,8 @@ class ClassHelperTool:
     ):
         self.title = "Class"
         self.dot = False
-        self.marks_changed: Callable[[bool], None] = lambda _on: None  # the menu item follows
+        self.builds_changed: Callable[[], None] = lambda: None  # the menu's Build item follows
+        self._builds_seen: tuple | None = None  # (job, build names, build) last told
         self._settings, self._changed = settings, on_settings_changed
         self._layer, self._go, self._best_rate = layer, go, best_rate
         self._data = load() if data is None else data
@@ -130,45 +183,24 @@ class ClassHelperTool:
         self._rect: tuple | None = None
         self._pool: list[_Mark] = []  # the layer owns them; they are hidden and reused
         self._marks: list[tuple[str, tuple[float, float], bool]] = []
-        self.tab = self._build_tab()
-        self._render([(("label", NO_CLASS, ACCENT), None)])
-
-    def _build_tab(self) -> QWidget:
-        tab = QWidget()
-        tab.setStyleSheet(_STYLE)
-        tab.setFixedWidth(TAB_W)
-        self._builds = QComboBox()
-        self._builds.setFocusPolicy(Qt.NoFocus)
-        self._builds.hide()
-        self._builds.currentTextChanged.connect(self._on_build)
+        self.tab = QWidget()
+        self.tab.setFixedWidth(TAB_W)
         self._body = QWidget()
-        self._marks_box = QCheckBox(MARKS)
-        self._marks_box.setFocusPolicy(Qt.NoFocus)
-        self._marks_box.setChecked(self._settings.get("class_marks", True))
-        self._marks_box.toggled.connect(self.set_marks)
-        col = QVBoxLayout(tab)
+        col = QVBoxLayout(self.tab)
         col.setContentsMargins(0, 4, 0, 0)
-        col.setSpacing(6)
-        col.addWidget(self._builds)
         col.addWidget(self._body)
-        col.addWidget(self._marks_box)
-        return tab
+        self._render([("info", NO_CLASS)])
 
     def hide_marks(self) -> None:
         for m in self._pool:
             m.hide()
 
     def set_marks(self, on: bool) -> None:
-        """Turn the marks on the game's windows on or off; the Class tab stays.
-
-        The tab's box and the menu's item both call it, and it sets both, so they agree.
-        """
+        """Turn the marks on the game's windows on or off (the menu's item); the tab stays."""
         if self._settings.get("class_marks", True) == on:
-            return  # the other one, following: nothing new
+            return
         self._settings["class_marks"] = on
         self._changed()
-        self._marks_box.setChecked(on)
-        self.marks_changed(on)
         self._draw_marks()
 
     def marks(self) -> list[tuple[str, tuple[int, int]]]:
@@ -223,12 +255,31 @@ class ClassHelperTool:
                 out.append((tag, row.plus, a.add > 0))
         return out
 
-    def _on_build(self, name: str) -> None:
+    def _plan(self):
+        return self._data.plan(self._plan_job) if self._plan_job else None
+
+    def build_names(self) -> list[str]:
+        """The current plan's builds, when there's a choice to make."""
+        plan = self._plan()
+        names = [b.name for b in plan.builds] if plan else []
+        return names if len(names) > 1 else []
+
+    def build_name(self) -> str | None:
+        plan = self._plan()
+        return plan.build(self._choices().get(plan.job)).name if plan else None
+
+    def pick_build(self, name: str) -> None:
         if self._plan_job is None or not name:
             return
         self._choices()[self._plan_job] = name
         self._changed()
         self._render_last()
+
+    def _tell_builds(self) -> None:
+        seen = (self._plan_job, tuple(self.build_names()), self.build_name())
+        if seen != self._builds_seen:
+            self._builds_seen = seen
+            self.builds_changed()
 
     # --- memory -----------------------------------------------------------
 
@@ -279,6 +330,7 @@ class ClassHelperTool:
         items, content = self._items(self._r)
         self._render(items)
         self._draw_marks()
+        self._tell_builds()
         level = self._level
         if self.tab.isVisible():
             self.dot = False
@@ -288,24 +340,63 @@ class ClassHelperTool:
         self._seen_at = level if level is not None else 0
 
     def _items(self, r: Reading | None):  # -> (items, dot key)
-        """Items are (kind, text..., go map) tuples, drawn in order."""
+        """Items are tuples, drawn in order: ("info", text), ("label", text, colour),
+        ("header", text, chip), ("row", name, sub, go map, best, outline), ("divider",)."""
         if self._job is None or self._level is None:
-            return [(("label", NO_CLASS, ACCENT), None)], None
+            return [("info", NO_CLASS)], None
         job, level = self._job, self._level
         plan = self._data.plan(job)
-        out = [(("label", f"{job} · Lv {level}", VALUE_COLOR), None)]
-        key = [job]
         self._plan_job = plan.job if plan else None
-        if plan is None:
-            out.append((("label", NO_PLAN.format(job), ACCENT), None))
-            self._builds.hide()
-        else:
-            more, extra = self._plan_items(plan, level)
-            out += more
-            key += extra
-        out += [(("label", t, ACCENT), None) for t in self._tab_lines(r)]
-        out += [(("label", t, ACCENT), None) for t in self._reasons(r)]
-        return out, tuple(key)
+        hints = [("info", t) for t in self._tab_lines(r) + self._reasons(r)]
+        if plan is None:  # the hints stay: a 1st-job tab's SP still needs placing
+            return [("info", NO_PLAN.format(job)), *hints], (job,)
+        build = plan.build(self._choices().get(plan.job))
+        ap, sp = self._points()
+        chip = " · ".join(f"{n} {w}" for n, w in ((ap, "AP"), (sp, "SP")) if n)
+        out = [("header", f"{job} · Lv {level}", chip)]
+        adv = advance_ready(plan, build, level)
+        if adv:
+            where = short_name(adv.where.name) if adv.where else None
+            sub = " · ".join(p for p in (adv.npc, where) if p)
+            out.append(("row", READY, sub, _go_map(adv.where), False, True))
+        out += self._train_items(plan, level, best=adv is None)
+        out += self._next_items(plan, build, level)
+        out += hints
+        tkey = tuple(t.place.map_id or t.place.name for t in training(plan, level) if t.place)
+        gkey = tuple(g.item.id for g in gear(build, level) if g)
+        return out, (job, tkey, gkey, adv is not None, ap + sp)
+
+    def _train_items(self, plan, level: int, *, best: bool) -> list:
+        rows = [t for t in training(plan, level) if t.place]
+        if not rows:
+            return [("label", TRAIN, LABEL_COLOR), ("info", NO_SPOTS.format(level))]
+        rates = [self._best_rate(t.place.title) if t.place.title else None for t in rows]
+        known = [(rate, i) for i, rate in enumerate(rates) if rate]
+        top = max(known)[1] if best and known else None
+        out = [("label", TRAIN, LABEL_COLOR)]
+        for i, (t, rate) in enumerate(zip(rows, rates, strict=True)):
+            sub = (
+                f"your best · {rate:,.0f}/min" if rate else f"mobs Lv {t.mobs[0]}{DASH}{t.mobs[1]}"
+            )
+            out.append(("row", short_name(t.place.name), sub, t.place.map_id, i == top, False))
+        return out
+
+    def _next_items(self, plan, build, level: int) -> list:
+        steps = milestones(plan, build, level)
+        if not steps:
+            return []
+        out = [("divider",), ("label", NEXT, LABEL_COLOR)]
+        st = self._stats_now()
+        for m in steps:
+            text = f"Lv {m.level} · {m.text}"
+            go = _go_map(m.where)
+            out.append(("row", text, "", go, False, False) if go else ("label", text, VALUE_COLOR))
+            lack = short(m.item, st.total if st else None) if m.item else {}
+            if lack:
+                out.append(
+                    ("label", ", ".join(f"{n} {k} short" for k, n in lack.items()), LABEL_COLOR)
+                )
+        return out
 
     def _tab_lines(self, r: Reading | None) -> list[str]:
         """A skill tab left with SP, other than the one open now."""
@@ -316,60 +407,6 @@ class ClassHelperTool:
             if tab != open_tab and n > 0 and at == self._level and plan:
                 out.append(f"{TIERS.get(plan.tier, tab)} tab: {n} SP to place")
         return out
-
-    def _plan_items(self, plan, level: int):  # -> (items, dot key parts)
-        out = []
-        self._fill_builds(plan)
-        build = plan.build(self._choices().get(plan.job))
-        ap, sp = self._points()
-        if ap or sp:
-            halves = [f"{n} {w}" for n, w in ((ap, "AP"), (sp, "SP")) if n]
-            out.append((("label", " · ".join(halves) + " to spend", ACCENT), None))
-        out.append((("label", "Train here", LABEL_COLOR), None))
-        rows = [r for r in training(plan, level) if r.place]
-        for row in rows:
-            out += self._train_items(row)
-        gear_items, gkey = self._gear_items(build, level)
-        out += gear_items
-        tkey = [r.place.map_id or r.place.name for r in rows]
-        adv = advance_due(plan, build, level)
-        if adv:
-            out.append((("label", advance_text(adv), VALUE_COLOR), None))
-            where = " · ".join(p for p in (adv.npc, adv.where.name if adv.where else None) if p)
-            if where:
-                out.append((("label", where, LABEL_COLOR), _go_map(adv.where)))
-        step = next_step(plan, build, level)
-        if step:
-            out.append((("label", "Next step", LABEL_COLOR), None))
-            out.append((("label", step, VALUE_COLOR), None))
-        return out, [tuple(tkey), tuple(gkey), adv is not None, ap + sp]
-
-    def _train_items(self, row) -> list:
-        detail = f"Lv {row.from_level}{DASH}{row.to_level} · mobs {row.mobs[0]}{DASH}{row.mobs[1]}"
-        rate = self._best_rate(row.place.title) if row.place.title else None
-        if rate:
-            detail += f" · best {rate:,.0f}/min"
-        return [
-            (("label", row.place.name, VALUE_COLOR), None),
-            (("label", detail, LABEL_COLOR), row.place.map_id),
-        ]
-
-    def _gear_items(self, build, level: int):  # -> (items, item ids)
-        now, nxt = gear(build, level)
-        out, ids = [], [g.item.id for g in (now, nxt) if g]
-        if now or nxt:
-            out.append((("label", "Gear", LABEL_COLOR), None))
-        if now:
-            out.append((("label", f"Now: {now.item.name}", VALUE_COLOR), None))
-        if nxt:
-            text = f"Next: {nxt.item.name} at {nxt.from_level}"
-            out.append((("label", text, VALUE_COLOR), _go_map(nxt.where)))
-            st = self._stats_now()
-            lack = short(nxt.item, st.total if st else None)
-            if lack:
-                text = ", ".join(f"{n} {k} short" for k, n in lack.items())
-                out.append((("label", text, ACCENT), None))
-        return out, ids
 
     def _reasons(self, r: Reading | None) -> list[str]:
         st = r.stats if r else None
@@ -391,20 +428,39 @@ class ClassHelperTool:
             self._settings["class_builds"] = {}
         return self._settings["class_builds"]
 
-    def _fill_builds(self, plan) -> None:
-        names = [b.name for b in plan.builds]
-        have = [self._builds.itemText(i) for i in range(self._builds.count())]
-        want = plan.build(self._choices().get(plan.job)).name
-        if have != names:
-            self._builds.blockSignals(True)
-            self._builds.clear()
-            self._builds.addItems(names)
-            self._builds.blockSignals(False)
-        if self._builds.currentText() != want:
-            self._builds.blockSignals(True)
-            self._builds.setCurrentText(want)
-            self._builds.blockSignals(False)
-        self._builds.setVisible(len(names) > 1)
+    def _widget(self, item) -> QWidget:
+        kind = item[0]
+        if kind == "info":
+            return InfoLine(item[1])
+        if kind == "label":
+            label = text_label(item[1], LABEL_PT, item[2])
+            label.setWordWrap(True)
+            return label
+        if kind == "divider":
+            line = QWidget()
+            line.setFixedHeight(1)
+            line.setAttribute(Qt.WA_StyledBackground, True)
+            line.setStyleSheet(f"background: {HERE_BG};")
+            return line
+        if kind == "row":
+            _, name, sub, map_id, best, outline = item
+            go = (lambda m=map_id: self._go(m)) if map_id else None
+            return Row(name, sub, go, best=best, outline=outline)
+        _, text, chip = item  # the header
+        head = QWidget()
+        row = QHBoxLayout(head)
+        row.setContentsMargins(0, 0, 0, 2)
+        row.addWidget(text_label(text, LABEL_PT, LABEL_COLOR))
+        row.addStretch()
+        if chip:
+            badge = text_label(chip, LABEL_PT, ACCENT, bold=True)
+            badge.setObjectName("chip")
+            badge.setStyleSheet(
+                f"#chip {{ color: {ACCENT}; background: {CHIP_BG}; border-radius: 8px;"
+                " padding: 0 7px; }"
+            )
+            row.addWidget(badge)
+        return head
 
     def _render(self, items) -> None:
         """Redraw only when the items changed."""
@@ -414,26 +470,10 @@ class ClassHelperTool:
         old, self._body = self._body, QWidget()
         col = QVBoxLayout(self._body)
         col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(2)
-        for (_, text, color), map_id in items:
-            label = text_label(text, LABEL_PT, color)
-            label.setWordWrap(True)
-            label.setMinimumWidth(0)
-            if map_id is None:
-                col.addWidget(label)
-                continue
-            line = QWidget()
-            row = QHBoxLayout(line)
-            row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(6)
-            row.addWidget(label, 1)
-            button = QPushButton("Go")
-            button.setObjectName("go")
-            button.setFocusPolicy(Qt.NoFocus)
-            button.clicked.connect(lambda _=False, m=map_id: self._go(m))
-            row.addWidget(button)
-            col.addWidget(line)
+        col.setSpacing(3)
+        for item in items:
+            col.addWidget(self._widget(item))
         parent = self.tab.layout()
-        parent.insertWidget(parent.indexOf(old), self._body)  # above the marks box
+        parent.insertWidget(parent.indexOf(old), self._body)
         parent.removeWidget(old)
         delete(old)  # at once: a widget left to deleteLater still shows in the tab's children

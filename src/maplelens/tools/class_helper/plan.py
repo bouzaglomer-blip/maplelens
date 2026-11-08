@@ -18,7 +18,6 @@ from maplelens.tools.class_helper.data import (
 )
 
 MAX_MAPS = 3
-ADVANCE_EARLY = 2
 
 
 @dataclass(frozen=True)
@@ -123,33 +122,6 @@ def short(item: Item, stats: dict[str, int] | None) -> dict[str, int]:
     return {
         k: n - stats.get(k, 0) for k, n in item.req.items() if k != "level" and stats.get(k, 0) < n
     }
-
-
-def advance_due(plan: JobPlan, build: Build, level: int) -> Advance | None:
-    adv = plan.advance_for(build)
-    return adv if adv and level >= adv.level - ADVANCE_EARLY else None
-
-
-def _jobs(adv: Advance) -> str:
-    return " or ".join(f"{'an' if j[0] in 'AEIOU' else 'a'} {j}" for j in adv.next_jobs)
-
-
-def advance_text(adv: Advance) -> str:
-    return f"At {adv.level}: become {_jobs(adv)}"
-
-
-def next_step(plan: JobPlan, build: Build, level: int) -> str | None:
-    cands = []  # (milestone level, text); min() keeps the first on a tie
-    if adv := plan.advance_for(build):
-        cands.append((adv.level, f"become {_jobs(adv)}"))
-    if nxt := gear(build, level)[1]:
-        cands.append((nxt.from_level, f"get {nxt.item.name}"))
-    if build.reset_at is not None and level <= build.reset_at:
-        cands.append((build.reset_at, f"reset AP for the {build.name} build"))
-    if not cands:
-        return None
-    at, text = min(cands, key=lambda c: c[0])
-    return f"{'Now' if at <= level else f'At {at}'}: {text}"
 
 
 @dataclass(frozen=True)

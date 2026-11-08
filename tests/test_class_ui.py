@@ -70,14 +70,18 @@ def make(monkeypatch):
 def texts(tool):
     from PySide6.QtWidgets import QLabel
 
-    return [w.text() for w in tool.tab.findChildren(QLabel) if not w.isHidden()]
+    from maplelens.overlay import InfoLine
+
+    shown = [w for w in tool.tab.findChildren(QLabel) if w.isVisibleTo(tool.tab)]
+    infos = [w for w in tool.tab.findChildren(InfoLine) if w.isVisibleTo(tool.tab)]
+    return [w.text() for w in shown] + [w.text() for w in infos]
 
 
-def go_buttons(tool):
-    from PySide6.QtWidgets import QPushButton
+def rows(tool):
+    from maplelens.tools.class_helper.ui import Row
 
-    bs = [b for b in tool.tab.findChildren(QPushButton) if b.text() == "Go" and not b.isHidden()]
-    return sorted(bs, key=lambda b: b.mapTo(tool.tab, b.rect().topLeft()).y())
+    shown = [r for r in tool.tab.findChildren(Row) if r.isVisibleTo(tool.tab)]
+    return sorted(shown, key=lambda r: r.mapTo(tool.tab, r.rect().topLeft()).y())
 
 
 def test_unknown_class_says_so(make):
@@ -96,12 +100,90 @@ def test_no_plan_for_job(make):
     assert NO_PLAN.format("Hermit") in texts(tool)
 
 
-def test_training_rows_go_and_best_rate(make):
-    tool = make(best_rate=lambda t: 1234.0)
+def test_training_rows_click_to_go_and_best_rate(make):
+    tool = make(best_rate=lambda t: 1234.0 if t else None)
     tool.update(R(level=12), RECT, 0)
-    assert any("best 1,234/min" in t for t in texts(tool))
-    go_buttons(tool)[0].click()
+    first, *rest = rows(tool)
+    assert first.sub == "your best · 1,234/min" and first.clickable and first.best
+    assert rest and all(r.sub.startswith("mobs Lv ") and not r.best for r in rest)
+    first.click()
     assert tool.gone == ["000000001"]
+
+
+def test_row_without_a_map_is_not_clickable(make):
+    tool = make()
+    tool.update(R(level=15), RECT, 0)
+    plain = [r for r in rows(tool) if r.name == "A map not in maps.json"]
+    assert plain and not plain[0].clickable
+    plain[0].click()
+    assert tool.gone == []
+
+
+def test_chip_counts_points(make):
+    tool = make()
+    tool.update(R(level=12, stats=SW(level=12, ap=5), skills=KW(sp=3, rows=ALL_ROGUE)), RECT, 0)
+    assert "5 AP · 3 SP" in texts(tool)
+    tool.update(R(level=13), RECT, 1)
+    assert not any(t.endswith((" AP", " SP")) for t in texts(tool))
+
+
+def test_advance_ready_row_on_top_and_out_of_footer(make):
+    from maplelens.tools.class_helper.ui import READY
+
+    tool = make(best_rate=lambda t: 1234.0 if t else None)
+    tool.update(R(level=30), RECT, 0)
+    assert rows(tool)[0].name == READY
+    assert not any("Advance:" in t for t in texts(tool))
+    assert not any(r.best for r in rows(tool))
+
+
+def test_footer_lists_milestones(make):
+    from maplelens.tools.class_helper.ui import NEXT
+
+    tool = make()
+    tool.update(R(level=12), RECT, 0)
+    assert NEXT in texts(tool)
+    assert "Lv 15 · Gear: Second Claw" in texts(tool) + [r.name for r in rows(tool)]
+    assert "Lv 30 · Advance: Assassin or Bandit" in texts(tool)
+
+
+def test_no_spots_says_so(make):
+    from maplelens.tools.class_helper.ui import NO_SPOTS
+
+    tool = make()
+    tool.update(R(level=25), RECT, 0)  # no Rogue training row covers 25 in the small data
+    assert NO_SPOTS.format(25) in texts(tool)
+
+
+def test_long_name_stays_one_line(make):
+    from maplelens.tools.class_helper.ui import Row
+
+    make()  # the app
+    long = Row("Victoria Road / " + "X" * 60, "mobs Lv 1–2", None)
+    short = Row("Short", "mobs Lv 1–2", None)
+    assert long.sizeHint().height() == short.sizeHint().height()
+    assert long.sizeHint().width() <= short.sizeHint().width() or long.sizeHint().width() <= 186
+
+
+def test_no_build_picker_or_marks_box_in_the_tab(make):
+    from PySide6.QtWidgets import QCheckBox, QComboBox
+
+    tool = make()
+    tool.update(R(level=12), RECT, 0)
+    assert not tool.tab.findChildren(QComboBox) and not tool.tab.findChildren(QCheckBox)
+
+
+def test_pick_build_saves_and_tells(make):
+    saved, told = [], []
+    tool = make(on_changed=lambda: saved.append(1))
+    tool.builds_changed = lambda: told.append(1)
+    tool.update(R(level=12), RECT, 0)
+    assert tool.build_names() == ["LUK", "Sindit"] and tool.build_name() == "LUK"
+    tool.pick_build("Sindit")
+    assert tool._settings["class_builds"] == {"Rogue": "Sindit"} and saved and told
+    assert tool.build_name() == "Sindit"
+    tool.update(R(job="Hermit", level=72), RECT, 1)
+    assert tool.build_names() == []
 
 
 def test_stats_never_read_then_badge_until_level_changes(make):
@@ -111,9 +193,9 @@ def test_stats_never_read_then_badge_until_level_changes(make):
     tool.update(R(level=12), RECT, 0)
     assert OPEN_STATS in texts(tool)
     tool.update(R(level=12, stats=SW(level=12, ap=3)), RECT, 1)
-    assert "3 AP to spend" in texts(tool)
+    assert "3 AP" in texts(tool)
     tool.update(R(level=13), RECT, 2)
-    assert not any("AP to spend" in t for t in texts(tool))
+    assert "3 AP" not in texts(tool)
 
 
 def test_stat_window_of_another_level_is_unread(make):
@@ -122,15 +204,7 @@ def test_stat_window_of_another_level_is_unread(make):
     tool = make()
     tool.update(R(level=12, stats=SW(level=11, ap=3)), RECT, 0)
     assert STAT_UNREAD in texts(tool)
-    assert not any("AP to spend" in t for t in texts(tool))
-
-
-def test_build_picker_saved(make):
-    saved = []
-    tool = make(on_changed=lambda: saved.append(1))
-    tool.update(R(level=12), RECT, 0)
-    tool._builds.setCurrentText("Sindit")
-    assert tool._settings["class_builds"] == {"Rogue": "Sindit"} and saved
+    assert "3 AP" not in texts(tool)
 
 
 def test_job_flicker_keeps_tab(make):
@@ -161,14 +235,6 @@ def test_level_up_dot_until_opened(make):
     assert not tool.dot
 
 
-def test_planless_job_hides_the_picker(make):
-    tool = make()
-    tool.update(R(level=12), RECT, 0)
-    assert not tool._builds.isHidden()
-    tool.update(R(job="Hermit", level=72), RECT, 1)
-    assert tool._builds.isHidden()
-
-
 def test_bad_class_builds_setting_is_reset(make):
     tool = make()
     tool._settings["class_builds"] = "oops"
@@ -192,23 +258,6 @@ def test_marks_can_be_turned_off(make):
     assert tool.marks() == []  # stays off; the tab still reads the window
     tool.set_marks(True)
     assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
-
-
-def test_the_tab_box_and_the_menu_follow_each_other(make):
-    from PySide6.QtWidgets import QCheckBox
-
-    tool = make()
-    tool.update(R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30))), RECT, 0)
-    (box,) = tool.tab.findChildren(QCheckBox)
-    menu = []
-    tool.marks_changed = menu.append
-    assert box.isChecked()
-    box.click()  # the player unticks it in the tab
-    assert tool.marks() == [] and menu == [False]
-    tool.set_marks(True)  # the menu item
-    assert box.isChecked() and menu == [False, True] and tool.marks()
-    tool.set_marks(True)  # the box following the menu: nothing new
-    assert menu == [False, True]
 
 
 def test_marks_follow_and_hide(make):
