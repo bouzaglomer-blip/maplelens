@@ -13,6 +13,7 @@ DEFAULTS = {
     "boxes": {},
     "path_taxi": True,
     "class_builds": {},  # job -> the build name picked in the Class tab
+    "class_marks": True,  # the AP/SP marks on the game's stat and skill windows
     "update_check": True,  # the installed Windows app asks GitHub for new versions
     "update_dismissed": None,  # the version whose notice line the player closed
 }

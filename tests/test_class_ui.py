@@ -182,6 +182,18 @@ def test_rings_on_the_plus_buttons(make):
     assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
 
 
+def test_marks_can_be_turned_off(make):
+    saved = []
+    tool = make(on_changed=lambda: saved.append(dict(tool._settings)))
+    tool.update(R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30))), RECT, 0)
+    tool.set_marks(False)
+    assert tool.marks() == [] and saved[-1]["class_marks"] is False
+    tool.update(R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30))), RECT, 1)
+    assert tool.marks() == []  # stays off; the tab still reads the window
+    tool.set_marks(True)
+    assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
+
+
 def test_marks_follow_and_hide(make):
     tool = make()
     tool.update(R(level=20, stats=SW(level=20, ap=5)), RECT, 0)

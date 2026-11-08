@@ -35,6 +35,7 @@ from maplelens.tools.class_helper.plan import (
     training,
 )
 
+MARKS = "Show AP/SP marks on game windows"
 NO_CLASS = "Can't read your class yet"
 NO_PLAN = "No plan for {} yet"
 OPEN_STATS = "Open your stat window once"
@@ -149,12 +150,20 @@ class ClassHelperTool:
         for m in self._pool:
             m.hide()
 
+    def set_marks(self, on: bool) -> None:
+        """Turn the marks on the game's windows on or off; the Class tab stays."""
+        self._settings["class_marks"] = on
+        self._changed()
+        self._draw_marks()
+
     def marks(self) -> list[tuple[str, tuple[int, int]]]:
         return [(m.tag, m.centre) for m in self._pool if not m.isHidden()]
 
     def _draw_marks(self) -> None:
         self.hide_marks()
         r, rect = self._r, self._rect
+        if not self._settings.get("class_marks", True):
+            return
         if r is None or rect is None or self._job is None or self._level is None:
             return
         k = rect[3] / glyphs.BASE_H  # normalized px -> client px
