@@ -440,3 +440,53 @@ def test_about_at_the_longest_version_keeps_the_box_width(monkeypatch):
     box.adjustSize()
     assert box._about.sizeHint().width() <= overlay.TAB_W
     assert box.width() == width
+
+
+def test_buttons_have_kinds_and_never_take_focus(monkeypatch):
+    from PySide6.QtCore import Qt
+
+    from maplelens.overlay import primary_button, secondary_button
+
+    _box(monkeypatch)  # the app
+    hits = []
+    p = primary_button("Start", lambda: hits.append("p"))
+    s = secondary_button("Stop", lambda: hits.append("s"))
+    assert (p.property("kind"), s.property("kind")) == ("primary", "secondary")
+    assert p.focusPolicy() == s.focusPolicy() == Qt.NoFocus
+    p.click()
+    s.click()
+    assert hits == ["p", "s"]
+
+
+def test_info_line_text_and_height(monkeypatch):
+    from maplelens.overlay import LABEL_COLOR, LABEL_PT, InfoLine, text_label
+
+    _box(monkeypatch)
+    line = InfoLine()
+    line.setText("No route")  # short: offscreen fonts are wide, and a wrap isn't the point
+    assert line.text() == "No route"
+    plain = text_label("No route", LABEL_PT, LABEL_COLOR)
+    assert line.sizeHint().height() <= plain.sizeHint().height() + 2  # no taller fallback font
+
+
+def test_add_submenu_returns_its_action_and_can_go_before_an_item(monkeypatch):
+    box = _box(monkeypatch)
+    box.add_menu_item("Quit", lambda: None)
+    action = box.add_submenu("Pick", lambda: ["a"], lambda t: None, at=-1)
+    assert action.text() == "Pick"
+    assert [a.text() for a in box.actions()] == ["Pick", "Quit"]
+
+
+def test_a_tab_with_a_wide_hint_keeps_the_box_width(monkeypatch):
+    from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+    box = _box(monkeypatch)
+    tab = QWidget()
+    tab.setFixedWidth(overlay.TAB_W)  # every tab is this wide; its wrapped text hints wider
+    text = QLabel("a long line that wraps " * 20)
+    text.setWordWrap(True)
+    QVBoxLayout(tab).addWidget(text)
+    box.add_tab("A", tab)
+    box.show()  # a shown box's pages size from their raw hints
+    box.adjustSize()
+    assert box.width() == overlay.TAB_W + 24  # the box's 12 px side margins

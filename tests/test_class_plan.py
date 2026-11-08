@@ -1,10 +1,8 @@
-from dataclasses import replace
 from pathlib import Path
 
 from maplelens.tools.class_helper.data import (
     MAPS,
     STATS,
-    Advance,
     Band,
     Build,
     Skill,
@@ -13,13 +11,13 @@ from maplelens.tools.class_helper.data import (
 )
 from maplelens.tools.class_helper.plan import (
     Advice,
-    advance_due,
-    advance_text,
+    advance_ready,
     ap_advice,
     band_at,
     gear,
-    next_step,
+    milestones,
     short,
+    short_name,
     sp_advice,
     training,
 )
@@ -136,30 +134,26 @@ def test_gear_now_next_and_shortfall():
     assert gear(ROGUE.build("LUK"), 5) == (None, now)
 
 
-def test_advance_shows_two_levels_early():
-    assert advance_due(ROGUE, ROGUE.builds[0], 27) is None
-    assert advance_due(ROGUE, ROGUE.builds[0], 28).level == 30
-    assert advance_text(advance_due(ROGUE, ROGUE.builds[0], 31)) == (
-        "At 30: become an Assassin or a Bandit"
-    )
-
-
-def test_advance_text_single_job():
-    assert advance_text(Advance(70, ("Hermit",), None, None)) == "At 70: become a Hermit"
-
-
-def test_next_step_is_the_nearest_milestone():
+def test_milestones_in_level_order():
     luk, sindit = ROGUE.build("LUK"), ROGUE.build("Sindit")
-    assert next_step(ROGUE, luk, 12) == "At 15: get Second Claw"
-    assert next_step(ROGUE, luk, 16) == "At 30: become an Assassin or a Bandit"
-    assert next_step(ROGUE, sindit, 29) == "At 30: become an Assassin or a Bandit"
-    assert next_step(ROGUE, sindit, 30) == "Now: become an Assassin or a Bandit"
-    assert next_step(ROGUE, sindit, 31) == "Now: become an Assassin or a Bandit"
+    assert [(m.level, m.text) for m in milestones(ROGUE, luk, 12)] == [
+        (15, "Gear: Second Claw"),
+        (30, "Advance: Assassin or Bandit"),
+    ]
+    gear_step = milestones(ROGUE, luk, 12)[0]
+    assert gear_step.item.name == "Second Claw" and gear_step.where is not None
+    # a ready advance is left out; Sindit has no gear
+    assert [(m.level, m.text) for m in milestones(ROGUE, sindit, 30)] == [
+        (30, "Reset AP: Sindit build")
+    ]
+    assert milestones(ROGUE, sindit, 31) == []
 
 
-def test_next_step_reset_and_none():
-    nobody = replace(ROGUE, advance=None)
-    sindit = nobody.build("Sindit")
-    assert next_step(nobody, sindit, 20) == "At 30: reset AP for the Sindit build"
-    assert next_step(nobody, sindit, 30) == "Now: reset AP for the Sindit build"
-    assert next_step(nobody, sindit, 31) is None
+def test_advance_ready_only_at_its_level():
+    assert advance_ready(ROGUE, ROGUE.builds[0], 29) is None
+    assert advance_ready(ROGUE, ROGUE.builds[0], 30).level == 30
+
+
+def test_short_name():
+    assert short_name("Kerning City Subway / Transfer Area") == "Transfer Area"
+    assert short_name("Henesys") == "Henesys"

@@ -1401,3 +1401,44 @@ def test_main_no_longer_exits_without_screen_recording(monkeypatch, tmp_path):
     monkeypatch.setattr(app.capture, "request_access", lambda: requests.append(1))
     assert app.main() == 0
     assert requests == [1]
+
+
+class _BuildTool:
+    def __init__(self):
+        self.names, self.name, self.picked = ["LUK", "Sindit"], "LUK", []
+        self.builds_changed = None
+
+    def build_names(self):
+        return self.names
+
+    def build_name(self):
+        return self.name
+
+    def pick_build(self, name):
+        self.picked.append(name)
+
+
+def test_build_menu_follows_the_class_tool(qt_box):
+    tool = _BuildTool()
+    action = app.add_build_menu(qt_box, tool)
+    assert not action.isVisible()
+    assert [a.text() for a in qt_box.actions()][-1] == "Quit MapleLens"  # above Quit
+    tool.builds_changed()
+    assert action.isVisible() and action.text() == "Build: LUK"
+    tool.name = "Sindit"
+    tool.builds_changed()
+    assert action.text() == "Build: Sindit"
+    tool.names = []  # a job with no plan, or one build
+    tool.builds_changed()
+    assert not action.isVisible()
+
+
+def test_build_menu_lists_and_picks(qt_box):
+    tool = _BuildTool()
+    action = app.add_build_menu(qt_box, tool)
+    tool.builds_changed()
+    menu = action.menu()
+    menu.aboutToShow.emit()
+    assert [a.text() for a in menu.actions()] == ["LUK", "Sindit"]
+    menu.actions()[1].trigger()
+    assert tool.picked == ["Sindit"]

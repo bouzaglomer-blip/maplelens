@@ -3,8 +3,17 @@
 import sys
 from collections.abc import Callable
 
-from PySide6.QtCore import QPoint, QRect, Qt, QUrl
-from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QPainter
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QUrl
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QDesktopServices,
+    QFont,
+    QFontMetrics,
+    QGuiApplication,
+    QPainter,
+    QPen,
+)
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -21,9 +30,28 @@ _INSET = 40  # px from the game's top-right corner for a box with no saved posit
 
 # The box's look (mockup 1), shared by every tab: grey labels, larger bold values.
 FONT = "Helvetica Neue" if sys.platform == "darwin" else "Segoe UI"
-LABEL_PT, LABEL_COLOR = 9, "#9fb0c8"
+LABEL_PT, LABEL_COLOR = 10, "#aebdd3"
+NOTICE_PT = 9  # the notice line keeps its size: the longest one must fit TAB_W
 VALUE_PT, VALUE_COLOR = 12, "#ffffff"
-ACCENT = "#ffcc33"
+ACCENT = "#ffcc33"  # "do this": the selected tab, the main button, points to spend
+FIELD, DARK, HERE_BG, EDGE = "#0b0f15", "#2a1d00", "#2c3a50", "#3d4b63"
+CHIP_BG, INFO_ICON = "#3a2e08", "#7fa8ff"
+FIELD_STYLE = f"""
+QLineEdit {{ background: {FIELD}; color: {VALUE_COLOR}; border: 1px solid {EDGE};
+    border-radius: 4px; padding: 2px 6px; }}
+QLineEdit:focus {{ border-color: {ACCENT}; }}
+QListWidget {{ background: {FIELD}; color: {VALUE_COLOR}; border: 0; border-radius: 4px; }}
+QListWidget::item:selected {{ background: {HERE_BG}; color: {VALUE_COLOR}; }}
+"""
+_BUTTON = {
+    "primary": f"""
+QPushButton {{ background: {ACCENT}; color: {DARK}; font-weight: bold; border: 0;
+    border-radius: 4px; padding: 4px; }}
+QPushButton:disabled {{ background: {HERE_BG}; color: {LABEL_COLOR}; }}""",
+    "secondary": f"""
+QPushButton {{ background: transparent; color: #e6edf7; border: 1px solid {EDGE};
+    border-radius: 4px; padding: 3px; }}""",
+}
 TAB_W = 186  # every tab's width: the box is 210 px wide, less its 12 px side margins
 # The box's menu button: three bullets. The midline ellipsis isn't in Segoe UI, and
 # the font Qt falls back to draws it faint and makes the box taller.
@@ -51,6 +79,66 @@ def mark_button(
     button.setStyleSheet(f"color: {color}; border: 0; padding: 0; text-align: left;")
     button.clicked.connect(on_click)
     return button
+
+
+def _kind_button(kind: str, text: str, on_click: Callable[[], None]) -> QPushButton:
+    button = QPushButton(text)
+    button.setProperty("kind", kind)
+    button.setFocusPolicy(Qt.NoFocus)
+    button.setCursor(Qt.PointingHandCursor)
+    button.setFont(QFont(FONT, LABEL_PT))
+    button.setStyleSheet(_BUTTON[kind])
+    button.clicked.connect(on_click)
+    return button
+
+
+def primary_button(text: str, on_click: Callable[[], None]) -> QPushButton:
+    """The tab's main action: yellow."""
+    return _kind_button("primary", text, on_click)
+
+
+def secondary_button(text: str, on_click: Callable[[], None]) -> QPushButton:
+    """Any other action: an outline."""
+    return _kind_button("secondary", text, on_click)
+
+
+class _InfoMark(QWidget):
+    """A small circled i, drawn: the font's own glyph comes from a fallback font, taller."""
+
+    def __init__(self):
+        super().__init__()
+        side = QFontMetrics(QFont(FONT, LABEL_PT)).ascent()
+        self.setFixedSize(side, side)
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(QPen(QColor(INFO_ICON), 1.2))
+        side = self.width()
+        p.drawEllipse(QRectF(0.6, 0.6, side - 1.2, side - 1.2))
+        p.drawLine(QPointF(side / 2, side * 0.45), QPointF(side / 2, side * 0.75))
+        p.drawPoint(QPointF(side / 2, side * 0.28))
+
+
+class InfoLine(QWidget):
+    """A grey line for your information, after a blue info mark: why something isn't there."""
+
+    def __init__(self, text: str = ""):
+        super().__init__()
+        self._icon = _InfoMark()
+        self._text = text_label(text, LABEL_PT, LABEL_COLOR)
+        self._text.setWordWrap(True)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(5)
+        row.addWidget(self._icon, 0, Qt.AlignTop)
+        row.addWidget(self._text, 1)
+
+    def setText(self, text: str) -> None:  # noqa: N802 - as QLabel
+        self._text.setText(text)
+
+    def text(self) -> str:
+        return self._text.text()
 
 
 def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
@@ -113,6 +201,9 @@ class Box(QWidget):
         self._strip.setSpacing(14)
         self._strip.addStretch()
         self._pages = QStackedWidget()
+        # Every tab is TAB_W wide, but the stack sizes from its pages' raw hints, which a
+        # page's fixed width doesn't bound (wrapped text hints wider): fix the stack instead.
+        self._pages.setFixedWidth(TAB_W)
         self._status = QLabel()
         self._status.setFont(QFont(FONT, 10))
         self._status.setStyleSheet(f"color: {VALUE_COLOR};")
@@ -132,7 +223,7 @@ class Box(QWidget):
         self._top.addWidget(self._about_close, 0, Qt.AlignVCenter)
         self._top.addWidget(self._menu_button, 0, Qt.AlignVCenter | Qt.AlignRight)
         self._notice = QWidget()  # a line of its own, so it shows with the tabs or the status
-        self._notice_text = text_label("", LABEL_PT, ACCENT)
+        self._notice_text = text_label("", NOTICE_PT, ACCENT)
         # a multiplication sign, the close mark
         self._notice_close = mark_button("\u00d7", LABEL_PT, self._dismiss_notice)
         self._on_dismiss: Callable[[], None] | None = None
@@ -337,9 +428,17 @@ class Box(QWidget):
         self.setContextMenuPolicy(Qt.ActionsContextMenu)
 
     def add_submenu(
-        self, label: str, choices: Callable[[], list[str]], on_pick: Callable[[str], None]
-    ) -> None:
-        """A submenu in the box's menu listing `choices()`, read again each time it opens."""
+        self,
+        label: str,
+        choices: Callable[[], list[str]],
+        on_pick: Callable[[str], None],
+        *,
+        at: int | None = None,
+    ) -> QAction:
+        """A submenu in the box's menu listing `choices()`, read again each time it opens.
+
+        Placed as add_menu_item places an item; returns its action, so it can change.
+        """
         menu = QMenu(label, self)
 
         def fill() -> None:
@@ -348,8 +447,8 @@ class Box(QWidget):
                 menu.addAction(text).triggered.connect(lambda _=False, t=text: on_pick(t))
 
         menu.aboutToShow.connect(fill)
-        self.addAction(menu.menuAction())
-        self.setContextMenuPolicy(Qt.ActionsContextMenu)
+        self._insert(menu.menuAction(), at)
+        return menu.menuAction()
 
     def place(self, game_rect: tuple[int, int, int, int]) -> None:
         if self._drag_from is not None:
@@ -374,9 +473,9 @@ class Box(QWidget):
     def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(20, 20, 24, 200))
-        p.drawRoundedRect(QRect(0, 0, self.width(), self.height()), 8, 8)
+        p.setPen(QColor(255, 255, 255, 20))  # a thin edge, so the box reads on any map
+        p.setBrush(QColor(16, 18, 24, 224))
+        p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 8, 8)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

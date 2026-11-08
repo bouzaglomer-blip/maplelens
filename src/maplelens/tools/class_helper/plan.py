@@ -11,13 +11,13 @@ from maplelens.tools.class_helper.data import (
     GearRow,
     Item,
     JobPlan,
+    Place,
     Skill,
     SpStep,
     TrainRow,
 )
 
 MAX_MAPS = 3
-ADVANCE_EARLY = 2
 
 
 @dataclass(frozen=True)
@@ -124,28 +124,34 @@ def short(item: Item, stats: dict[str, int] | None) -> dict[str, int]:
     }
 
 
-def advance_due(plan: JobPlan, build: Build, level: int) -> Advance | None:
+@dataclass(frozen=True)
+class Milestone:
+    """Something ahead at `level`: the job advance, the next gear, or an AP reset."""
+
+    level: int
+    text: str
+    where: Place | None = None
+    item: Item | None = None
+
+
+def advance_ready(plan: JobPlan, build: Build, level: int) -> Advance | None:
     adv = plan.advance_for(build)
-    return adv if adv and level >= adv.level - ADVANCE_EARLY else None
+    return adv if adv and level >= adv.level else None
 
 
-def _jobs(adv: Advance) -> str:
-    return " or ".join(f"{'an' if j[0] in 'AEIOU' else 'a'} {j}" for j in adv.next_jobs)
-
-
-def advance_text(adv: Advance) -> str:
-    return f"At {adv.level}: become {_jobs(adv)}"
-
-
-def next_step(plan: JobPlan, build: Build, level: int) -> str | None:
-    cands = []  # (milestone level, text); min() keeps the first on a tie
-    if adv := plan.advance_for(build):
-        cands.append((adv.level, f"become {_jobs(adv)}"))
+def milestones(plan: JobPlan, build: Build, level: int) -> list[Milestone]:
+    """What's ahead, nearest first; a ready advance isn't ahead."""
+    out = []
+    adv = plan.advance_for(build)
+    if adv and level < adv.level:
+        out.append(Milestone(adv.level, "Advance: " + " or ".join(adv.next_jobs), adv.where))
     if nxt := gear(build, level)[1]:
-        cands.append((nxt.from_level, f"get {nxt.item.name}"))
+        out.append(Milestone(nxt.from_level, f"Gear: {nxt.item.name}", nxt.where, nxt.item))
     if build.reset_at is not None and level <= build.reset_at:
-        cands.append((build.reset_at, f"reset AP for the {build.name} build"))
-    if not cands:
-        return None
-    at, text = min(cands, key=lambda c: c[0])
-    return f"{'Now' if at <= level else f'At {at}'}: {text}"
+        out.append(Milestone(build.reset_at, f"Reset AP: {build.name} build"))
+    return sorted(out, key=lambda m: m.level)  # stable: ties keep this order
+
+
+def short_name(name: str) -> str:
+    """ "Street / Name" -> "Name"."""
+    return name.rsplit(" / ", 1)[-1]
