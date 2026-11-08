@@ -70,6 +70,7 @@ EXPECTED = {
     "minimap_a_1920x1080_100.png": "Kerning City Subway / Transfer Area",
     # macOS: the Retina capture, 2732x1536 in the game, normalized to 768 rows.
     "exp_mac_2732x1536_100.png": ExpValue(23749, 43.26),
+    "exp_mac_2560x1439_100.png": ExpValue(3364, 3.10),  # its "%" matched no template
     "level_mac_2732x1536_100.png": 26,
     "job_mac_2732x1536_100.png": "Rogue",
     "minimap_mac_2732x1536_100.png": "Dungeon / Sleepywood",
