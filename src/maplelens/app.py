@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import sys
 import threading
@@ -322,20 +323,29 @@ def _user_agent() -> dict[str, str]:
     return {"User-Agent": f"MapleLens/{version('maplelens')}"}  # nothing about the player
 
 
+MAC_CAS = "/etc/ssl/cert.pem"  # macOS's own CA list, on every Mac
+
+
+def _tls(platform: str = sys.platform) -> ssl.SSLContext:
+    """The Mac app's bundled OpenSSL looks for CAs in Homebrew's folder, which most Macs
+    don't have: there, trust macOS's list instead."""
+    return ssl.create_default_context(cafile=MAC_CAS if platform == "darwin" else None)
+
+
 def fetch_latest(repo: str = update.REPO) -> dict:
     """GitHub's latest release of `repo`, as JSON. Sends only MapleLens's version."""
     req = urllib.request.Request(
         f"https://api.github.com/repos/{repo}/releases/latest",
         headers={**_user_agent(), "Accept": "application/vnd.github+json"},
     )
-    with urllib.request.urlopen(req, timeout=10) as reply:
+    with urllib.request.urlopen(req, timeout=10, context=_tls()) as reply:
         return json.load(reply)
 
 
 def download_file(url: str, dest: Path) -> None:
     """Save `url` to `dest`. The timeout is per read, so a 60 MB setup can take its time."""
     req = urllib.request.Request(url, headers=_user_agent())
-    with urllib.request.urlopen(req, timeout=30) as reply, dest.open("wb") as f:
+    with urllib.request.urlopen(req, timeout=30, context=_tls()) as reply, dest.open("wb") as f:
         shutil.copyfileobj(reply, f)
 
 
