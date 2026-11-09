@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import cv2
@@ -10,6 +11,7 @@ from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
+from maplelens.readers.quest_window import NAME_UNREADABLE, QuestOpen, read_quest_window
 from maplelens.readers.skill_window import SkillRow, SkillWindow, read_skill_window
 from maplelens.readers.stat_window import UNREADABLE, StatWindow, parse_stat, read_stat_window
 
@@ -140,6 +142,19 @@ EXPECTED_SKILL = {
     "skill_edge_2560x1440_100.png": None,  # window mostly off the left edge
 }
 
+# Quest window crops: native, the window only. The read name is the details body's bold
+# line (the quest's own name), never the header or list row, which show its chain's name
+# ("Caretaker's Ledger"). A quest with no chain has no bold line: its name is read from
+# the selected list row ("Arwen and the Glass Shoe").
+EXPECTED_QUEST = {
+    "quest_progress_1366x768_100.png": QuestOpen("The Filing Error", True),
+    "quest_progress_1920x1080_100.png": QuestOpen("The Filing Error", True),
+    "quest_available_1366x768_100.png": QuestOpen("Make a Match Cards Set", False),
+    "quest_available_1920x1080_100.png": QuestOpen("Make a Match Cards Set", False),
+    "quest_offscreen_1366x768_100.png": UNREADABLE,  # the details pane cut by the screen edge
+    "quest_nochain_2560x1440_100.png": QuestOpen("Arwen and the Glass Shoe", False),
+}
+
 
 def screen(name: str):
     return cv2.imread(str(SCREENS / name), cv2.IMREAD_COLOR)
@@ -216,8 +231,8 @@ def test_expected_matches_fixture_files():
         "title_ellinia_1920x1080_100.png",
         "title_rainforest_1920x1080_100.png",
     }
-    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(
-        EXPECTED_SKILL
+    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(EXPECTED_SKILL) | set(
+        EXPECTED_QUEST
     ) | native_map == {p.name for p in SCREENS.glob("*.png")}
 
 
@@ -606,9 +621,9 @@ def test_parse_stat(text, want):
 
 
 def _window_args(name):
-    """(frame, native, scale) of a native stat crop: frame is the 768-scale resize."""
+    """(frame, native, scale) of a native crop: frame is the 768-scale resize."""
     native = screen(name)
-    scale = int(name.split("_")[2].split("x")[1]) / 768
+    scale = int(re.search(r"_\d+x(\d+)_", name)[1]) / 768
     return _scaled(native, scale), native, scale
 
 
@@ -820,3 +835,150 @@ def test_skill_plus_off_frame_is_unreadable():
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("stat_a_*.png")))
 def test_no_skill_window_in_a_stat_window(name):
     assert read_skill_window(*_window_args(name)) is None
+
+
+@needs_ocr
+@pytest.mark.parametrize("name", [n for n, q in EXPECTED_QUEST.items() if q != UNREADABLE])
+def test_read_quest_window(name, monkeypatch):
+    from maplelens.readers import quest_window
+
+    read, seen = quest_window.ocr.read_lines, []
+    monkeypatch.setattr(quest_window.ocr, "read_lines", lambda m: seen.append(read(m)) or seen[-1])
+    assert read_quest_window(*_window_args(name)) == EXPECTED_QUEST[name], seen
+
+
+def test_quest_window_off_screen_is_unreadable():
+    assert read_quest_window(*_window_args("quest_offscreen_1366x768_100.png")) == UNREADABLE
+
+
+@pytest.mark.parametrize(
+    "name", sorted(p.name for p in SCREENS.glob("*.png") if p.name not in EXPECTED_QUEST)
+)
+def test_no_quest_window(name):
+    assert read_quest_window(*_window_args(name)) is None
+
+
+def test_completed_tab_reads_none():
+    """Nothing to help with on the Completed tab: the pink tab moved there reads None."""
+    native = screen("quest_progress_1366x768_100.png")
+    assert read_quest_window(native) is not None
+    tabs = native[24:42].copy()
+    native[24:42, 150:222] = tabs[:, 78:150]  # In Progress's pink onto Completed
+    native[24:42, 78:150] = tabs[:, 4:76]  # Available's grey onto In Progress
+    assert read_quest_window(native) is None
+
+
+def test_known_quest_names():
+    from maplelens.readers.quest_window import known_quest_names
+
+    names = known_quest_names()
+    assert "The Filing Error" in names and len(names) > 100
+    assert "[Event] Trick or Treat!" in names  # left out of the quests on purpose
+    assert "Arwen and the Glass Shoe" in names
+
+
+def test_no_open_tab_reads_none():
+    """No pink tab: not a quest window."""
+    native = screen("quest_progress_1366x768_100.png")
+    native[24:42, 78:150] = native[24:42, 4:76].copy()  # Available's grey onto In Progress
+    assert read_quest_window(native) is None
+
+
+@needs_ocr
+def test_chainless_quest_with_no_row_selected_is_name_unreadable():
+    """No bold name line and no selected list row: nothing to read the name from."""
+    native, scale = screen("quest_nochain_2560x1440_100.png"), 1440 / 768
+    native[130:175, 40:420] = 255  # the selected row
+    assert read_quest_window(_scaled(native, scale), native, scale) == NAME_UNREADABLE
+
+
+@needs_ocr
+@pytest.mark.parametrize(
+    "name, rows",
+    [
+        ("quest_available_1366x768_100.png", (147, 156)),
+        ("quest_progress_1366x768_100.png", (199, 210)),
+    ],
+)
+def test_quest_name_line_painted_white_is_name_unreadable(name, rows, monkeypatch):
+    """Without its name line, the first white-body line is description text, and the
+    selected list row shows the chain's name: neither is the quest's name."""
+    from maplelens.readers import quest_window
+
+    read, seen = quest_window.ocr.read_lines, []
+    monkeypatch.setattr(quest_window.ocr, "read_lines", lambda m: seen.append(read(m)) or seen[-1])
+    native = screen(name)
+    native[rows[0] : rows[1], 256:524] = 255
+    assert read_quest_window(native) == NAME_UNREADABLE
+    assert any(line[0].startswith(("Caretaker's Ledger", "Maple World's")) for line in seen), seen
+
+
+@pytest.mark.parametrize(
+    "text, want",
+    [
+        ("Arwen and the Glass Shoe", "Arwen and the Glass Shoe"),
+        ("Anwen and the Glass Shoe", "Arwen and the Glass Shoe"),  # snapped
+        ("Arwen and the Glass S...", "Arwen and the Glass Shoe"),  # cut: a unique prefix
+        ("Arwen and the Glass S…", "Arwen and the Glass Shoe"),
+        # A name ending in "." reads like a cut one: still the one name it starts.
+        (
+            "Asking After Mrs. Ming Ming, the Town Resident.",
+            "Asking After Mrs. Ming Ming, the Town Resident.",
+        ),
+        (
+            "Asking After Mrs. Ming Ming, the Town Res..",
+            "Asking After Mrs. Ming Ming, the Town Resident.",
+        ),
+        (
+            "Asking After Mr. Pickall, the Town Resident",
+            "Asking After Mr. Pickall, the Town Resident ",
+        ),
+        ("Caretaker's Ledger", None),  # a chain's name, no quest's
+        ("Mai's Training", None),  # a chain's name and its first quest's: which one?
+        ("Mai's...", None),  # the chain's, or Mai's Final Training's
+        ("Icarus's...", None),  # prefix of a chain's name and of a quest's
+        ("The...", None),  # many quests
+        ("", None),
+    ],
+)
+def test_quest_name_from_list_row(text, want):
+    from maplelens.readers.quest_window import _listed
+
+    assert _listed(text) == want
+
+
+@pytest.mark.parametrize(
+    "lines, want",
+    [
+        (["[Event] Trick or Treat!"], QuestOpen("[Event] Trick or Treat!", True)),  # left out
+        (["[Event] Trick or Treat1"], QuestOpen("[Event] Trick or Treat!", True)),  # snapped
+        (["The Filing Error"], QuestOpen("The Filing Error", True)),
+        (["A Quest Nobody Ever Wrote"], NAME_UNREADABLE),  # name-shaped, in neither set
+        (["It seems that Casey in Henesys Park knows"], NAME_UNREADABLE),  # a description line
+        (["The Filing \ufffdrror"], NAME_UNREADABLE),
+        ([], NAME_UNREADABLE),
+        (None, NAME_UNREADABLE),  # no OCR engine
+    ],
+)
+def test_quest_name_from_ocr_lines(monkeypatch, lines, want):
+    from maplelens.readers import quest_window
+
+    monkeypatch.setattr(quest_window.ocr, "read_lines", lambda m: lines)
+    assert read_quest_window(screen("quest_progress_1366x768_100.png")) == want
+
+
+@needs_ocr
+def test_read_all_fills_quest():
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    fixture = screen("quest_progress_1366x768_100.png")
+    frame[100 : 100 + fixture.shape[0], 300 : 300 + fixture.shape[1]] = fixture
+    assert read_all(frame, 1.0).quest == EXPECTED_QUEST["quest_progress_1366x768_100.png"]
+
+
+@needs_ocr
+@pytest.mark.parametrize("name", [n for n in EXPECTED_QUEST if "x768_" not in n])
+def test_quest_reads_at_every_offset(name):
+    scale = int(re.search(r"_\d+x(\d+)_", name)[1]) / 768
+    for k in range(6):
+        native = screen(name)[k:, k:]
+        assert read_quest_window(_scaled(native, scale), native, scale) == EXPECTED_QUEST[name], k

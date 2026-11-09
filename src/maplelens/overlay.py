@@ -3,7 +3,7 @@
 import sys
 from collections.abc import Callable
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QUrl
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, Qt, QUrl
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -15,6 +15,7 @@ from PySide6.QtGui import (
     QPen,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -50,7 +51,10 @@ QPushButton:disabled {{ background: {HERE_BG}; color: {LABEL_COLOR}; }}""",
 QPushButton {{ background: transparent; color: #e6edf7; border: 1px solid {EDGE};
     border-radius: 4px; padding: 3px; }}""",
 }
-TAB_W = 186  # every tab's width: the box is 210 px wide, less its 12 px side margins
+# Every tab's width: the box's width less its 12 px side margins. It fits four tab titles
+# and the Path tab's dot at the strip's 14 px spacing, in FONT: on a real Windows window
+# (Segoe UI) the strip wants a 237 px box, so 238; Helvetica Neue on the Mac CI wants 244.
+TAB_W = 220 if sys.platform == "darwin" else 214
 # The box's menu button: three bullets. The midline ellipsis isn't in Segoe UI, and
 # the font Qt falls back to draws it faint and makes the box taller.
 MENU_MARK = "•••"
@@ -139,6 +143,80 @@ class InfoLine(QWidget):
         return self._text.text()
 
 
+_PAD = 6  # a row's side padding
+
+
+class Row(QWidget):
+    """One line to act on: a name, a grey line under it, and a yellow \u203a when a click goes
+    somewhere. Names never wrap: they're cut to fit, the full one is the tooltip."""
+
+    def __init__(  # noqa: PLR0913 - the row's parts; all but three are keywords
+        self,
+        name: str,
+        sub: str,
+        on_click: Callable[[], None] | None,
+        *,
+        best: bool = False,
+        outline: bool = False,
+        trailing: QWidget | None = None,  # in place of the arrow, e.g. a button
+        info: bool = False,  # the grey line is why it can't be clicked: an info mark leads it
+    ):
+        super().__init__()
+        self.name, self.sub, self.best, self.outline = name, sub, best, outline
+        self.info = info and bool(sub)
+        self.clickable, self._on_click = on_click is not None, on_click
+        self.setObjectName("row")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setFocusPolicy(Qt.NoFocus)
+        bg = HERE_BG if best or outline else "transparent"
+        edge = f"1px solid {ACCENT}" if outline else f"1px solid {bg}"
+        self.setStyleSheet(f"#row {{ background: {bg}; border: {edge}; border-radius: 4px; }}")
+        if self.clickable:
+            self.setCursor(Qt.PointingHandCursor)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(_PAD, 3, _PAD, 3)
+        row.setSpacing(6)
+        col = QVBoxLayout()
+        col.setSpacing(0)
+        arrow = text_label("\u203a", LABEL_PT + 2, ACCENT, bold=True)  # single right angle
+        end = trailing or (arrow if self.clickable else None)
+        room = TAB_W - 2 * _PAD - 2 - (end.sizeHint().width() + 6 if end else 0)
+        title = text_label(name, LABEL_PT, VALUE_COLOR, bold=best or outline)
+        title.setText(QFontMetrics(title.font()).elidedText(name, Qt.ElideRight, room))
+        title.setToolTip(name)
+        col.addWidget(title)
+        if sub:
+            under = text_label(sub, LABEL_PT, LABEL_COLOR)
+            line = QHBoxLayout()
+            line.setSpacing(5)
+            if self.info:
+                mark = _InfoMark()
+                line.addWidget(mark, 0, Qt.AlignVCenter)
+                room -= mark.width() + line.spacing()
+            under.setText(QFontMetrics(under.font()).elidedText(sub, Qt.ElideRight, room))
+            line.addWidget(under, 1)
+            col.addLayout(line)
+        row.addLayout(col, 1)
+        if end:
+            row.addWidget(end, 0, Qt.AlignVCenter)
+
+    def click(self) -> None:
+        if self._on_click:
+            self._on_click()
+
+    # A clickable row takes its press, as a button does, so the box doesn't start a drag;
+    # any other row leaves press and release to the box, which drags.
+    def mousePressEvent(self, event):
+        event.setAccepted(self.clickable and event.button() == Qt.LeftButton)
+
+    def mouseReleaseEvent(self, event):
+        if not (self.clickable and event.button() == Qt.LeftButton):
+            event.ignore()
+            return
+        if self.rect().contains(event.position().toPoint()):
+            self.click()
+
+
 def game_to_layer(px: float, py: float, dpr: float) -> tuple[float, float]:
     """Game-client physical pixels to layer-local Qt logical coordinates."""
     return px / dpr, py / dpr
@@ -180,15 +258,37 @@ class Layer(QWidget):
         super().showEvent(event)
 
 
+class _Touches(QObject):
+    """Counts mouse presses on `box` or its children; never swallows an event.
+
+    A child of the box, so Qt unhooks it from the application when the box goes.
+    """
+
+    def __init__(self, box: "Box"):
+        super().__init__(box)
+        self._box = box
+        QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        press = event.type() == QEvent.MouseButtonPress
+        if press and isinstance(obj, QWidget) and obj.window() is self._box:
+            self._box.touches += 1
+        return False
+
+
 class Box(QWidget):
     """A small dark box with a tab strip; drag it, its spot is saved per game window."""
 
-    def __init__(self, name: str, settings: dict, on_moved: Callable[[], None]):
+    def __init__(  # noqa: PLR0915 - the box's parts, built in order
+        self, name: str, settings: dict, on_moved: Callable[[], None]
+    ):
         super().__init__(None, _OVERLAY)
         self._name, self._settings, self._on_moved = name, settings, on_moved
         self._origin: QPoint | None = None  # game client top-left, logical px
         self._game_w = 0
         self._drag_from: QPoint | None = None
+        self.touches = 0  # mouse presses on the box or anything in it, so far
+        self._count = _Touches(self)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self._tab_buttons: list[QPushButton] = []
@@ -290,6 +390,10 @@ class Box(QWidget):
         self._strip.insertWidget(at + 1, dot, 0, Qt.AlignVCenter)
         self.select(self._current)
         return i
+
+    @property
+    def current(self) -> int:
+        return self._current
 
     def select(self, index: int) -> None:
         self._current = index

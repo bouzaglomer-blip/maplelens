@@ -39,6 +39,38 @@ def test_self_check_fails_without_classes_json(monkeypatch, no_cache):
     assert app.self_check() == 1
 
 
+def test_self_check_fails_without_quests_json(monkeypatch, no_cache):
+    from maplelens.tools.quest_helper import data
+
+    monkeypatch.setattr(data, "load", lambda: (_ for _ in ()).throw(FileNotFoundError()))
+    assert app.self_check() == 1
+
+
+def test_self_check_fails_without_quest_names(monkeypatch, no_cache):
+    from maplelens.readers import quest_window
+
+    monkeypatch.setattr(
+        quest_window, "known_quest_names", lambda: (_ for _ in ()).throw(FileNotFoundError())
+    )
+    assert app.self_check() == 1
+
+
+class _Path:
+    def __init__(self, starts: bool):
+        self.starts, self.running, self.calls = starts, False, []
+
+    def go(self, *args):
+        self.calls.append(args)
+        self.running = self.starts
+
+
+@pytest.mark.parametrize("starts, selected", [(True, []), (False, [1])])
+def test_quest_go_shows_the_path_tab_only_when_no_trip_runs(starts, selected):
+    path, picked = _Path(starts), []
+    app.quest_go(path, picked.append)("town", (1, 2), "Heena")
+    assert path.calls == [("town", (1, 2), "Heena")] and picked == selected
+
+
 def test_self_check_fails_without_ocr(monkeypatch, no_cache):
     monkeypatch.setattr(ocr, "engine", lambda: None)
     assert app.self_check() == 1
@@ -147,6 +179,7 @@ class _Raises:
 class _Quiet:
     running = False
     dot = False
+    open = False
 
     def update(self, *_):
         pass
@@ -177,10 +210,114 @@ def test_a_tool_error_is_logged_once(log, monkeypatch):
     monkeypatch.setattr(sys, "stderr", None)  # a windowed exe has no console
     seen: set[str] = set()
     for _ in range(3):
-        app.update_tools(_Box(), _Raises(), _Quiet(), _Quiet(), None, None, 0.0, seen)
+        app.update_tools(
+            _Box(), _Raises(), _Quiet(), _Quiet(), _Quiet(), _Quiet(), None, None, 0.0, seen
+        )
     text = log.read_text(encoding="utf-8")
     assert text.count("ValueError: bad frame") == 1
     assert "Traceback" in text
+
+
+class _FocusBox:
+    def __init__(self, current=0):
+        self.current, self.touches = current, 0
+        self.selects = []
+
+    def select(self, i):
+        self.selects.append(i)
+        self.current = i
+
+    def set_tab_dot(self, *_):
+        pass
+
+
+class _Open(_Quiet):
+    def __init__(self, open_=True):
+        self.open = open_
+
+    def update(self, r, *_):
+        self.open = r is not None
+
+
+def _focus(box):
+    return app.QuestFocus(box, 3)
+
+
+def test_switches_on_open_and_back_on_close():
+    box = _FocusBox(1)
+    f = _focus(box)
+    f.update(True)
+    assert box.current == 1  # one reading isn't enough
+    f.update(True)
+    assert box.current == 3
+    f.update(False)
+    f.update(False)
+    assert box.current == 1
+
+
+def test_touch_keeps_the_tab():
+    box = _FocusBox(0)
+    f = _focus(box)
+    f.update(True)
+    f.update(True)
+    box.touches += 1
+    f.update(False)
+    f.update(False)
+    assert box.current == 3
+
+
+def test_a_touch_before_opening_does_not_block_the_way_back():
+    box = _FocusBox(1)
+    box.touches = 5
+    f = _focus(box)
+    for o in (True, True, False, False):
+        f.update(o)
+    assert box.selects == [3, 1]
+
+
+def test_already_on_quests_stays():
+    box = _FocusBox(3)
+    f = _focus(box)
+    for o in (True, True, False, False):
+        f.update(o)
+    assert box.selects == []
+
+
+def test_one_missed_reading_keeps_the_tab():
+    box = _FocusBox(0)
+    f = _focus(box)
+    for o in (True, True, False, True):
+        f.update(o)
+    assert box.selects == [3]  # the single closed reading didn't switch back
+    f.update(True)
+    assert box.selects == [3]
+
+
+def test_no_reading_counts_as_closed():
+    box = _FocusBox(2)
+    f = app.QuestFocus(box, 3)
+    q = _Open()
+    for r in ("r", "r", None, None):
+        app.update_tools(box, _Quiet(), _Quiet(), _Quiet(), q, f, r, None, 0.0, set())
+        if r is None:
+            assert not q.open
+        if r == "r" and box.selects:
+            assert box.current == 3
+    assert box.selects == [3, 2]
+
+
+def test_quest_tool_error_does_not_stop_the_others(log, monkeypatch):
+    monkeypatch.setattr(sys, "stderr", None)
+    ran = []
+
+    class Cls(_Quiet):
+        def update(self, *_):
+            ran.append(1)
+
+    q = _Raises()
+    q.open = False
+    app.update_tools(_Box(), _Quiet(), _Quiet(), Cls(), q, _Quiet(), None, None, 0.0, set())
+    assert ran and "bad frame" in log.read_text(encoding="utf-8")
 
 
 def test_picker_leaves_out_our_own_windows(monkeypatch):
@@ -1078,6 +1215,7 @@ class _Recorder:
 
     running = False
     dot = False
+    open = False
 
     def __init__(self):
         self.updates = []
@@ -1114,6 +1252,8 @@ def _tick(box, layer, shown, updates=None):
         exp=exp,
         path=path,
         cls=_Recorder(),
+        quest=_Recorder(),
+        focus=_Quiet(),
         updates=updates,
         seen=set(),
         shown=shown,

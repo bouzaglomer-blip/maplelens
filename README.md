@@ -21,6 +21,11 @@ one click to set a route there, plus what comes next: job advancement, gear and 
 
 ![The Class tab for a level 28 Rogue: three training spots with Transfer Area marked as the best at 928 EXP a minute, then the level 30 advancement and gear](docs/screenshots/class.jpg)
 
+**Quest helper:** open a quest in the game and the Quests tab shows where to go for each
+NPC, monster and item it needs, one click to set a route there. Track quests to keep them.
+
+![The Quests tab next to the game's quest window: The Filing Error's Torn Ledger Pages row is outlined with Going · 8 maps away and a Stop button, the Path tab shows its running dot, and a yellow arrow by the character points the way](docs/screenshots/quests.jpg)
+
 ## The promise: screen-reading only
 
 MapleLens is **screen-reading only**. It may capture pixels of the game
@@ -147,13 +152,16 @@ checks, the workflow and how releases are made.
 
 ## Status
 
-> **Status: Phase 3: class helper (in progress).** Three tools are built: the EXP meter
+> **Status: Phase 3: class helper (in progress).** Four tools are built: the EXP meter
 > (EXP/min, time to level, History window), the path arrow (points you to the next portal on
-> your route) and the class helper (a Class tab with gear, training maps, AP and SP plans for
-> every 1st and 2nd job, plus marks on the game's stat and skill windows).
+> your route), the class helper (a Class tab with gear, training maps, AP and SP plans for
+> every 1st and 2nd job, plus marks on the game's stat and skill windows) and the quest
+> helper (a Quests tab that tracks quests, showing where to go for each NPC, monster and
+> item they need, and takes over while a quest window is open in the game).
 >
 > Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
 > Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
+> Quest data adapted from [meowdb](https://meowdb.com/msclassic) (NiaDB) and [OSMS Data Explorer](https://osmsdataexplorer.com) (CC BY 4.0).
 >
 > Class plans adapted from the NiaDB class guides:
 >   [beginners-guide-first-steps-in-maple-world](https://meowdb.com/msclassic/guides/beginners-guide-first-steps-in-maple-world) ·

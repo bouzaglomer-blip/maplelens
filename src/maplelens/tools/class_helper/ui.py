@@ -15,9 +15,9 @@ from maplelens.overlay import (
     LABEL_COLOR,
     LABEL_PT,
     TAB_W,
-    VALUE_COLOR,
     InfoLine,
     Layer,
+    Row,
     game_to_layer,
     text_label,
 )
@@ -54,67 +54,6 @@ RING_R, TAG_GAP = 11, 26  # ring radius; the tag starts this far right of the + 
 MARK_PT = 9  # the tags over the game's windows keep their size; the box's labels grew
 
 DASH = "\u2013"
-_PAD = 6  # a row's side padding
-
-
-class Row(QWidget):
-    """One line to act on: a name, a grey line under it, and a yellow \u203a when a click goes
-    somewhere. Names never wrap: they're cut to fit, the full one is the tooltip."""
-
-    def __init__(
-        self,
-        name: str,
-        sub: str,
-        on_click: Callable[[], None] | None,
-        *,
-        best: bool = False,
-        outline: bool = False,
-    ):
-        super().__init__()
-        self.name, self.sub, self.best = name, sub, best
-        self.clickable, self._on_click = on_click is not None, on_click
-        self.setObjectName("row")
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFocusPolicy(Qt.NoFocus)
-        bg = HERE_BG if best or outline else "transparent"
-        edge = f"1px solid {ACCENT}" if outline else f"1px solid {bg}"
-        self.setStyleSheet(f"#row {{ background: {bg}; border: {edge}; border-radius: 4px; }}")
-        if self.clickable:
-            self.setCursor(Qt.PointingHandCursor)
-        row = QHBoxLayout(self)
-        row.setContentsMargins(_PAD, 3, _PAD, 3)
-        row.setSpacing(6)
-        col = QVBoxLayout()
-        col.setSpacing(0)
-        arrow = text_label("\u203a", LABEL_PT + 2, ACCENT, bold=True)  # single right angle
-        room = TAB_W - 2 * _PAD - 2 - (arrow.sizeHint().width() + 6 if self.clickable else 0)
-        title = text_label(name, LABEL_PT, VALUE_COLOR, bold=best or outline)
-        title.setText(QFontMetrics(title.font()).elidedText(name, Qt.ElideRight, room))
-        title.setToolTip(name)
-        col.addWidget(title)
-        if sub:
-            under = text_label(sub, LABEL_PT, LABEL_COLOR)
-            under.setText(QFontMetrics(under.font()).elidedText(sub, Qt.ElideRight, room))
-            col.addWidget(under)
-        row.addLayout(col, 1)
-        if self.clickable:
-            row.addWidget(arrow, 0, Qt.AlignVCenter)
-
-    def click(self) -> None:
-        if self._on_click:
-            self._on_click()
-
-    # A clickable row takes its press, as a button does, so the box doesn't start a drag;
-    # any other row leaves press and release to the box, which drags.
-    def mousePressEvent(self, event):
-        event.setAccepted(self.clickable and event.button() == Qt.LeftButton)
-
-    def mouseReleaseEvent(self, event):
-        if not (self.clickable and event.button() == Qt.LeftButton):
-            event.ignore()
-            return
-        if self.rect().contains(event.position().toPoint()):
-            self.click()
 
 
 class _Mark(QWidget):
