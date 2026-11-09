@@ -142,8 +142,9 @@ EXPECTED_SKILL = {
     "skill_edge_2560x1440_100.png": None,  # window mostly off the left edge
 }
 
-# Quest window crops: native, the window only. The details pane's bold line is the quest's
-# own name; the header and the list show its chain's name ("Caretaker's Ledger").
+# Quest window crops: native, the window only. The read name is the details body's bold
+# line (the quest's own name), never the header or list row, which show its chain's name
+# ("Caretaker's Ledger"); both names are in quests.json's quests.
 EXPECTED_QUEST = {
     "quest_progress_1366x768_100.png": QuestOpen("The Filing Error", True),
     "quest_progress_1920x1080_100.png": QuestOpen("The Filing Error", True),
@@ -870,6 +871,49 @@ def test_known_quest_names():
 
     names = known_quest_names()
     assert "The Filing Error" in names and len(names) > 100
+    assert "Donating to Kerning City" in names  # left out of the quests on purpose
+
+
+def test_no_open_tab_reads_none():
+    """No pink tab: not a quest window."""
+    native = screen("quest_progress_1366x768_100.png")
+    native[24:42, 78:150] = native[24:42, 4:76].copy()  # Available's grey onto In Progress
+    assert read_quest_window(native) is None
+
+
+@needs_ocr
+@pytest.mark.parametrize(
+    "name, rows",
+    [
+        ("quest_available_1366x768_100.png", (147, 156)),
+        ("quest_progress_1366x768_100.png", (199, 210)),
+    ],
+)
+def test_quest_name_line_painted_white_is_unreadable(name, rows):
+    """Without its name line, the first white-body line is description text: not a name."""
+    native = screen(name)
+    native[rows[0] : rows[1], 256:524] = 255
+    assert read_quest_window(native) == UNREADABLE
+
+
+@pytest.mark.parametrize(
+    "lines, want",
+    [
+        (["Donating to Kerning City"], QuestOpen("Donating to Kerning City", True)),  # left out
+        (["Donatinq to Kerning City"], QuestOpen("Donating to Kerning City", True)),  # snapped
+        (["The Filing Error"], QuestOpen("The Filing Error", True)),
+        (["A Quest Nobody Ever Wrote"], UNREADABLE),  # name-shaped, in neither set
+        (["It seems that Casey in Henesys Park knows"], UNREADABLE),  # a description line
+        (["The Filing \ufffdrror"], UNREADABLE),
+        ([], UNREADABLE),
+        (None, UNREADABLE),  # no OCR engine
+    ],
+)
+def test_quest_name_from_ocr_lines(monkeypatch, lines, want):
+    from maplelens.readers import quest_window
+
+    monkeypatch.setattr(quest_window.ocr, "read_lines", lambda m: lines)
+    assert read_quest_window(screen("quest_progress_1366x768_100.png")) == want
 
 
 @needs_ocr

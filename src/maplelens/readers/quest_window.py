@@ -2,11 +2,13 @@
 
 The details pane's header and the list rows show the quest's chain name, cut with "…"
 when long; the quest's own name is the first grey line on the white body, never cut.
+That line is trusted only when it snaps to a known Classic quest name: a scrolled pane
+or another layout puts a description line there instead.
 """
 
 import json
 from dataclasses import dataclass
-from functools import cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -22,12 +24,16 @@ class QuestOpen:
 
 
 # The window, 768-scale (548x397 at 1366x768, 770x556 at 1920x1080): size, and the anchor
-# (the "QUEST" title bar, template, offset from its top-left).
+# (the "QUEST" title bar, template, offset from its top-left). Coarse scores (grey
+# TM_CCOEFF_NORMED on the normalized frame): the quest grabs 1.00 at 1366 and 0.858 at
+# 1920; stat_a 0.53-0.56, skill_a at most 0.52, title_ellinia 0.45. The stat title clears
+# window.COARSE_MIN, so it's the exact-spot ANCHOR_MIN and the tab gate that reject it.
 WIN_W, WIN_H = 548, 397
 ANCHORS = [("quest_title", (4, 7))]
 # The tabs' rows and columns: Available, In Progress, Completed. The open one is pink:
 # red over blue by PINK_RB. Measured: about 935 pink px on the open tab, at most 73 on
-# the others (their edges, at 1920x1080); PINK_MIN sits well between.
+# the others (their edges, at 1920x1080); PINK_MIN sits well between. No pink tab: not
+# a quest window.
 TAB_Y = (24, 42)
 TABS_X = ((4, 78), (78, 150), (150, 222))
 TAKEN = (False, True, None)  # None: the Completed tab, nothing to help with
@@ -47,8 +53,16 @@ OCR_INK_HI = (205, 205, 205)
 
 @cache
 def known_quest_names() -> frozenset[str]:
-    data = Path(__file__).parents[1] / "data" / "quests.json"
-    return frozenset(q["name"] for q in json.loads(data.read_text("utf-8"))["quests"])
+    """The quests' names, and the Classic quests left out on purpose ("other_names")."""
+    raw = json.loads((Path(__file__).parents[1] / "data" / "quests.json").read_text("utf-8"))
+    return frozenset(q["name"] for q in raw["quests"]) | frozenset(raw["other_names"])
+
+
+@lru_cache(maxsize=256)
+def _snap(text: str) -> str | None:
+    """The known quest name `text` reads as, else None."""
+    name = map_name.snap_title(text, known_quest_names())
+    return name if name in known_quest_names() else None
 
 
 def _tab(win: np.ndarray) -> int | None:
@@ -76,8 +90,9 @@ def read_quest_window(
 ) -> QuestOpen | str | None:
     """The quest window in `frame` (normalized), read from `native` (default `frame`).
 
-    None if no window is found or it shows the Completed tab; UNREADABLE if one is but
-    its details body is off screen or its name can't be read.
+    None if no window is found, no tab is open (pink) or it's the Completed tab;
+    UNREADABLE if one is but its details body is off screen or its name doesn't read as
+    a known quest name.
     """
     native = frame if native is None else native
     scale = native.shape[0] / frame.shape[0] if scale is None else scale
@@ -86,7 +101,7 @@ def read_quest_window(
         return None
     win, (wx, wy) = hit
     tab = _tab(win)
-    if tab is not None and TAKEN[tab] is None:
+    if tab is None or TAKEN[tab] is None:
         return None
     x, y, w, h = BODY
     fh, fw = frame.shape[:2]
@@ -98,8 +113,6 @@ def read_quest_window(
     box = (wx + x, wy + line[0], w, line[1] - line[0] + 1)
     lines = ocr.read_lines(glyphs.mask(ocr.crop(frame, native, box), INK_LO, OCR_INK_HI))
     text = " ".join(lines or []).strip()
-    if not text or not text.isprintable():
-        return UNREADABLE
-    return QuestOpen(
-        map_name.snap_title(text, known_quest_names()), None if tab is None else TAKEN[tab]
-    )
+    # OCR marks what it cannot read with replacement or control characters.
+    name = _snap(text) if text.isprintable() and "\ufffd" not in text else None
+    return UNREADABLE if name is None else QuestOpen(name, TAKEN[tab])
