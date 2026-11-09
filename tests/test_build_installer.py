@@ -293,10 +293,10 @@ def test_mac_spec_and_icon_exist():
     assert (ROOT / "packaging" / "mac" / "icon.icns").is_file()
 
 
-def test_mac_spec_pins_the_bundle_id_and_keeps_the_dock_icon():
+def test_mac_spec_pins_the_bundle_id_and_stays_out_of_the_dock():
     text = build_installer.MAC_SPEC.read_text()
     assert "io.github.or-keren.maplelens" in text
-    assert "LSUIElement" not in text  # a normal app, in the Dock
+    assert '"LSUIElement": True' in text  # in the menu bar, not the Dock
 
 
 def test_mac_full_build_freezes_signs_verifies_self_checks_and_makes_the_dmg(

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QIcon, QImage
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -545,11 +545,11 @@ def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests
 
 
 def tray_available() -> bool:
-    """A tray icon on Windows, when there's a notification area to put it in.
+    """A tray icon: in the notification area on Windows, the menu bar on the Mac.
 
-    Not on the Mac (Windows only for now), and with no tray the box's ••• still works.
+    Not elsewhere, and with no tray the box's ••• still works.
     """
-    return sys.platform == "win32" and QSystemTrayIcon.isSystemTrayAvailable()
+    return sys.platform in ("win32", "darwin") and QSystemTrayIcon.isSystemTrayAvailable()
 
 
 def make_tray(
@@ -572,27 +572,9 @@ def make_tray(
 
 
 def box_menu(box: Box) -> QMenu:
-    """A menu of the box's own items, read again each time it opens: the tray's, the Dock's."""
+    """A menu of the box's own items, read again each time it opens: the tray's."""
     menu = QMenu(box)
     box.attach_menu(menu)
-    return menu
-
-
-def dock_available() -> bool:
-    """A Dock icon with a menu: the Mac's."""
-    return sys.platform == "darwin"
-
-
-def make_dock(box: Box, *, available: bool, as_dock: Callable | None = None) -> QMenu | None:
-    """The Dock icon's menu on the Mac: the box's menu, as the tray has it. None if not
-    `available`. macOS adds its own items (Options, Quit…) under it.
-
-    `as_dock` makes the menu the Dock's (QMenu.setAsDockMenu, which only the Mac's Qt has).
-    """
-    if not available:
-        return None
-    menu = box_menu(box)
-    (as_dock or QMenu.setAsDockMenu)(menu)
     return menu
 
 
@@ -622,34 +604,23 @@ class Shown:
             self.item.setText(HIDE if self.on else SHOW)
 
 
-def add_hide(
-    box: Box, layer: Layer, tray: QSystemTrayIcon | None, dock: QApplication | None = None
-) -> Shown:
-    """Hide / Show: a menu item just before Quit, and a way back: a left click on the
-    tray icon (Windows), or a click on the Dock icon (Mac).
-
-    `dock` is the QApplication where there's a Dock icon (make_dock made its menu), else
-    None. A Dock click reaches Qt as it becoming active, sent even when it already is; so
-    does Cmd-Tab. Either shows a hidden box; a shown one stays as it is. With no way back
-    there's no item: a hidden box would stay hidden.
+def add_hide(box: Box, layer: Layer, tray: QSystemTrayIcon | None, *, click: bool = True) -> Shown:
+    """Hide / Show: a menu item just before Quit; the tray's menu has it, so the tray is
+    the way back. With `click` (Windows) a left click on the tray icon toggles too; on the
+    Mac a click opens the menu instead. With no tray there's no item: a hidden box would
+    stay hidden.
     """
     shown = Shown(box, layer)
-    if tray is None and dock is None:
+    if tray is None:
         return shown
 
     def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.Trigger:  # a left click; a double click has one too
             shown.toggle()
 
-    def activated(state: Qt.ApplicationState) -> None:
-        if state == Qt.ApplicationActive and not shown.on:
-            shown.toggle()
-
     shown.item = box.add_menu_item(HIDE, shown.toggle, at=-1)
-    if tray is not None:
+    if click:
         tray.activated.connect(clicked)
-    if dock is not None:
-        dock.applicationStateChanged.connect(activated)
     return shown
 
 
@@ -737,26 +708,22 @@ class Tick:
         self.box.place(rect)
 
 
-def show_in_dock(app: QApplication) -> None:
-    """Mac: a normal app, with a Dock icon and a menu bar, even run from source as a plain
-    python. From source the icon is ICON, not Python's; the installed app has its icon.icns.
-    """
+def hide_from_dock() -> None:
+    """Mac: no Dock icon, only the menu bar's (make_tray), even run from source."""
     from maplelens import overlay_mac  # AppKit only exists on the Mac
 
-    overlay_mac.make_regular()
-    if not getattr(sys, "frozen", False):
-        app.setWindowIcon(QIcon(str(ICON)))
+    overlay_mac.make_accessory()
 
 
 def _start_qt() -> QApplication:
     """The QApplication, started so that it never takes the front from the game itself:
-    only the player's Dock click or Cmd-Tab brings MapleLens forward."""
+    only the player's click on one of its windows brings MapleLens forward."""
     if sys.platform == "darwin":  # Qt raises a starting app over the others unless told not
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     if sys.platform == "darwin":
-        show_in_dock(app)
+        hide_from_dock()
         app.processEvents()  # finish launching first: a window shown before that activates us
     return app
 
@@ -812,8 +779,7 @@ def main() -> int:
     box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
-    dock = make_dock(box, available=dock_available())  # the box, its parent, holds it
-    shown = add_hide(box, layer, tray, app if dock is not None else None)
+    shown = add_hide(box, layer, tray, click=sys.platform == "win32")
     add_about(box, updates)  # after Hide: just before Quit
     tick = Tick(settings, save, box, layer, tool, path_tool, cls_tool, updates, seen, shown)
     timer = QTimer()
