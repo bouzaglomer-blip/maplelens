@@ -41,6 +41,10 @@ class _Confirmed:
         return changed
 
 
+# This many jumps in a row are real (a 2x event, a party, a richer map), not misreads
+_JUMPS_TO_ACCEPT = 3
+
+
 class ExpMeter:
     def __init__(self, idle_cutoff_s: float = 90, jump_factor: float = 5, window_s: float = 300):
         self.idle_cutoff_s = idle_cutoff_s
@@ -55,6 +59,7 @@ class ExpMeter:
         self._window: deque[tuple[float, int, float, float]] = deque()
         self._event_t: float | None = None  # last accepted gain
         self._recent: deque[float] = deque(maxlen=50)  # pct of the last counted gains
+        self._jumps = 0  # jumps rejected in a row
         self._seg: Segment | None = None
         self._closed: list[Segment] = []
         self._last_event_t: float | None = None
@@ -107,7 +112,12 @@ class ExpMeter:
         if gain and len(self._recent) >= 10:
             med = median(self._recent)
             if med > 0 and gain[1] > self.jump_factor * med:
-                return None
+                self._jumps += 1
+                if self._jumps < _JUMPS_TO_ACCEPT:
+                    return None
+                self._recent.clear()  # learn the new size from here
+        if gain:
+            self._jumps = 0
         return gain
 
     def _on_exp(self, old: ExpValue, old_level, paused: bool, t: float) -> None:

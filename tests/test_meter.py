@@ -225,3 +225,17 @@ def test_walk_from_town_is_not_training_time():
         feed(m, 50 + i * 30, 1000 + 100 * i, 10 + 0.5 * i)
     # only the 3 gains after the first kill count: 1.5 % over 90 s
     assert m.rate(171).pct_per_min == pytest.approx(1.0)
+
+
+def test_lasting_jump_is_learned_after_three_kills():
+    """A 2x event or a richer map: every kill is suddenly 6x the old size, and stays so."""
+    m = ExpMeter()
+    steady(m, 13)  # 12 gains of 0.5 at 30.5 .. 360.5, last pct 16.0
+    for i in range(1, 6):  # 5 gains of 3.0 at 390.5 .. 510.5
+        feed(m, 360 + i * 30, 1600 + 300 * i, 16.0 + 3.0 * i)
+    # the first two look like misreads; the third agrees, so it and the rest count
+    assert m.open_segment().pct == pytest.approx(6.0 + 3 * 3.0)
+    # window: the 3 counted 3.0 gains (gaps 90, 30, 30) + the last 5 old 0.5 gains (150 s)
+    rate = m.rate(511)
+    assert rate.pct_per_min == pytest.approx((9.0 + 2.5) / 5)
+    assert not rate.paused
