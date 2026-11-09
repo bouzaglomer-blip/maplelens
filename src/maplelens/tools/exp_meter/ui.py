@@ -25,7 +25,7 @@ from maplelens.overlay import (
     text_label,
 )
 from maplelens.readers import Reading
-from maplelens.tools.exp_meter.history import history, save_segment
+from maplelens.tools.exp_meter.history import MIN_VISIT_S, history, save_segment
 from maplelens.tools.exp_meter.meter import ExpMeter
 from maplelens.tools.exp_meter.text import box_lines, format_duration, format_last
 
@@ -130,9 +130,13 @@ class ExpMeterTool:
         self._history.raise_()
 
     def _save(self, now: float, *, flush_open: bool) -> None:
+        def kept(seg) -> bool:
+            return seg.end - seg.start >= MIN_VISIT_S
+
         for seg in self._meter.pop_closed():
-            save_segment(self._conn, seg)
-        if flush_open and (seg := self._meter.open_segment()):
+            if kept(seg):
+                save_segment(self._conn, seg)
+        if flush_open and (seg := self._meter.open_segment()) and kept(seg):
             save_segment(self._conn, seg)
             self._last_flush = now
 

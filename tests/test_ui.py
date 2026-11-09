@@ -3,6 +3,14 @@ from maplelens.store import DEFAULTS
 from maplelens.tools.exp_meter.history import history, open_db
 
 
+def _play(tool, ticks: int) -> None:
+    """Ticks 2.5 s apart from t=1000; each EXP value is read twice, as the meter needs."""
+    for i in range(ticks):
+        t = 1000.0 + i * 2.5
+        exp = ExpValue(1000 + i // 2 * 100, 10 + i // 2 * 0.1)
+        tool.update(Reading(t, exp, 50, "Mage", "Ant Tunnel"), None, t)
+
+
 def test_tool_flushes_open_segment_each_minute(monkeypatch, tmp_path):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
@@ -12,15 +20,27 @@ def test_tool_flushes_open_segment_each_minute(monkeypatch, tmp_path):
     app = QApplication.instance() or QApplication([])
     conn = open_db(tmp_path / "h.db")
     tool = ExpMeterTool(dict(DEFAULTS, boxes={}), conn)
-    for i in range(73):  # 3 minutes at 2.5 s; each EXP value is read twice, as the meter needs
-        t = 1000.0 + i * 2.5
-        exp = ExpValue(1000 + i // 2 * 100, 10 + i // 2 * 0.1)
-        tool.update(Reading(t, exp, 50, "Mage", "Ant Tunnel"), None, t)
+    _play(tool, 145)  # 6 minutes
     rows = history(conn)
     assert len(rows) == 1  # nothing closed, so this came from the periodic flush
     assert rows[0].active_s >= 120
-    tool.shutdown(1182.5)
+    tool.shutdown(1000 + 145 * 2.5)
     app.processEvents()
+
+
+def test_tool_skips_visits_under_five_minutes(monkeypatch, tmp_path):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+
+    QApplication.instance() or QApplication([])
+    conn = open_db(tmp_path / "h.db")
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), conn)
+    _play(tool, 97)  # 4 minutes
+    assert history(conn) == []
+    tool.shutdown(1000 + 97 * 2.5)
+    assert history(conn) == []
 
 
 def test_closing_history_window_does_not_quit(monkeypatch, tmp_path):
@@ -68,14 +88,10 @@ def test_quit_menu_item_saves_and_quits(monkeypatch, tmp_path):
     app = QApplication.instance() or QApplication([])
     conn = open_db(tmp_path / "h.db")
     tool = ExpMeterTool(dict(DEFAULTS, boxes={}), conn)
-    for i in range(9):  # 20 s of play: too short for the periodic flush
-        t = 1000.0 + i * 2.5
-        exp = ExpValue(1000 + i // 2 * 100, 10 + i // 2 * 0.1)
-        tool.update(Reading(t, exp, 50, "Mage", "Ant Tunnel"), None, t)
-    assert history(conn) == []
+    _play(tool, 125)  # just over 5 minutes, so the visit is kept
     box = build_box(dict(DEFAULTS, boxes={}), lambda: None, [tool])
     (quit_item,) = [a for a in box.actions() if a.text() == "Quit MapleLens"]
-    save = lambda: tool.shutdown(1020.0)  # noqa: E731 - what app.py connects
+    save = lambda: tool.shutdown(1320.0)  # noqa: E731 - what app.py connects
     app.aboutToQuit.connect(save)
     QTimer.singleShot(0, quit_item.trigger)
     timed_out = []
@@ -85,7 +101,7 @@ def test_quit_menu_item_saves_and_quits(monkeypatch, tmp_path):
     finally:
         app.aboutToQuit.disconnect(save)
     assert not timed_out
-    assert len(history(conn)) == 1
+    assert history(conn)[0].last == 1320.0
 
 
 def test_history_button_on_exp_tab(monkeypatch, tmp_path):
