@@ -51,9 +51,10 @@ QPushButton:disabled {{ background: {HERE_BG}; color: {LABEL_COLOR}; }}""",
 QPushButton {{ background: transparent; color: #e6edf7; border: 1px solid {EDGE};
     border-radius: 4px; padding: 3px; }}""",
 }
-TAB_W = 214  # every tab's width: the box is 238 px wide, less its 12 px side margins
-# (four tab titles and the Path tab's dot, at the strip's 14 px spacing; measured on a real
-# Windows window, Segoe UI: 213 px of strip wants 237, the next even width is 238)
+# Every tab's width: the box's width less its 12 px side margins. It fits four tab titles
+# and the Path tab's dot at the strip's 14 px spacing, in FONT: on a real Windows window
+# (Segoe UI) the strip wants a 237 px box, so 238; Helvetica Neue on the Mac CI wants 244.
+TAB_W = 220 if sys.platform == "darwin" else 214
 # The box's menu button: three bullets. The midline ellipsis isn't in Segoe UI, and
 # the font Qt falls back to draws it faint and makes the box taller.
 MENU_MARK = "•••"
