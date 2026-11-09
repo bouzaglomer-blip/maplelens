@@ -777,7 +777,7 @@ def test_fetch_asks_github_with_only_the_version(monkeypatch):
 
     seen = {}
 
-    def urlopen(req, timeout):
+    def urlopen(req, timeout, context):
         seen["url"], seen["headers"], seen["timeout"] = req.full_url, dict(req.headers), timeout
         return io.BytesIO(json.dumps(NEWER).encode())
 
@@ -1029,12 +1029,20 @@ def test_clear_updates_keeps_the_result(tmp_path):
     assert [p.name for p in tmp_path.iterdir()] == [update_mac.RESULT]
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS's CA list")
+def test_tls_on_the_mac_trusts_macos_cas_without_homebrew(monkeypatch):
+    # the shipped OpenSSL looks for CAs in Homebrew's folder; a friend's Mac has none
+    monkeypatch.setenv("SSL_CERT_FILE", "/nonexistent/cert.pem")
+    monkeypatch.setenv("SSL_CERT_DIR", "/nonexistent")
+    assert app._tls("darwin").cert_store_stats()["x509_ca"] > 0
+
+
 def test_download_file_saves_the_reply_with_the_user_agent(tmp_path, monkeypatch):
     import io
 
     seen = {}
 
-    def urlopen(req, timeout):
+    def urlopen(req, timeout, context):
         seen["url"], seen["headers"] = req.full_url, dict(req.headers)
         return io.BytesIO(SETUP)
 
