@@ -19,12 +19,12 @@ every map you've trained on.
 **Class helper:** where to train for your class and level, with your best spot first and
 one click to set a route there, plus what comes next: job advancement, gear and stats.
 
-![The Class tab for a level 28 Rogue: three training spots with Transfer Area marked as the best at 928 EXP a minute, then the level 30 advancement and gear](docs/screenshots/class.jpg)
+![The Class tab for a level 29 Rogue with 5 AP and 3 SP: three training spots with Transfer Area marked as the best at 879 EXP a minute, then the level 30 advancement and gear. Over the game's stat window a ring on LUK's + button says 5 here, and over the skill window a ring on Dark Sight's says 3 here](docs/screenshots/class.jpg)
 
 **Quest helper:** open a quest in the game and the Quests tab shows where to go for each
 NPC, monster and item it needs, one click to set a route there. Track quests to keep them.
 
-![The Quests tab next to the game's quest window: The Filing Error's Torn Ledger Pages row is outlined with Going · 8 maps away and a Stop button, the Path tab shows its running dot, and a yellow arrow by the character points the way](docs/screenshots/quests.jpg)
+![The Quests tab next to the game's quest window: The Filing Error's Torn Ledger Pages row is outlined with Going · 5 maps away and a Stop button, the Path tab shows its running dot, and a yellow arrow by the character points the way](docs/screenshots/quests.jpg)
 
 ## The promise: screen-reading only
 
