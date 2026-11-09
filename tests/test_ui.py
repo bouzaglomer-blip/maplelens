@@ -61,7 +61,7 @@ def test_closing_history_window_does_not_quit(monkeypatch, tmp_path):
     assert survived == [1]
 
 
-def test_history_window_is_a_non_activating_tool_window_on_mac(monkeypatch, tmp_path):
+def test_history_window_stays_over_the_game_without_taking_focus(monkeypatch, tmp_path):
     import sys
 
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
@@ -72,9 +72,11 @@ def test_history_window_is_a_non_activating_tool_window_on_mac(monkeypatch, tmp_
 
     QApplication.instance() or QApplication([])
     win = HistoryWindow(open_db(tmp_path / "h.db"))
-    mac = sys.platform == "darwin"  # Windows keeps its plain window
-    assert (win.windowType() == Qt.Tool) == mac
-    assert win.testAttribute(Qt.WA_ShowWithoutActivating) == mac
+    assert win.windowType() == Qt.Tool
+    assert win.testAttribute(Qt.WA_ShowWithoutActivating)
+    if sys.platform != "darwin":  # the Mac's panel does this itself, in native_setup
+        assert win.windowFlags() & Qt.WindowStaysOnTopHint
+        assert win.windowFlags() & Qt.WindowDoesNotAcceptFocus
 
 
 def test_quit_menu_item_saves_and_quits(monkeypatch, tmp_path):

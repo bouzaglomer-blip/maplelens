@@ -376,7 +376,8 @@ class PathArrowTool:
         rows = []
         for i, s in enumerate(self.trip.steps):
             room = TAB_W - fm.horizontalAdvance("00  " + (" taxi" if s.cab else ""))
-            name = escape(fm.elidedText(self.maps[s.map_id].name, Qt.ElideRight, room))
+            # Cut in the middle: neighbours often share a long start (The Swamp of Despair I, II)
+            name = escape(fm.elidedText(self.maps[s.map_id].name, Qt.ElideMiddle, room))
             if i < self.trip.index:
                 row = f'<span style="color:{_DONE}"><s>{i + 1}&nbsp;&nbsp;{name}</s></span>'
             elif i == self.trip.index:
