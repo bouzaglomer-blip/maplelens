@@ -4,6 +4,10 @@ The details pane's header and the list rows show the quest's chain name, cut wit
 when long; the quest's own name is the first grey line on the white body, never cut.
 That line is trusted only when it snaps to a known Classic quest name: a scrolled pane
 or another layout puts a description line there instead.
+
+A quest with no chain (128 of the 343) has no such line: its name shows only in the
+header and its list row. Then the selected list row is read, trusted only when it is a
+known quest name and no chain's name, since a chained quest's row shows its chain's.
 """
 
 import json
@@ -51,6 +55,18 @@ WHITE = 245
 # offsets each, Windows OCR read every name exactly from 200 to 210; 190 and 215 lost
 # letters ("Cal (Is", "Filho").
 OCR_INK_HI = (205, 205, 205)
+# The list pane (x, y, w, h), left of its scrollbar. The selected row is ROW_BLUE (BGR),
+# about 190 px wide, white text; the region rows are lighter (200,176,156) or brown
+# (109,148,176). The selected row: the pane's rows with ROW_MIN px within ROW_TOL of
+# ROW_BLUE (about 192 above and below the text, as few as 23 through it), first to last,
+# at most ROW_H tall (18 measured), so two blue things never read as one row.
+LIST = (8, 46, 216, 316)
+ROW_BLUE, ROW_TOL, ROW_MIN, ROW_H = (153, 102, 51), 8, 100, 20
+# The row's text mask, every channel at least this: on the six grabs, at 6 sub-pixel
+# offsets each, Windows OCR read every row exactly from 115 to 130; 110 dropped an
+# apostrophe, 135 read ':' as '.'.
+ROW_INK_LO = (125, 125, 125)
+CUT = ".…"  # a cut name ends in "…", which the OCR reads as one to three dots
 
 
 @cache
@@ -58,6 +74,28 @@ def known_quest_names() -> frozenset[str]:
     """The quests' names, and the Classic quests left out on purpose ("other_names")."""
     raw = json.loads((Path(__file__).parents[1] / "data" / "quests.json").read_text("utf-8"))
     return frozenset(q["name"] for q in raw["quests"]) | frozenset(raw["other_names"])
+
+
+@cache
+def chain_names() -> frozenset[str]:
+    """The quest chains' names: a chained quest's header and list row show its chain's."""
+    raw = json.loads((Path(__file__).parents[1] / "data" / "quests.json").read_text("utf-8"))
+    return frozenset(raw["chain_names"])
+
+
+@lru_cache(maxsize=256)
+def _listed(text: str) -> str | None:
+    """The known quest name a list row's `text` shows, else None. A cut text ("…") must
+    start exactly one quest's or chain's name. A chain's name is never read as a quest's:
+    12 chains share their name with one of their own quests (Mai's Training), and which
+    one a row shows can't be told."""
+    if text.endswith(tuple(CUT)):
+        start = text.rstrip(CUT)
+        names = [n for n in known_quest_names() | chain_names() if n.startswith(start)]
+        name = names[0] if len(names) == 1 else None
+    else:
+        name = _snap(text)
+    return None if name is None or name in chain_names() else name
 
 
 @lru_cache(maxsize=256)
@@ -87,6 +125,28 @@ def _name_line(win: np.ndarray) -> tuple[int, int] | None:
     return None
 
 
+def _row(win: np.ndarray) -> tuple[int, int, int, int] | None:
+    """The selected list row's text box (x, y, w, h of the window), or None."""
+    x, y, w, h = LIST
+    blue = (np.abs(win[y : y + h, x : x + w].astype(int) - ROW_BLUE).max(axis=2)) <= ROW_TOL
+    rows = np.flatnonzero(blue.sum(axis=1) >= ROW_MIN)
+    if rows.size == 0 or rows[-1] - rows[0] >= ROW_H:
+        return None
+    cols = np.flatnonzero(blue[rows].any(axis=0))
+    # 2 px in from the blue's edge, so ocr.crop's margin stays off the white around it.
+    return x + cols[0] + 2, y + rows[0] + 2, cols[-1] - cols[0] - 3, rows[-1] - rows[0] - 3
+
+
+def _read(
+    frame: np.ndarray, native: np.ndarray, box: tuple[int, int, int, int], lo: tuple, hi: tuple
+) -> str | None:
+    """The text in `box` (normalized x, y, w, h) inked from `lo` to `hi`, or None when the
+    OCR has none or marks what it cannot read (replacement or control characters)."""
+    lines = ocr.read_lines(glyphs.mask(ocr.crop(frame, native, box), lo, hi))
+    text = " ".join(lines or []).strip()
+    return text if text.isprintable() and "\ufffd" not in text else None
+
+
 def read_quest_window(
     frame: np.ndarray, native: np.ndarray | None = None, scale: float | None = None
 ) -> QuestOpen | str | None:
@@ -94,7 +154,8 @@ def read_quest_window(
 
     None if no window is found, no tab is open (pink) or it's the Completed tab;
     UNREADABLE if one is but the frame's edge cuts its details body; NAME_UNREADABLE if
-    no name line is found (the text is scrolled) or it doesn't read as a known quest name.
+    neither the name line nor the selected list row reads as a known quest name (the
+    text is scrolled, or no row is selected).
 
     Limit: the "QUEST" title is the anchor, at the window's top-left, so a window dragged
     past the frame's left or top edge isn't found and reads None, as if closed.
@@ -112,12 +173,13 @@ def read_quest_window(
     fh, fw = frame.shape[:2]
     if not (0 <= wx + x <= fw - w and 0 <= wy + y <= fh - h):
         return UNREADABLE
-    line = _name_line(win)
-    if line is None:
-        return NAME_UNREADABLE
-    box = (wx + x, wy + line[0], w, line[1] - line[0] + 1)
-    lines = ocr.read_lines(glyphs.mask(ocr.crop(frame, native, box), INK_LO, OCR_INK_HI))
-    text = " ".join(lines or []).strip()
-    # OCR marks what it cannot read with replacement or control characters.
-    name = _snap(text) if text.isprintable() and "\ufffd" not in text else None
-    return NAME_UNREADABLE if name is None else QuestOpen(name, TAKEN[tab])
+    name = None
+    if line := _name_line(win):
+        box = (wx + x, wy + line[0], w, line[1] - line[0] + 1)
+        text = _read(frame, native, box, INK_LO, OCR_INK_HI)
+        name = text and _snap(text)
+    if not name and (row := _row(win)):
+        box = (wx + row[0], wy + row[1], row[2], row[3])
+        text = _read(frame, native, box, ROW_INK_LO, (255, 255, 255))
+        name = text and _listed(text)
+    return QuestOpen(name, TAKEN[tab]) if name else NAME_UNREADABLE

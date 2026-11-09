@@ -144,13 +144,15 @@ EXPECTED_SKILL = {
 
 # Quest window crops: native, the window only. The read name is the details body's bold
 # line (the quest's own name), never the header or list row, which show its chain's name
-# ("Caretaker's Ledger"); both names are in quests.json's quests.
+# ("Caretaker's Ledger"). A quest with no chain has no bold line: its name is read from
+# the selected list row ("Arwen and the Glass Shoe").
 EXPECTED_QUEST = {
     "quest_progress_1366x768_100.png": QuestOpen("The Filing Error", True),
     "quest_progress_1920x1080_100.png": QuestOpen("The Filing Error", True),
     "quest_available_1366x768_100.png": QuestOpen("Make a Match Cards Set", False),
     "quest_available_1920x1080_100.png": QuestOpen("Make a Match Cards Set", False),
     "quest_offscreen_1366x768_100.png": UNREADABLE,  # the details pane cut by the screen edge
+    "quest_nochain_2560x1440_100.png": QuestOpen("Arwen and the Glass Shoe", False),
 }
 
 
@@ -872,6 +874,7 @@ def test_known_quest_names():
     names = known_quest_names()
     assert "The Filing Error" in names and len(names) > 100
     assert "[Event] Trick or Treat!" in names  # left out of the quests on purpose
+    assert "Arwen and the Glass Shoe" in names
 
 
 def test_no_open_tab_reads_none():
@@ -882,6 +885,14 @@ def test_no_open_tab_reads_none():
 
 
 @needs_ocr
+def test_chainless_quest_with_no_row_selected_is_name_unreadable():
+    """No bold name line and no selected list row: nothing to read the name from."""
+    native, scale = screen("quest_nochain_2560x1440_100.png"), 1440 / 768
+    native[130:175, 40:420] = 255  # the selected row
+    assert read_quest_window(_scaled(native, scale), native, scale) == NAME_UNREADABLE
+
+
+@needs_ocr
 @pytest.mark.parametrize(
     "name, rows",
     [
@@ -889,11 +900,51 @@ def test_no_open_tab_reads_none():
         ("quest_progress_1366x768_100.png", (199, 210)),
     ],
 )
-def test_quest_name_line_painted_white_is_name_unreadable(name, rows):
-    """Without its name line, the first white-body line is description text: not a name."""
+def test_quest_name_line_painted_white_is_name_unreadable(name, rows, monkeypatch):
+    """Without its name line, the first white-body line is description text, and the
+    selected list row shows the chain's name: neither is the quest's name."""
+    from maplelens.readers import quest_window
+
+    read, seen = quest_window.ocr.read_lines, []
+    monkeypatch.setattr(quest_window.ocr, "read_lines", lambda m: seen.append(read(m)) or seen[-1])
     native = screen(name)
     native[rows[0] : rows[1], 256:524] = 255
     assert read_quest_window(native) == NAME_UNREADABLE
+    assert any(line[0].startswith(("Caretaker's Ledger", "Maple World's")) for line in seen), seen
+
+
+@pytest.mark.parametrize(
+    "text, want",
+    [
+        ("Arwen and the Glass Shoe", "Arwen and the Glass Shoe"),
+        ("Anwen and the Glass Shoe", "Arwen and the Glass Shoe"),  # snapped
+        ("Arwen and the Glass S...", "Arwen and the Glass Shoe"),  # cut: a unique prefix
+        ("Arwen and the Glass S…", "Arwen and the Glass Shoe"),
+        # A name ending in "." reads like a cut one: still the one name it starts.
+        (
+            "Asking After Mrs. Ming Ming, the Town Resident.",
+            "Asking After Mrs. Ming Ming, the Town Resident.",
+        ),
+        (
+            "Asking After Mrs. Ming Ming, the Town Res..",
+            "Asking After Mrs. Ming Ming, the Town Resident.",
+        ),
+        (
+            "Asking After Mr. Pickall, the Town Resident",
+            "Asking After Mr. Pickall, the Town Resident ",
+        ),
+        ("Caretaker's Ledger", None),  # a chain's name, no quest's
+        ("Mai's Training", None),  # a chain's name and its first quest's: which one?
+        ("Mai's...", None),  # the chain's, or Mai's Final Training's
+        ("Icarus's...", None),  # prefix of a chain's name and of a quest's
+        ("The...", None),  # many quests
+        ("", None),
+    ],
+)
+def test_quest_name_from_list_row(text, want):
+    from maplelens.readers.quest_window import _listed
+
+    assert _listed(text) == want
 
 
 @pytest.mark.parametrize(
@@ -925,9 +976,9 @@ def test_read_all_fills_quest():
 
 
 @needs_ocr
-@pytest.mark.parametrize("name", [n for n in EXPECTED_QUEST if "1920x1080" in n])
+@pytest.mark.parametrize("name", [n for n in EXPECTED_QUEST if "x768_" not in n])
 def test_quest_reads_at_every_offset(name):
-    scale = 1080 / 768
+    scale = int(re.search(r"_\d+x(\d+)_", name)[1]) / 768
     for k in range(6):
         native = screen(name)[k:, k:]
         assert read_quest_window(_scaled(native, scale), native, scale) == EXPECTED_QUEST[name], k
