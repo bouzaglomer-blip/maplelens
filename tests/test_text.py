@@ -38,3 +38,7 @@ def test_format_last():
     assert format_last(datetime(2026, 10, 31, 23, 0).timestamp(), now) == "yesterday"
     assert format_last(datetime(2026, 10, 29, 12, 0).timestamp(), now) == "Oct 29"
     assert format_last(datetime(2026, 10, 5, 12, 0).timestamp(), now) == "Oct 5"
+
+
+def test_box_lines_paused():
+    assert box_lines(Rate(100, 0.1, None, paused=True), False)[0][0] == "EXP · paused"

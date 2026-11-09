@@ -130,10 +130,16 @@ def test_short_visits_hidden(tmp_path):
 
 def test_best_maps_job_line_level_range_top_three(tmp_path):
     conn = open_db(tmp_path / "t.db")
-    for i, (m, job, lvl, exp) in enumerate([
-        ("A", "Rogue", 28, 600), ("B", "Thief", 29, 900), ("C", "Assassin", 31, 300),
-        ("D", "Assassin", 32, 1200), ("E", "Bandit", 30, 5000), ("F", "Assassin", 35, 5000),
-    ]):
+    for i, (m, job, lvl, exp) in enumerate(
+        [
+            ("A", "Rogue", 28, 600),
+            ("B", "Thief", 29, 900),
+            ("C", "Assassin", 31, 300),
+            ("D", "Assassin", 32, 1200),
+            ("E", "Bandit", 30, 5000),
+            ("F", "Assassin", 35, 5000),
+        ]
+    ):
         save_segment(conn, _seg(i * 1000, exp=exp, level=lvl, map_name=m, job=job))
     rows = best_maps(conn, {"Rogue", "Thief", "Assassin"}, 31)
     assert [r[0] for r in rows] == ["D", "B", "A"]

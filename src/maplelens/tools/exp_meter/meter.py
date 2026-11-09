@@ -12,6 +12,7 @@ class Rate:
     exp_per_min: float
     pct_per_min: float
     minutes_to_level: float | None
+    paused: bool = False  # no gain for longer than the idle cutoff: the numbers are the last ones
 
 
 @dataclass
@@ -50,8 +51,9 @@ class ExpMeter:
         )
         self._fields = fields
         self._base: tuple[ExpValue, int | None] | None = None  # last non-None exp and its level
-        self._first_t: float | None = None
-        self._window: deque[tuple[float, int, float]] = deque()  # (t, raw, pct) counted gains
+        # (t, raw, pct, gap) gains whose gap since the previous exp event is under the cutoff
+        self._window: deque[tuple[float, int, float, float]] = deque()
+        self._event_t: float | None = None  # last exp event: the baseline or an accepted gain
         self._recent: deque[float] = deque(maxlen=50)  # pct of the last counted gains
         self._seg: Segment | None = None
         self._closed: list[Segment] = []
@@ -59,8 +61,6 @@ class ExpMeter:
 
     def feed(self, r: Reading | None) -> None:
         t = r.t if r else None
-        if r and self._first_t is None:
-            self._first_t = t
         vals = (r.exp, r.level, r.job, r.map_name) if r else (None,) * 4
         exp_ch, *_ = (f.update(v) for f, v in zip(self._fields, vals, strict=True))
 
@@ -72,6 +72,8 @@ class ExpMeter:
         if exp_ch and self._exp.value is not None:
             if self._base is not None:
                 self._on_exp(*self._base, None in ctx, t)
+            else:
+                self._event_t = t
             self._base = (self._exp.value, level)
 
         # 2. close on a confirmed change to a different non-None value, then open
@@ -114,9 +116,13 @@ class ExpMeter:
         gain = self._gain(old, old_level)
         if gain:
             self._recent.append(gain[1])
-            self._window.append((t, *gain))
-            while self._window[0][0] <= t - self.window_s:
-                self._window.popleft()
+            # a gain right after an idle stretch only starts a new one: neither its time nor its exp
+            if (gap := t - self._event_t) <= self.idle_cutoff_s:
+                self._window.append((t, *gain, gap))
+                active = sum(g[3] for g in self._window)
+                while active - self._window[0][3] >= self.window_s:  # last window_s of active time
+                    active -= self._window.popleft()[3]
+            self._event_t = t
         seg = self._seg
         if seg and not paused:  # gains while paused count in the live rate only
             if self._last_event_t is not None and t - self._last_event_t <= self.idle_cutoff_s:
@@ -133,14 +139,24 @@ class ExpMeter:
         self._seg = self._last_event_t = None
 
     def rate(self, now: float) -> Rate | None:
-        if self._first_t is None or now - self._first_t < 60:
+        """EXP per minute of active time over the last `window_s` of it; None under a minute."""
+        active = sum(g[3] for g in self._window)
+        if active < 60:
             return None
-        minutes = min(self.window_s, now - self._first_t) / 60
-        gains = [g for g in self._window if now - self.window_s < g[0] <= now]
-        pct_per_min = sum(g[2] for g in gains) / minutes
+        minutes = active / 60
+        pct_per_min = sum(g[2] for g in self._window) / minutes
         exp = self._exp.value
         left = (100 - exp.pct) / pct_per_min if exp and pct_per_min > 0 else None
-        return Rate(sum(g[1] for g in gains) / minutes, pct_per_min, left)
+        paused = now - self._event_t > self.idle_cutoff_s
+        return Rate(sum(g[1] for g in self._window) / minutes, pct_per_min, left, paused)
+
+    @property
+    def job(self) -> str | None:
+        return self._job.value
+
+    @property
+    def level(self) -> int | None:
+        return self._level.value
 
     def pop_closed(self) -> list[Segment]:
         closed, self._closed = self._closed, []

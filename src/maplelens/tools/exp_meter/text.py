@@ -23,7 +23,8 @@ def box_lines(rate: Rate | None, waiting: bool) -> list[tuple[str, list[str]]]:
         exp = f"{rate.exp_per_min * 60:,.0f} /h"
         pct = f"{rate.pct_per_min * 60:.2f}% /h"
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
-    return [("EXP · last 5 min", [exp, pct]), ("Level up in", [eta])]
+    label = "EXP · paused" if rate and rate.paused else "EXP · last 5 min"
+    return [(label, [exp, pct]), ("Level up in", [eta])]
 
 
 def format_last(ts: float, now: float) -> str:
