@@ -478,9 +478,9 @@ def test_header_keeps_the_level_when_points_crowd_it(make):
     (head,) = [w for w in tool.tab.findChildren(QLabel) if w.text().endswith("Lv 12")]
     (chip,) = [w for w in tool.tab.findChildren(QLabel) if w.objectName() == "chip"]
     assert chip.text() == "12 AP · 10 SP"
-    assert (
-        head.sizeHint().width() + 6 + chip.sizeHint().width() <= overlay.TAB_W
-    )  # 6: the row's spacing
+    # 6: the row's spacing
+    used = head.sizeHint().width() + 6 + chip.sizeHint().width()
+    assert used <= overlay.TAB_W
 
 
 def test_a_long_job_name_is_cut_not_the_level(make):

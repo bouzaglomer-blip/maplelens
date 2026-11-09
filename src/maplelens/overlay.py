@@ -51,8 +51,9 @@ QPushButton:disabled {{ background: {HERE_BG}; color: {LABEL_COLOR}; }}""",
 QPushButton {{ background: transparent; color: #e6edf7; border: 1px solid {EDGE};
     border-radius: 4px; padding: 3px; }}""",
 }
-TAB_W = 212  # every tab's width: the box is 236 px wide, less its 12 px side margins
-# (four tab titles and the Path tab's dot, at the strip's 14 px spacing)
+TAB_W = 214  # every tab's width: the box is 238 px wide, less its 12 px side margins
+# (four tab titles and the Path tab's dot, at the strip's 14 px spacing; measured on a real
+# Windows window, Segoe UI: 213 px of strip wants 237, the next even width is 238)
 # The box's menu button: three bullets. The midline ellipsis isn't in Segoe UI, and
 # the font Qt falls back to draws it faint and makes the box taller.
 MENU_MARK = "•••"
@@ -266,7 +267,9 @@ class _Touches(QObject):
 class Box(QWidget):
     """A small dark box with a tab strip; drag it, its spot is saved per game window."""
 
-    def __init__(self, name: str, settings: dict, on_moved: Callable[[], None]):
+    def __init__(  # noqa: PLR0915 - the box's parts, built in order
+        self, name: str, settings: dict, on_moved: Callable[[], None]
+    ):
         super().__init__(None, _OVERLAY)
         self._name, self._settings, self._on_moved = name, settings, on_moved
         self._origin: QPoint | None = None  # game client top-left, logical px
@@ -276,7 +279,8 @@ class Box(QWidget):
         self._count = _Touches(self)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
-        self._tab_buttons, self._tab_dots = [], []  # QPushButtons, QLabels
+        self._tab_buttons: list[QPushButton] = []
+        self._tab_dots: list[QLabel] = []
         self._strip_row = QWidget()  # holds the strip, so it hides as one
         self._strip = QHBoxLayout(self._strip_row)
         self._strip.setContentsMargins(0, 0, 0, 0)
