@@ -7,6 +7,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from maplelens.readers.minimap_pos import MinimapView
+    from maplelens.readers.quest_window import QuestOpen
     from maplelens.readers.skill_window import SkillWindow
     from maplelens.readers.stat_window import StatWindow
 
@@ -28,6 +29,7 @@ class Reading:
     minimap: "MinimapView | None" = None  # see minimap_pos.read_view
     stats: "StatWindow | str | None" = None  # see stat_window.read_stat_window
     skills: "SkillWindow | str | None" = None  # see skill_window.read_skill_window
+    quest: "QuestOpen | str | None" = None  # the quest window; None: none open
 
 
 def read_all(frame: np.ndarray, t: float) -> Reading:

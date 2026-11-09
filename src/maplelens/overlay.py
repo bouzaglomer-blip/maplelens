@@ -149,7 +149,7 @@ class Row(QWidget):
     """One line to act on: a name, a grey line under it, and a yellow \u203a when a click goes
     somewhere. Names never wrap: they're cut to fit, the full one is the tooltip."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - the row's parts; all but three are keywords
         self,
         name: str,
         sub: str,
@@ -157,9 +157,10 @@ class Row(QWidget):
         *,
         best: bool = False,
         outline: bool = False,
+        trailing: QWidget | None = None,  # in place of the arrow, e.g. a button
     ):
         super().__init__()
-        self.name, self.sub, self.best = name, sub, best
+        self.name, self.sub, self.best, self.outline = name, sub, best, outline
         self.clickable, self._on_click = on_click is not None, on_click
         self.setObjectName("row")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -175,7 +176,8 @@ class Row(QWidget):
         col = QVBoxLayout()
         col.setSpacing(0)
         arrow = text_label("\u203a", LABEL_PT + 2, ACCENT, bold=True)  # single right angle
-        room = TAB_W - 2 * _PAD - 2 - (arrow.sizeHint().width() + 6 if self.clickable else 0)
+        end = trailing or (arrow if self.clickable else None)
+        room = TAB_W - 2 * _PAD - 2 - (end.sizeHint().width() + 6 if end else 0)
         title = text_label(name, LABEL_PT, VALUE_COLOR, bold=best or outline)
         title.setText(QFontMetrics(title.font()).elidedText(name, Qt.ElideRight, room))
         title.setToolTip(name)
@@ -185,8 +187,8 @@ class Row(QWidget):
             under.setText(QFontMetrics(under.font()).elidedText(sub, Qt.ElideRight, room))
             col.addWidget(under)
         row.addLayout(col, 1)
-        if self.clickable:
-            row.addWidget(arrow, 0, Qt.AlignVCenter)
+        if end:
+            row.addWidget(end, 0, Qt.AlignVCenter)
 
     def click(self) -> None:
         if self._on_click:

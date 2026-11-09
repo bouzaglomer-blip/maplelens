@@ -1,0 +1,289 @@
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from maplelens.readers import Reading
+from maplelens.readers.quest_window import QuestOpen
+from maplelens.readers.window import UNREADABLE
+from maplelens.store import DEFAULTS
+from maplelens.tools.quest_helper.data import MAPS, Quest, load
+
+SMALL = Path(__file__).parent / "fixtures" / "quests_small.json"
+RECT = (0, 0, 1366, 768)
+MIRROR = "Bringing a Mirror to Heena"  # 1001: Sera gives it, Snail x3, Heena takes it
+SNAILS = 1002  # Snail Hunt: Snail x5 (the same map as 1001's), hand in to Heena
+BIG = 1003  # Big Hunt: Sera gives it, four Snail rows, Heena takes it: 6 rows
+SHARED = "Test of Qualification"  # 1004 and 1005
+SNAIL_MAP, TOWN = "000000040", "000000001"
+
+
+def data():
+    d = load(SMALL, MAPS)
+    q = d.quests[1001]
+    extra = [
+        Quest(SNAILS, "Snail Hunt", None, 1, ((2, 5),), (), ()),
+        Quest(BIG, "Big Hunt", 2, 1, ((2, 1), (2, 2), (2, 3), (2, 4)), (), ()),
+        replace(q, id=1004, name=SHARED),
+        replace(q, id=1005, name=SHARED),
+    ]
+    return replace(d, quests={**d.quests, **{x.id: x for x in extra}})
+
+
+def R(quest=None):
+    return Reading(0.0, None, None, None, None, quest=quest)
+
+
+def opened(name=MIRROR, taken=False):
+    return R(QuestOpen(name, taken))
+
+
+@pytest.fixture
+def make(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from maplelens.tools.quest_helper.ui import QuestHelperTool
+
+    QApplication.instance() or QApplication([])
+
+    def build(tracked=(), expanded=None, heading=None):
+        calls = {"go": [], "stop": 0, "changed": 0, "heading": heading}
+        settings = dict(
+            DEFAULTS,
+            quests_tracked=tracked if isinstance(tracked, str) else list(tracked),
+            quests_expanded=expanded,
+        )
+
+        def changed():
+            calls["changed"] += 1
+
+        def stop():
+            calls["stop"] += 1
+            calls["heading"] = None
+
+        def go(map_id, at, label):
+            calls["go"].append((map_id, at, label))
+
+        tool = QuestHelperTool(
+            settings,
+            changed,
+            go,
+            lambda: calls["heading"],
+            stop,
+            lambda m: None,
+            data(),
+        )
+        tool.settings, tool.calls = settings, calls
+        return tool
+
+    return build
+
+
+def visible(tool, kind):
+    shown = [w for w in tool.tab.findChildren(kind) if w.isVisibleTo(tool.tab)]
+    return sorted(shown, key=lambda w: w.mapTo(tool.tab, w.rect().topLeft()).y())
+
+
+def texts(tool):
+    from PySide6.QtWidgets import QLabel, QPushButton
+
+    from maplelens.overlay import InfoLine
+
+    # a name cut to fit has its full text as the tooltip
+    return [
+        w.toolTip() or w.text() for k in (QLabel, QPushButton, InfoLine) for w in visible(tool, k)
+    ]
+
+
+def rows(tool):
+    from maplelens.overlay import Row
+
+    return visible(tool, Row)
+
+
+def button(tool, text):
+    from PySide6.QtWidgets import QPushButton
+
+    found = [b for b in visible(tool, QPushButton) if text in b.text()]
+    assert found, (text, texts(tool))
+    return found[0]
+
+
+def test_empty_says_open_a_quest(make):
+    from maplelens.tools.quest_helper.ui import EMPTY
+
+    tool = make()
+    tool.update(R(), RECT, 0)
+    assert EMPTY in texts(tool) and not rows(tool) and not tool.open
+    assert tool.title == "Quests"
+
+
+def test_open_quest_shows_rows_and_track(make):
+    from maplelens.tools.quest_helper.ui import OPEN, TRACK
+
+    tool = make()
+    tool.update(opened(taken=False), RECT, 0)
+    assert tool.open
+    assert OPEN in texts(tool) and MIRROR in texts(tool) and TRACK in texts(tool)
+    assert [(r.name, r.sub) for r in rows(tool)] == [
+        ("Sera", "Mushroom Town - West Entrance · gives the quest"),
+        ("Snail ×3 · Shell ×10", "Snail Hunting Ground I"),
+        ("Heena", "Mushroom Town - West Entrance · hand in"),
+    ]
+    assert all(r.clickable for r in rows(tool))
+    tool.update(opened(taken=True), RECT, 1)  # in progress: no giver row
+    assert [r.name for r in rows(tool)] == ["Snail ×3 · Shell ×10", "Heena"]
+
+
+def test_track_saves_and_survives_close(make):
+    from maplelens.tools.quest_helper.ui import TRACK, TRACKING
+
+    tool = make()
+    tool.update(opened(), RECT, 0)
+    button(tool, TRACK).click()
+    assert tool.settings["quests_tracked"] == [1001] and tool.calls["changed"] == 1
+    for t in (1, 2):
+        tool.update(R(), RECT, t)
+    assert not tool.open
+    assert TRACKING.format(n=1) in texts(tool)
+    assert any(MIRROR in t for t in texts(tool))
+
+
+def test_tracked_open_quest_shows_tracked_mark_once(make):
+    from maplelens.tools.quest_helper.ui import TRACK, TRACKED
+
+    tool = make(tracked=[1001, SNAILS])
+    tool.update(opened(), RECT, 0)
+    shown = texts(tool)
+    assert TRACKED in shown and TRACK not in shown
+    assert sum(MIRROR in t for t in shown) == 1  # on top, not again under Tracking
+    assert any("Snail Hunt" in t for t in shown)
+
+
+def test_one_expanded_and_remove(make):
+    tool = make(tracked=[1001, SNAILS], expanded=1001)
+    tool.update(R(), RECT, 0)
+    assert "▾" in button(tool, MIRROR).text() and "▸" in button(tool, "Snail Hunt").text()
+    assert [r.name for r in rows(tool)] == ["Snail ×3 · Shell ×10", "Heena"]  # no giver
+    button(tool, "Snail Hunt").click()
+    assert tool.settings["quests_expanded"] == SNAILS and tool.calls["changed"] == 1
+    assert "▸" in button(tool, MIRROR).text() and "▾" in button(tool, "Snail Hunt").text()
+    assert [r.name for r in rows(tool)] == ["Snail ×5", "Heena"]
+    from PySide6.QtWidgets import QPushButton
+
+    marks = [b for b in visible(tool, QPushButton) if b.text() == "×"]
+    marks[-1].click()  # Snail Hunt's
+    assert tool.settings["quests_tracked"] == [1001] and tool.settings["quests_expanded"] is None
+    assert tool.calls["changed"] == 2
+    assert not any("Snail Hunt" in t for t in texts(tool))
+
+
+def test_row_click_goes(make):
+    tool = make()
+    tool.update(opened(), RECT, 0)
+    by = {r.name: r for r in rows(tool)}
+    by["Snail ×3 · Shell ×10"].click()
+    by["Heena"].click()
+    assert tool.calls["go"] == [(SNAIL_MAP, None, None), (TOWN, (-46, 280), "Heena")]
+
+
+def test_running_row_outlined_with_stop(make):
+    from maplelens.tools.quest_helper.ui import GOING, STOP
+
+    tool = make(heading=(TOWN, (-46, 280), 3))
+    tool.update(opened(), RECT, 0)
+    (run,) = [r for r in rows(tool) if r.outline]
+    assert run.name == "Heena" and run.sub == GOING.format(n=3)
+    button(tool, STOP).click()
+    assert tool.calls["stop"] == 1
+    assert not any(r.outline for r in rows(tool))  # redrawn at once
+
+
+def test_row_click_before_map_known_outlines_nothing(make):
+    tool = make()
+    tool.update(opened(), RECT, 0)
+    rows(tool)[1].click()
+    assert tool.calls["go"] == [(SNAIL_MAP, None, None)]
+    assert not any(r.outline for r in rows(tool))
+
+
+def test_row_click_outlines_the_row_at_once(make):
+    tool = make()
+    tool.update(opened(), RECT, 0)
+    tool.calls["heading"] = (SNAIL_MAP, None, 2)  # the path tool starts the trip
+    rows(tool)[1].click()
+    assert [r.name for r in rows(tool) if r.outline] == ["Snail ×3 · Shell ×10"]
+
+
+def test_also_for(make):
+    from maplelens.tools.quest_helper.ui import ALSO
+
+    tool = make(tracked=[SNAILS], expanded=SNAILS)
+    tool.update(opened(taken=True), RECT, 0)
+    snail = next(r for r in rows(tool) if r.name.startswith("Snail ×3"))
+    assert snail.sub.endswith(" · " + ALSO.format(quest="Snail Hunt"))
+    assert snail.toolTip() == snail.sub
+    hunt = next(r for r in rows(tool) if r.name == "Snail ×5")
+    assert hunt.sub.endswith(" · " + ALSO.format(quest=MIRROR))  # the open, untracked quest
+    heena = next(r for r in rows(tool) if r.name == "Heena")  # the open quest's hand-in
+    assert heena.sub.endswith(ALSO.format(quest="Snail Hunt"))  # Snail Hunt's is on that map
+
+
+def test_unreadable_unknown_and_shared_lines(make):
+    from maplelens.tools.quest_helper.ui import OPEN, SHARED_NAME, UNKNOWN, UNREAD
+
+    tool = make()
+    for quest, line in (
+        (UNREADABLE, UNREAD),
+        (QuestOpen("Nobody's Quest", None), UNKNOWN),
+        (QuestOpen(SHARED, None), SHARED_NAME),
+    ):
+        tool.update(R(quest), RECT, 0)
+        assert line in texts(tool) and OPEN in texts(tool) and not rows(tool)
+
+
+def test_one_missed_reading_keeps_the_open_quest(make):
+    tool = make()
+    tool.update(opened(), RECT, 0)
+    tool.update(R(), RECT, 1)
+    assert MIRROR in texts(tool) and not tool.open
+    tool.update(opened(), RECT, 2)
+    assert MIRROR in texts(tool) and tool.open
+    tool.update(R(), RECT, 3)
+    assert MIRROR in texts(tool)
+    tool.update(None, RECT, 4)  # no frame at all counts as closed
+    assert MIRROR not in texts(tool)
+
+
+def test_unknown_tracked_id_is_dropped(make):
+    tool = make(tracked=[999999, SNAILS], expanded=999999)
+    tool.update(R(), RECT, 0)
+    assert tool.settings["quests_tracked"] == [SNAILS]
+    assert tool.settings["quests_expanded"] is None
+    assert any("Snail Hunt" in t for t in texts(tool))
+
+
+def test_bad_settings_are_replaced(make):
+    tool = make(tracked="oops", expanded="x")
+    tool.update(R(), RECT, 0)
+    assert tool.settings["quests_tracked"] == [] and tool.settings["quests_expanded"] is None
+
+
+def test_height_capped(make):
+    from maplelens.tools.quest_helper.ui import MAX_H
+
+    tool = make(tracked=[1001, SNAILS, 1004], expanded=1001)
+    tool.update(R(QuestOpen("Big Hunt", False)), RECT, 0)
+    assert len(rows(tool)) >= 6
+    assert tool.tab.sizeHint().height() <= MAX_H
+
+
+def test_nothing_takes_focus(make):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QWidget
+
+    tool = make(tracked=[SNAILS], heading=(SNAIL_MAP, None, 2))
+    tool.update(opened(), RECT, 0)
+    taking = [w for w in tool.tab.findChildren(QWidget) if w.focusPolicy() != Qt.NoFocus]
+    assert taking == []
