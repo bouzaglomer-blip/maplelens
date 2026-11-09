@@ -244,7 +244,27 @@ A trip without `at` ends on reaching the map, as today.
 - Modify: `src/maplelens/readers/__init__.py` (`Reading.quest`, `read_all`)
 - Test: `tests/test_readers.py`
 
-**Findings from Task 1:** *(written by Task 1, Step 5)*
+**Findings from Task 1** (five owner grabs, 2026-11-09; the controller read them against the OSMS data):
+
+- **Layout.** The quest window has two panes side by side. The left (list) pane has a title bar "QUEST" with a close button, then three tabs: **Available**, **In Progress** and **Completed**. The active tab is drawn red/pink and the others grey. Below the tabs, quests sit in groups (a group bar per region, e.g. "Ellinia (1)"), and the selected quest's row is highlighted dark blue with white text. The right (details) pane has a blue header block holding a small green circle, a title, "Level N+" and an NPC picture. Under it come the body lines.
+- **The header and the list rows show the quest's CHAIN name, not its own name.** OSMS `chain` makes this concrete:
+  - the header "Caretaker's Ledger" is quest 10213 "The Filing Error" (chain "Caretaker's Ledger");
+  - the header "Maple World's Unique F…" is quest 80001 "Make a Match Cards Set" (chain "Maple World's Unique Fun: Match Cards").
+
+  Long chain names are cut with "…" in both the header and the list row.
+- **The quest's own name is the bold dark line in the details body.** Examples: "The Filing Error", "Make a Match Cards Set". It is never cut. Its height varies:
+  - in progress: under a "Quest Summary" box (item icon + "Torn Ledger Pages 0 / 25");
+  - available: under a blue "! Talk to NPC Casey" line.
+
+  The description text follows it, in a lighter font, with NPC and map names in blue.
+- **Taken.** In Progress means `taken=True`, Available means `taken=False`. **Completed** returns `None`, since there's nothing to help with.
+- **Read the bold body line,** snapped with `map_name.snap_title` to `known_quest_names()`. This also tells shared names apart only if they differ, so job-advancement quests still show the shared-name line. The header and list text aren't needed.
+- **Off screen.** In `quest_offscreen_1366x768_100.png` the details pane is cut by the screen edge, so the bold line isn't visible. That gives `UNREADABLE`.
+- **Scale.** The window scales with the frame: 770x556 px in the 1920x1080 grabs, 548x397 in the 1366x768 ones. It's drawn at screen-pixel positions, like the stat window (`readers/window.py`).
+- **Fixtures** (cropped, no names or chat): `quest_progress_1920x1080_100.png`, `quest_available_1920x1080_100.png`, `quest_progress_1366x768_100.png`, `quest_available_1366x768_100.png` and `quest_offscreen_1366x768_100.png`. They're in `.superpowers/sdd/2026-11-09-quest-helper/grabs/` and move to `tests/fixtures/screens/`. Expected readings:
+  - the progress grabs: `QuestOpen("The Filing Error", True)`;
+  - the available grabs: `QuestOpen("Make a Match Cards Set", False)` (80001 isn't in `quests.json`; the name is returned as read);
+  - the off-screen grab: `UNREADABLE`.
 
 **Interfaces:**
 - Produces:
