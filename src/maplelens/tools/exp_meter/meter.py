@@ -53,7 +53,7 @@ class ExpMeter:
         self._base: tuple[ExpValue, int | None] | None = None  # last non-None exp and its level
         # (t, raw, pct, gap) gains whose gap since the previous exp event is under the cutoff
         self._window: deque[tuple[float, int, float, float]] = deque()
-        self._event_t: float | None = None  # last exp event: the baseline or an accepted gain
+        self._event_t: float | None = None  # last accepted gain
         self._recent: deque[float] = deque(maxlen=50)  # pct of the last counted gains
         self._seg: Segment | None = None
         self._closed: list[Segment] = []
@@ -72,8 +72,6 @@ class ExpMeter:
         if exp_ch and self._exp.value is not None:
             if self._base is not None:
                 self._on_exp(*self._base, None in ctx, t)
-            else:
-                self._event_t = t
             self._base = (self._exp.value, level)
 
         # 2. close on a confirmed change to a different non-None value, then open
@@ -116,8 +114,8 @@ class ExpMeter:
         gain = self._gain(old, old_level)
         if gain:
             self._recent.append(gain[1])
-            # a gain right after an idle stretch only starts a new one: neither its time nor its exp
-            if (gap := t - self._event_t) <= self.idle_cutoff_s:
+            # the first gain, or one after an idle stretch, only starts the clock: no time, no exp
+            if self._event_t is not None and (gap := t - self._event_t) <= self.idle_cutoff_s:
                 self._window.append((t, *gain, gap))
                 active = sum(g[3] for g in self._window)
                 while active - self._window[0][3] >= self.window_s:  # last window_s of active time

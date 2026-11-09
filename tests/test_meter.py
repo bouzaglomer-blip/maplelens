@@ -52,8 +52,9 @@ def test_level_up_counts_across_wrap():
     for i, pct in enumerate([94, 95, 96, 97, 98]):
         feed(m, i * 30, pct * 1000, pct)
     feed(m, 150, 1000, 1.0, level=23)
-    # 4 gains of 1.0 at level 22, then (100 - 98) + 1 = 3.0 across the wrap
-    assert m.rate(150.5).pct_per_min == pytest.approx(7.0 / (150 / 60))  # 150 s of active time
+    # 4 gains of 1.0 at level 22, then (100 - 98) + 1 = 3.0 across the wrap;
+    # the first gain only starts the clock, so 6.0 over 120 s
+    assert m.rate(150.5).pct_per_min == pytest.approx(6.0 / (120 / 60))
     closed = m.pop_closed()
     assert len(closed) == 1
     assert closed[0].level == 22
@@ -66,11 +67,11 @@ def test_level_up_counts_across_wrap():
 
 def test_death_not_counted():
     m = ExpMeter()
-    for i, pct in enumerate([48, 49, 50]):
+    for i, pct in enumerate([47, 48, 49, 50]):
         feed(m, i * 30, pct * 1000, pct)
-    before = (m.open_segment().pct, m.rate(100).pct_per_min)
-    feed(m, 90, 45000, 45)
-    assert (m.open_segment().pct, m.rate(100).pct_per_min) == before
+    before = (m.open_segment().pct, m.rate(130).pct_per_min)
+    feed(m, 120, 45000, 45)
+    assert (m.open_segment().pct, m.rate(130).pct_per_min) == before
 
 
 def test_jump_not_counted():
@@ -105,10 +106,10 @@ def test_map_change_closes_segment():
 
 def test_death_then_map_change_counts_nothing():
     m = ExpMeter()
-    steady(m, 3)
-    feed(m, 90, 500, 5.0, map_name="Town")
+    steady(m, 4)
+    feed(m, 120, 500, 5.0, map_name="Town")
     closed = m.pop_closed()
-    assert [s.pct for s in closed] == [pytest.approx(1.0)]
+    assert [s.pct for s in closed] == [pytest.approx(1.5)]
     seg = m.open_segment()
     assert seg.map_name == "Town"
     assert seg.pct == 0
@@ -152,7 +153,7 @@ def test_covered_bar_keeps_baseline():
         m.feed(r)
     feed(m, 130, 1150, 11.5)
     assert m.open_segment().pct == pytest.approx(1.5)
-    assert m.rate(131).pct_per_min == pytest.approx(1.5 / (130 / 60))
+    assert m.rate(131).pct_per_min == pytest.approx(1.0 / (100 / 60))
 
 
 def test_covered_level_up_never_negative():
@@ -189,9 +190,9 @@ def test_single_dropped_frame_keeps_accrual():
 def test_rate_after_a_minute_of_active_time_even_if_app_started_earlier():
     m = ExpMeter()
     m.feed(None)  # app running long before any game reading
-    for i in range(3):  # baseline at 1000.5, gains at 1030.5, 1060.5
+    for i in range(4):  # baseline at 1000.5; 1030.5 starts the clock; 1060.5, 1090.5 count
         feed(m, 1000 + i * 30, 1000 + 100 * i, 10 + 0.5 * i)
-    rate = m.rate(1061)
+    rate = m.rate(1091)
     assert rate.pct_per_min == pytest.approx(1.0)
     assert not rate.paused
 
@@ -215,3 +216,12 @@ def test_window_is_last_five_active_minutes_across_a_gap():
         feed(m, 900 + (i - 1) * 30, 1500 + 100 * i, 15.0 + i)
     # window: the 3 counted 1.0 gains (90 s) + the last 7 old 0.5 gains (210 s)
     assert m.rate(991).pct_per_min == pytest.approx((3.0 + 3.5) / 5)
+
+
+def test_walk_from_town_is_not_training_time():
+    m = ExpMeter()
+    feed(m, 0, 1000, 10.0)  # app started in town
+    for i in range(1, 5):  # first kill 80 s later, then one every 30 s
+        feed(m, 50 + i * 30, 1000 + 100 * i, 10 + 0.5 * i)
+    # only the 3 gains after the first kill count: 1.5 % over 90 s
+    assert m.rate(171).pct_per_min == pytest.approx(1.0)

@@ -84,3 +84,10 @@ def test_best_maps_job_line_level_range_top_three(tmp_path):
     rows = best_maps(conn, {"Rogue", "Thief", "Assassin"}, 31)
     assert [r[0] for r in rows] == ["D", "B", "A"]
     assert rows[0][1] == approx(1200)
+
+
+def test_best_maps_skips_maps_with_under_a_minute_of_training(tmp_path):
+    conn = open_db(tmp_path / "t.db")
+    save_segment(conn, _seg(0, exp=500, active_s=10.0, map_name="One lucky kill"))
+    save_segment(conn, _seg(1000, exp=600, map_name="Real"))
+    assert [r[0] for r in best_maps(conn, {"Hero"}, 44)] == ["Real"]

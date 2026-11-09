@@ -66,6 +66,6 @@ def best_maps(
     return conn.execute(
         "SELECT map, SUM(exp) / SUM(active_s) * 60 AS r, SUM(pct) / SUM(active_s) * 60"
         f" FROM exp_segments WHERE {_KEPT} AND job IN ({marks}) AND level BETWEEN ? AND ?"
-        " GROUP BY map ORDER BY r DESC LIMIT ?",
+        " GROUP BY map HAVING SUM(active_s) >= 60 ORDER BY r DESC LIMIT ?",  # not one lucky kill
         (*jobs, level - spread, level + spread, n),
     ).fetchall()
