@@ -111,6 +111,28 @@ class ClassData:
     def plan(self, job: str | None) -> JobPlan | None:
         return self.jobs.get(ALIASES.get(job, job))
 
+    def line(self, job: str) -> frozenset[str]:
+        """The job, every job before and after it on the advancement tree, and their aliases."""
+        children: dict[str, set[str]] = {}
+        parent: dict[str, str] = {}
+        for p in self.jobs.values():
+            for adv in (p.advance, *(b.advance for b in p.builds)):
+                for nxt in adv.next_jobs if adv else ():
+                    children.setdefault(p.job, set()).add(nxt)
+                    parent[nxt] = p.job
+        start = ALIASES.get(job, job)
+        if start not in children and start not in parent:
+            return frozenset({job})
+        found, todo = {start}, [start]
+        while todo:  # descendants
+            found |= (new := children.get(todo.pop(), set()) - found)
+            todo += new
+        j = start
+        while j in parent:  # ancestors
+            found.add(j := parent[j])
+        found |= {alias for alias, name in ALIASES.items() if name in found}
+        return frozenset(found)
+
 
 def _hold(v) -> tuple[int, float]:
     return (v["base"], v["per_level"]) if isinstance(v, dict) else (v, 0)

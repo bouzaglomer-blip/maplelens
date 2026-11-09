@@ -9,15 +9,16 @@ from shiboken6 import delete
 
 from maplelens.overlay import (
     ACCENT,
+    BOX_FILL,
     CHIP_BG,
     FONT,
     HERE_BG,
     LABEL_COLOR,
     LABEL_PT,
     TAB_W,
-    VALUE_COLOR,
     InfoLine,
     Layer,
+    Row,
     game_to_layer,
     text_label,
 )
@@ -50,72 +51,12 @@ STAT_UNREAD = "Can't read your stat window: move it fully into view"
 SKILL_UNREAD = "Can't read your skill window: move it fully into view"
 SCROLL = "scroll the list once"
 TIERS = {0: "Beginner", 1: "1st job", 2: "2nd job"}
-RING_R, TAG_GAP = 11, 26  # ring radius; the tag starts this far right of the + centre
+# Ring radius, and where the tag starts from the ring's left edge: past the pair of + buttons,
+# which ends 20 px right of the ring's centre. Game base size; both grow with its buttons.
+RING_R, TAG_GAP = 11, 36
 MARK_PT = 9  # the tags over the game's windows keep their size; the box's labels grew
 
 DASH = "\u2013"
-_PAD = 6  # a row's side padding
-
-
-class Row(QWidget):
-    """One line to act on: a name, a grey line under it, and a yellow \u203a when a click goes
-    somewhere. Names never wrap: they're cut to fit, the full one is the tooltip."""
-
-    def __init__(  # noqa: PLR0913 - what the row shows, and the width its names are cut to
-        self,
-        name: str,
-        sub: str,
-        on_click: Callable[[], None] | None,
-        *,
-        best: bool = False,
-        outline: bool = False,
-        width: int = TAB_W,
-    ):
-        super().__init__()
-        self.name, self.sub, self.best = name, sub, best
-        self.clickable, self._on_click = on_click is not None, on_click
-        self.setObjectName("row")
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFocusPolicy(Qt.NoFocus)
-        bg = HERE_BG if best or outline else "transparent"
-        edge = f"1px solid {ACCENT}" if outline else f"1px solid {bg}"
-        self.setStyleSheet(f"#row {{ background: {bg}; border: {edge}; border-radius: 4px; }}")
-        if self.clickable:
-            self.setCursor(Qt.PointingHandCursor)
-        row = QHBoxLayout(self)
-        row.setContentsMargins(_PAD, 3, _PAD, 3)
-        row.setSpacing(6)
-        col = QVBoxLayout()
-        col.setSpacing(0)
-        arrow = text_label("\u203a", LABEL_PT + 2, ACCENT, bold=True)  # single right angle
-        room = width - 2 * _PAD - 2 - (arrow.sizeHint().width() + 6 if self.clickable else 0)
-        title = text_label(name, LABEL_PT, VALUE_COLOR, bold=best or outline)
-        title.setText(QFontMetrics(title.font()).elidedText(name, Qt.ElideRight, room))
-        title.setToolTip(name)
-        col.addWidget(title)
-        if sub:
-            under = text_label(sub, LABEL_PT, LABEL_COLOR)
-            under.setText(QFontMetrics(under.font()).elidedText(sub, Qt.ElideRight, room))
-            col.addWidget(under)
-        row.addLayout(col, 1)
-        if self.clickable:
-            row.addWidget(arrow, 0, Qt.AlignVCenter)
-
-    def click(self) -> None:
-        if self._on_click:
-            self._on_click()
-
-    # A clickable row takes its press, as a button does, so the box doesn't start a drag;
-    # any other row leaves press and release to the box, which drags.
-    def mousePressEvent(self, event):
-        event.setAccepted(self.clickable and event.button() == Qt.LeftButton)
-
-    def mouseReleaseEvent(self, event):
-        if not (self.clickable and event.button() == Qt.LeftButton):
-            event.ignore()
-            return
-        if self.rect().contains(event.position().toPoint()):
-            self.click()
 
 
 class _Mark(QWidget):
@@ -126,13 +67,15 @@ class _Mark(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFont(QFont(FONT, MARK_PT, QFont.Bold))
-        self.tag, self.centre, self.ring = "", (0, 0), False
+        self.tag, self.centre, self.ring, self.scale = "", (0, 0), False, 1.0
         self.hide()
 
-    def put(self, tag: str, centre: tuple[float, float], ring: bool) -> None:
-        self.tag, self.centre, self.ring = tag, centre, ring
-        w = TAG_GAP + QFontMetrics(self.font()).horizontalAdvance(tag) + 6
-        self.setGeometry(round(centre[0]) - RING_R, round(centre[1]) - RING_R, w, 2 * RING_R)
+    def put(self, tag: str, centre: tuple[float, float], ring: bool, scale: float = 1.0) -> None:
+        """`scale`: layer px per base game px, so the ring and gap follow the + buttons."""
+        self.tag, self.centre, self.ring, self.scale = tag, centre, ring, scale
+        r, gap = round(RING_R * scale), round(TAG_GAP * scale)
+        w = gap + QFontMetrics(self.font()).horizontalAdvance(tag) + 6
+        self.setGeometry(round(centre[0]) - r, round(centre[1]) - r, w, 2 * r)
         self.show()
         self.update()
 
@@ -140,14 +83,19 @@ class _Mark(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setFont(self.font())
+        r, gap = self.height() / 2, round(TAG_GAP * self.scale)
         colour = QColor(ACCENT if self.ring else LABEL_COLOR)
         if self.ring:
-            p.setPen(QPen(colour, 3))
-            p.drawEllipse(QRectF(2, 2, 2 * RING_R - 4, 2 * RING_R - 4))
+            pen = 3 * self.scale
+            p.setPen(QPen(colour, pen))
+            p.drawEllipse(QRectF(pen / 2 + 0.5, pen / 2 + 0.5, 2 * r - pen - 1, 2 * r - pen - 1))
+        th = QFontMetrics(self.font()).height() + 2
+        back = QRectF(gap - 4, r - th / 2, self.width() - gap + 3, th)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(*BOX_FILL))  # readable over any game art
+        p.drawRoundedRect(back, 4, 4)
         p.setPen(colour)
-        p.drawText(
-            QRectF(TAG_GAP, 0, self.width() - TAG_GAP, self.height()), Qt.AlignVCenter, self.tag
-        )
+        p.drawText(QRectF(gap, 0, self.width() - gap, self.height()), Qt.AlignVCenter, self.tag)
 
 
 def _tag(stat: str, a) -> str:
@@ -237,7 +185,7 @@ class ClassHelperTool:
         while len(self._pool) < len(found):
             self._pool.append(_Mark(self._layer))
         for m, (tag, (x, y), ring) in zip(self._pool, found, strict=False):
-            m.put(tag, game_to_layer(x * k, y * k, dpr), ring)
+            m.put(tag, game_to_layer(x * k, y * k, dpr), ring, k / dpr)
 
     def _ap_marks(self, r: Reading) -> list:
         st, level = r.stats, self._level

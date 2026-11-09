@@ -4,30 +4,27 @@ An open-source overlay for **MapleStory Classic** that keeps you in the game.
 Instead of alt-tabbing to price sites, class guides and route finders, MapleLens
 reads what's on your screen and shows what you need on top of the game window.
 
-> **Status: Phase 3: class helper (in progress).** Three tools are built: the EXP meter
-> (EXP/min, time to level, History window), the path arrow (points you to the next portal on
-> your route) and the class helper (a Class tab with gear, training maps, AP and SP plans for
-> every 1st and 2nd job, plus marks on the game's stat and skill windows).
->
-> Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
-> Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
->
-> Class plans adapted from the NiaDB class guides:
->   [beginners-guide-first-steps-in-maple-world](https://meowdb.com/msclassic/guides/beginners-guide-first-steps-in-maple-world) ·
->   [warrior-class-guide](https://meowdb.com/msclassic/guides/warrior-class-guide) ·
->   [magician-class-guide](https://meowdb.com/msclassic/guides/magician-class-guide) ·
->   [bowman-class-guide](https://meowdb.com/msclassic/guides/bowman-class-guide) ·
->   [thief-class-guide](https://meowdb.com/msclassic/guides/thief-class-guide) ·
->   [fighter-class-guide](https://meowdb.com/msclassic/guides/fighter-class-guide) ·
->   [page-class-guide](https://meowdb.com/msclassic/guides/page-class-guide) ·
->   [spearman-class-guide](https://meowdb.com/msclassic/guides/spearman-class-guide) ·
->   [fp-wizard-class-guide](https://meowdb.com/msclassic/guides/fp-wizard-class-guide) ·
->   [il-wizard-class-guide](https://meowdb.com/msclassic/guides/il-wizard-class-guide) ·
->   [cleric-class-guide](https://meowdb.com/msclassic/guides/cleric-class-guide) ·
->   [hunter-class-guide](https://meowdb.com/msclassic/guides/hunter-class-guide) ·
->   [crossbowman-class-guide](https://meowdb.com/msclassic/guides/crossbowman-class-guide) ·
->   [assassin-class-guide](https://meowdb.com/msclassic/guides/assassin-class-guide) ·
->   [bandit-class-guide](https://meowdb.com/msclassic/guides/bandit-class-guide)
+![MapleLens over MapleStory Classic in the Kerning City subway: the Path tab lists a 12-map route to Sleepywood, and a yellow arrow over the character points to the next portal](docs/screenshots/hero.jpg)
+
+## What it does
+
+**Path arrow** (above): pick a map, and the Path tab lists the route there while an arrow
+over your character points to the next portal.
+
+**EXP meter:** your EXP per hour and time to level, live. History keeps the average for
+every map you've trained on.
+
+![The EXP tab showing 21,433 EXP an hour and level up in 3h 49m, over the History window: the best maps for a level 29 Rogue, with Transfer Area at 49,198 EXP an hour, then the average EXP per hour for each map, class and level](docs/screenshots/exp.jpg)
+
+**Class helper:** where to train for your class and level, with your best spot first and
+one click to set a route there, plus what comes next: job advancement, gear and stats.
+
+![The Class tab for a level 29 Rogue with 5 AP and 3 SP: three training spots with Transfer Area marked as the best at 879 EXP a minute, then the level 30 advancement and gear. Over the game's stat window a ring on LUK's + button says 5 here, and over the skill window a ring on Dark Sight's says 3 here](docs/screenshots/class.jpg)
+
+**Quest helper:** open a quest in the game and the Quests tab shows where to go for each
+NPC, monster and item it needs, one click to set a route there. Track quests to keep them.
+
+![The Quests tab next to the game's quest window: The Filing Error's Torn Ledger Pages row is outlined with Going · 5 maps away and a Stop button, the Path tab shows its running dot, and a yellow arrow by the character points the way](docs/screenshots/quests.jpg)
 
 ## The promise: screen-reading only
 
@@ -102,8 +99,8 @@ Apple silicon (M1 or newer) only.
    **Open Anyway** next to MapleLens, then confirm. You only do this once.
 4. MapleLens needs Screen Recording to see the game. If the box says "Allow, then
    reopen: click •••", click **•••** on the box, choose **Open Screen Recording
-   settings…** and tick MapleLens. Then quit MapleLens (right-click its Dock icon and
-   choose **Quit**, or press ⌘Q) and click MapleLens in the Dock or open it from
+   settings…** and tick MapleLens. Then quit MapleLens (click its maple leaf in the
+   menu bar at the top of the screen and choose **Quit MapleLens**) and open it from
    Applications again: macOS doesn't give a running app the permission, and it doesn't
    offer to restart it. If MapleLens is already switched on there but the box keeps
    asking (an older copy's permission), quit MapleLens, run
@@ -111,9 +108,9 @@ Apple silicon (M1 or newer) only.
    MapleLens and allow it again.
 5. Start MapleStory Classic **windowed** (the Mac launcher's fullscreen hides overlays),
    then use the box as on Windows. If it says "Looking for MapleStory…", click **•••** on
-   the box and choose **Pick game window…**. Right-clicking MapleLens in the Dock opens
-   the same menu; **Hide MapleLens** there hides the box and the arrow, and clicking the
-   Dock icon brings them back.
+   the box and choose **Pick game window…**. MapleLens has no Dock icon: its maple leaf
+   in the menu bar opens the same menu, and **Hide MapleLens** / **Show MapleLens** there
+   hides the box and the arrow and brings them back.
 
 **Updating:** same as Windows: click **•••** on the box and choose **Update to X.Y.Z…**.
 MapleLens downloads the new dmg, checks its SHA-256 checksum, and swaps itself in. You
@@ -152,6 +149,36 @@ click **•••** on the box and use **Pick game window…**. The choice is sa
 
 Run the tests with `uv run pytest`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
 checks, the workflow and how releases are made.
+
+## Status
+
+> **Status: Phase 3: class helper (in progress).** Four tools are built: the EXP meter
+> (EXP/min, time to level, History window), the path arrow (points you to the next portal on
+> your route), the class helper (a Class tab with gear, training maps, AP and SP plans for
+> every 1st and 2nd job, plus marks on the game's stat and skill windows) and the quest
+> helper (a Quests tab that tracks quests, showing where to go for each NPC, monster and
+> item they need, and takes over while a quest window is open in the game).
+>
+> Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
+> Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
+> Quest data adapted from [meowdb](https://meowdb.com/msclassic) (NiaDB) and [OSMS Data Explorer](https://osmsdataexplorer.com) (CC BY 4.0).
+>
+> Class plans adapted from the NiaDB class guides:
+>   [beginners-guide-first-steps-in-maple-world](https://meowdb.com/msclassic/guides/beginners-guide-first-steps-in-maple-world) ·
+>   [warrior-class-guide](https://meowdb.com/msclassic/guides/warrior-class-guide) ·
+>   [magician-class-guide](https://meowdb.com/msclassic/guides/magician-class-guide) ·
+>   [bowman-class-guide](https://meowdb.com/msclassic/guides/bowman-class-guide) ·
+>   [thief-class-guide](https://meowdb.com/msclassic/guides/thief-class-guide) ·
+>   [fighter-class-guide](https://meowdb.com/msclassic/guides/fighter-class-guide) ·
+>   [page-class-guide](https://meowdb.com/msclassic/guides/page-class-guide) ·
+>   [spearman-class-guide](https://meowdb.com/msclassic/guides/spearman-class-guide) ·
+>   [fp-wizard-class-guide](https://meowdb.com/msclassic/guides/fp-wizard-class-guide) ·
+>   [il-wizard-class-guide](https://meowdb.com/msclassic/guides/il-wizard-class-guide) ·
+>   [cleric-class-guide](https://meowdb.com/msclassic/guides/cleric-class-guide) ·
+>   [hunter-class-guide](https://meowdb.com/msclassic/guides/hunter-class-guide) ·
+>   [crossbowman-class-guide](https://meowdb.com/msclassic/guides/crossbowman-class-guide) ·
+>   [assassin-class-guide](https://meowdb.com/msclassic/guides/assassin-class-guide) ·
+>   [bandit-class-guide](https://meowdb.com/msclassic/guides/bandit-class-guide)
 
 ## Disclaimer
 

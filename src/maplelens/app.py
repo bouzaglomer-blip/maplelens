@@ -15,14 +15,14 @@ from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QIcon, QImage
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import maplelens
 from maplelens import capture, update, update_mac
 from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
-from maplelens.readers import glyphs, ocr, read_all
+from maplelens.readers import glyphs, ocr, quest_window, read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.class_helper import data as class_data
 from maplelens.tools.class_helper.ui import MARKS, ClassHelperTool
@@ -30,6 +30,8 @@ from maplelens.tools.exp_meter.history import best_rate, open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
 from maplelens.tools.path_arrow import maps
 from maplelens.tools.path_arrow.ui import PathArrowTool
+from maplelens.tools.quest_helper import data as quest_data
+from maplelens.tools.quest_helper.ui import QuestHelperTool
 
 _TICK_MS = 500
 APP_NAME = "MapleLens"  # also the title of our own windows, which the picker leaves out
@@ -155,8 +157,39 @@ def poll_updates(updates: "UpdateCheck | None", now: float, seen: set[str]) -> N
         report_once(e, seen)
 
 
+class QuestFocus:
+    """Switch the box to the Quests tab while a quest window is open in the game.
+
+    The state flips only after two updates in a row agree. On close the box goes back to
+    the tab it came from, unless the player pressed in the box since.
+    """
+
+    def __init__(self, box: Box, index: int):
+        self._box, self._index = box, index
+        self._open = False  # the settled state
+        self._last = False  # the latest update
+        self._back: int | None = None
+        self._touches = 0
+
+    def update(self, open_: bool) -> None:
+        agreed = open_ == self._last
+        self._last = open_
+        if not agreed or open_ == self._open:
+            return
+        self._open = open_
+        box = self._box
+        if open_:
+            if box.current != self._index:
+                self._back, self._touches = box.current, box.touches
+                box.select(self._index)
+        else:
+            if self._back is not None and box.touches == self._touches:
+                box.select(self._back)
+            self._back = None
+
+
 def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bundle would hide them
-    box: Box, exp, path, cls, reading, rect, now: float, seen: set[str]
+    box: Box, exp, path, cls, quest, focus, reading, rect, now: float, seen: set[str]
 ) -> None:
     """Feed the tools the same reading; the Path tab shows a dot while a trip runs.
 
@@ -176,8 +209,24 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
     except Exception as e:
         report_once(e, seen)
         cls.hide_marks()  # never leave marks from a tick that failed
+    try:
+        quest.update(reading, rect, now)
+    except Exception as e:
+        report_once(e, seen)  # it draws nothing on the layer: nothing to hide
+    focus.update(quest.open)
     box.set_tab_dot(1, path.running)  # the tabs' indexes in build_box's tools list
     box.set_tab_dot(2, cls.dot)
+
+
+def quest_go(path_tool, select):
+    """The Quests tab's go: if no trip starts, show the Path tab, which says why."""
+
+    def go(map_id: str, at=None, label=None) -> None:
+        path_tool.go(map_id, at, label)
+        if not path_tool.running:
+            select(1)
+
+    return go
 
 
 def self_check() -> int:
@@ -191,6 +240,8 @@ def self_check() -> int:
         glyphs.load_all()
         maps.load()
         class_data.load()
+        quest_data.load()
+        quest_window.known_quest_names()
         pictures = sorted(maps.PICTURES.glob("*.png"))
         if not pictures or any(maps.picture(p.stem) is None for p in pictures):
             return 1
@@ -546,11 +597,11 @@ def update_check(  # noqa: PLR0913, PLR0917 - main's parts, plus the fetch tests
 
 
 def tray_available() -> bool:
-    """A tray icon on Windows, when there's a notification area to put it in.
+    """A tray icon: in the notification area on Windows, the menu bar on the Mac.
 
-    Not on the Mac (Windows only for now), and with no tray the box's ••• still works.
+    Not elsewhere, and with no tray the box's ••• still works.
     """
-    return sys.platform == "win32" and QSystemTrayIcon.isSystemTrayAvailable()
+    return sys.platform in ("win32", "darwin") and QSystemTrayIcon.isSystemTrayAvailable()
 
 
 def make_tray(
@@ -573,27 +624,9 @@ def make_tray(
 
 
 def box_menu(box: Box) -> QMenu:
-    """A menu of the box's own items, read again each time it opens: the tray's, the Dock's."""
+    """A menu of the box's own items, read again each time it opens: the tray's."""
     menu = QMenu(box)
     box.attach_menu(menu)
-    return menu
-
-
-def dock_available() -> bool:
-    """A Dock icon with a menu: the Mac's."""
-    return sys.platform == "darwin"
-
-
-def make_dock(box: Box, *, available: bool, as_dock: Callable | None = None) -> QMenu | None:
-    """The Dock icon's menu on the Mac: the box's menu, as the tray has it. None if not
-    `available`. macOS adds its own items (Options, Quit…) under it.
-
-    `as_dock` makes the menu the Dock's (QMenu.setAsDockMenu, which only the Mac's Qt has).
-    """
-    if not available:
-        return None
-    menu = box_menu(box)
-    (as_dock or QMenu.setAsDockMenu)(menu)
     return menu
 
 
@@ -623,34 +656,23 @@ class Shown:
             self.item.setText(HIDE if self.on else SHOW)
 
 
-def add_hide(
-    box: Box, layer: Layer, tray: QSystemTrayIcon | None, dock: QApplication | None = None
-) -> Shown:
-    """Hide / Show: a menu item just before Quit, and a way back: a left click on the
-    tray icon (Windows), or a click on the Dock icon (Mac).
-
-    `dock` is the QApplication where there's a Dock icon (make_dock made its menu), else
-    None. A Dock click reaches Qt as it becoming active, sent even when it already is; so
-    does Cmd-Tab. Either shows a hidden box; a shown one stays as it is. With no way back
-    there's no item: a hidden box would stay hidden.
+def add_hide(box: Box, layer: Layer, tray: QSystemTrayIcon | None, *, click: bool = True) -> Shown:
+    """Hide / Show: a menu item just before Quit; the tray's menu has it, so the tray is
+    the way back. With `click` (Windows) a left click on the tray icon toggles too; on the
+    Mac a click opens the menu instead. With no tray there's no item: a hidden box would
+    stay hidden.
     """
     shown = Shown(box, layer)
-    if tray is None and dock is None:
+    if tray is None:
         return shown
 
     def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.Trigger:  # a left click; a double click has one too
             shown.toggle()
 
-    def activated(state: Qt.ApplicationState) -> None:
-        if state == Qt.ApplicationActive and not shown.on:
-            shown.toggle()
-
     shown.item = box.add_menu_item(HIDE, shown.toggle, at=-1)
-    if tray is not None:
+    if click:
         tray.activated.connect(clicked)
-    if dock is not None:
-        dock.applicationStateChanged.connect(activated)
     return shown
 
 
@@ -687,7 +709,7 @@ def add_about(box: Box, updates: "UpdateCheck | None") -> None:
 
     def show() -> None:
         text, accent = about_line(updates)
-        url = f"https://github.com/{update.REPO}"  # the repo the update check asks
+        url = f"https://github.com/{update.HOME_REPO}"
         box.show_about(version("maplelens"), text, url, accent=accent)
 
     box.add_menu_item(ABOUT, show, at=-1)
@@ -707,6 +729,8 @@ class Tick:
     exp: ExpMeterTool
     path: PathArrowTool
     cls: ClassHelperTool
+    quest: QuestHelperTool
+    focus: QuestFocus
     updates: "UpdateCheck | None"
     seen: set[str]  # error types/messages already logged
     shown: Shown
@@ -724,7 +748,18 @@ class Tick:
         if rect is None:
             self.hwnd = None  # gone or minimized: look again next tick
             self.layer.hide()
-            update_tools(self.box, self.exp, self.path, self.cls, None, None, now, self.seen)
+            update_tools(
+                self.box,
+                self.exp,
+                self.path,
+                self.cls,
+                self.quest,
+                self.focus,
+                None,
+                None,
+                now,
+                self.seen,
+            )
             return
         self.layer.follow(rect)
         if self.shown.on:  # hidden by the player: the tools still run, nothing shows
@@ -734,30 +769,37 @@ class Tick:
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, self.seen)
             reading = None
-        update_tools(self.box, self.exp, self.path, self.cls, reading, rect, now, self.seen)
+        update_tools(
+            self.box,
+            self.exp,
+            self.path,
+            self.cls,
+            self.quest,
+            self.focus,
+            reading,
+            rect,
+            now,
+            self.seen,
+        )
         self.box.place(rect)
 
 
-def show_in_dock(app: QApplication) -> None:
-    """Mac: a normal app, with a Dock icon and a menu bar, even run from source as a plain
-    python. From source the icon is ICON, not Python's; the installed app has its icon.icns.
-    """
+def hide_from_dock() -> None:
+    """Mac: no Dock icon, only the menu bar's (make_tray), even run from source."""
     from maplelens import overlay_mac  # AppKit only exists on the Mac
 
-    overlay_mac.make_regular()
-    if not getattr(sys, "frozen", False):
-        app.setWindowIcon(QIcon(str(ICON)))
+    overlay_mac.make_accessory()
 
 
 def _start_qt() -> QApplication:
     """The QApplication, started so that it never takes the front from the game itself:
-    only the player's Dock click or Cmd-Tab brings MapleLens forward."""
+    only the player's click on one of its windows brings MapleLens forward."""
     if sys.platform == "darwin":  # Qt raises a starting app over the others unless told not
         os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     if sys.platform == "darwin":
-        show_in_dock(app)
+        hide_from_dock()
         app.processEvents()  # finish launching first: a window shown before that activates us
     return app
 
@@ -793,7 +835,8 @@ def main() -> int:
         save_settings(path, settings)
 
     conn = open_db(data_dir() / "maplelens.db")
-    tool = ExpMeterTool(settings, conn)
+    cls_data = class_data.load()
+    tool = ExpMeterTool(settings, conn, cls_data.line)
     # the lambda defers the lookup: `box` is built from path_tool on the next line
     path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))  # noqa: PLW0108
     seen: set[str] = set()  # error types/messages already logged
@@ -806,17 +849,37 @@ def main() -> int:
         path_tool.go(map_id)
         box.select(1)
 
-    cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t))
-    box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
+    cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t), cls_data)
+    quest_tool = QuestHelperTool(
+        settings,
+        save,
+        quest_go(path_tool, lambda i: box.select(i)),  # noqa: PLW0108 - box is built next
+        path_tool.heading,
+        path_tool.stop,
+        path_tool.hops,
+    )  # its go stays on the Quests tab while a trip runs
+    box = build_box(settings, save, [tool, path_tool, cls_tool, quest_tool], pick)
     setup_screen_recording(box)
     add_build_menu(box, cls_tool)
     box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)
     updates = update_check(box, settings, save, seen, time.time())
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
-    dock = make_dock(box, available=dock_available())  # the box, its parent, holds it
-    shown = add_hide(box, layer, tray, app if dock is not None else None)
+    shown = add_hide(box, layer, tray, click=sys.platform == "win32")
     add_about(box, updates)  # after Hide: just before Quit
-    tick = Tick(settings, save, box, layer, tool, path_tool, cls_tool, updates, seen, shown)
+    tick = Tick(
+        settings,
+        save,
+        box,
+        layer,
+        tool,
+        path_tool,
+        cls_tool,
+        quest_tool,
+        QuestFocus(box, 3),
+        updates,
+        seen,
+        shown,
+    )
     timer = QTimer()
     timer.timeout.connect(lambda: tick.run(time.time()))
     timer.start(_TICK_MS)

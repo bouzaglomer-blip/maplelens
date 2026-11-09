@@ -23,8 +23,9 @@ MAPS = {
     m.id: m
     for m in [
         mk("A", "Apple", [(300, -300, "B")]),
-        mk("B", "Berry", [(0, 0, "A"), (0, 0, "C")]),
+        mk("B", "Berry", [(0, 0, "A"), (0, 0, "C"), (0, 0, "M")]),
         mk("C", "Cherry", [(0, 0, "B")]),
+        mk("M", "Hush", [(0, 0, "B")], minimap=None),  # reachable, but no minimap
         mk("D", "Date"),  # nothing leads here
         mk("X", "Xylo", [(0, 0, "C")], street="Bay"),
         mk("N", "Nomap", [(0, 0, "B")], minimap=None),
@@ -321,6 +322,7 @@ def test_long_names_elide_to_the_box_width(make):
 
 class _Cls:
     dot = False
+    open = False
     title = "Class"
 
     def __init__(self):
@@ -364,11 +366,11 @@ def test_tick_feeds_both_tools_and_dots_path_tab(make):
         box.select(i)
         widths.add(box.sizeHint().width())
     assert len(widths) == 1  # same box width on both tabs
-    update_tools(box, exp, path, cls, None, None, 1.0, set())
+    update_tools(box, exp, path, cls, _Cls(), _Cls(), None, None, 1.0, set())
     assert box._tab_dots[1].isHidden()
     go(path, "A", "C", 1.0)
     assert path.running
-    update_tools(box, exp, path, cls, None, None, 2.0, set())
+    update_tools(box, exp, path, cls, _Cls(), _Cls(), None, None, 2.0, set())
     assert not box._tab_dots[1].isHidden()
     box.close()
     exp.shutdown(3.0)
@@ -458,7 +460,7 @@ def test_tool_errors_do_not_stop_the_other_tool(make, capsys):
     seen = set()
     for t in (1.0, 1.5):
         r = Reading(t, None, None, None, title("B"), minimap=MID)
-        update_tools(box, Broken(), path, _Cls(), r, RECT, t, seen)
+        update_tools(box, Broken(), path, _Cls(), _Cls(), _Cls(), r, RECT, t, seen)
     assert path._header.text() == "To Cherry · 2 of 3"  # path still ran
     assert not box._tab_dots[1].isHidden()
     assert capsys.readouterr().err.count("ValueError: boom") == 1  # printed once
@@ -467,7 +469,7 @@ def test_tool_errors_do_not_stop_the_other_tool(make, capsys):
         raise ValueError("bang")
 
     path.update = broken_path
-    update_tools(box, Broken(), path, _Cls(), None, RECT, 2.0, seen)
+    update_tools(box, Broken(), path, _Cls(), _Cls(), _Cls(), None, RECT, 2.0, seen)
     assert not path.arrow.isVisible()  # hidden, not frozen at its last spot
 
 
@@ -535,6 +537,8 @@ def test_start_and_stop_kinds(make):
 
 
 def test_a_wider_tab_shows_more_of_a_long_name(make):
+    from maplelens.tools.path_arrow import ui
+
     tool = make()
     feed(tool, title("L"))
     narrow = tool._header.text()
@@ -544,7 +548,7 @@ def test_a_wider_tab_shows_more_of_a_long_name(make):
     tool._search.setText("Cherry")
     tool._start.click()
     wide_route = tool._route_list.text()
-    tool.set_tab_w(186)
+    tool.set_tab_w(ui.TAB_W)
     assert len(tool._route_list.text()) < len(wide_route)
 
 
@@ -558,3 +562,72 @@ def test_build_box_gives_every_tool_the_saved_width(make):
     box = build_box({"boxes": {}, "tab_width": 300}, lambda: None, [exp, path, cls])
     assert [t.tab.maximumWidth() for t in (exp, path, cls)] == [300, 300, 300]
     box.close()
+
+
+def _npc_world(tool, x, y):
+    """A reading with the player at world (x, y) on the confirmed map."""
+    return MinimapView((125, 62), (62.5 + x / 16, 31.0 + y / 16), ())
+
+
+def test_npc_trip_points_then_arrives(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    feed(tool, title("B"))
+    tool.go("C", (0, 0), "Luke")
+    feed(tool, title("C"), 1.0, view=_npc_world(tool, 400, 0))
+    assert tool.running and tool.arrow.isVisible()
+    assert tool.heading() == ("C", (0, 0), 0)
+    feed(tool, title("C"), 2.0, view=_npc_world(tool, ui.NPC_NEAR - 10, 0))
+    assert tool._header.text() == "Arrived at Luke"
+    assert not tool.running
+
+
+def test_npc_trip_without_minimap_arrives_on_map(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    feed(tool, title("B"))
+    tool.go("M", (0, 0), "Luke")
+    feed(tool, title("M"), 1.0)
+    assert tool._header.text() == ui.ON_MAP.format("Luke")
+    assert not tool.running
+
+
+def test_heading_stop_hops(make):
+    tool = make()
+    assert tool.hops("C") is None  # map not known yet
+    feed(tool, title("A"))
+    assert tool.hops("C") == 2
+    tool.go("C", (5, 6), "Luke")
+    assert tool.heading() == ("C", (5, 6), 2)
+    tool.stop()
+    assert tool.heading() is None and not tool.running
+
+
+def test_route_steps_with_a_long_shared_name_stay_apart(make):
+    import re
+
+    from maplelens.overlay import Layer
+    from maplelens.tools.path_arrow.ui import PathArrowTool
+
+    make()  # the app
+    swamp = "The Very Long Swamp of Despair Past The Old Forest Gate"
+    maps = {
+        m.id: m
+        for m in [
+            mk("S0", "Start", [(0, 0, "S1")]),
+            mk("S1", swamp + " I", [(0, 0, "S0"), (0, 0, "S2")]),
+            mk("S2", swamp + " II", [(0, 0, "S1"), (0, 0, "S3")]),
+            mk("S3", swamp + " III", [(0, 0, "S2")]),
+        ]
+    }
+    layer = Layer()
+    layer.show()
+    tool = PathArrowTool(dict(DEFAULTS, boxes={}), lambda: None, layer, lambda on: None, maps)
+    feed(tool, maps["S0"].title)
+    tool._search.setText(maps["S3"].name)
+    tool._start.click()
+    rows = [re.sub("<[^>]+>", "", r) for r in tool._route_list.text().split("<br>")]
+    for row, numeral in zip(rows[1:], (" I", " II", " III"), strict=True):
+        assert "…" in row and row.endswith(numeral)  # cut, but the end that differs stays

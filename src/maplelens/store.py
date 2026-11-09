@@ -17,6 +17,8 @@ DEFAULTS = {
     "class_marks": True,  # the AP/SP marks on the game's stat and skill windows
     "update_check": True,  # the installed Windows app asks GitHub for new versions
     "update_dismissed": None,  # the version whose notice line the player closed
+    "quests_tracked": [],  # quest ids, in tracking order
+    "quests_expanded": None,  # the tracked quest shown open in the Quests tab
 }
 
 

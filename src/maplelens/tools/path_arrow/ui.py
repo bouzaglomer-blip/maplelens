@@ -34,16 +34,18 @@ from maplelens.overlay import (
 from maplelens.readers import Reading, glyphs
 from maplelens.tools.path_arrow.camera import by_size, can_place, fits, player_world, to_screen
 from maplelens.tools.path_arrow.maps import MapInfo, find, load, picture, search
-from maplelens.tools.path_arrow.route import Trip
+from maplelens.tools.path_arrow.route import Trip, plan
 
 # Normalized px from the feet (the dot's world spot) up to the arrow's centre: just above
 # the head, under the 768-high frame the camera model works in.
 ARROW_DY = 100
 ARROW_SIZE = 36  # logical px, the arrow's square
+NPC_NEAR = 60  # world px: this close to the NPC counts as arrived
 ARRIVED_S = 5.0  # "Arrived at …" stays this long
 UNREAD_S = 3.0  # map name unreadable this long before asking for the minimap
 OPEN = "Open your minimap to see the arrow"
 HIDDEN = "Hidden portal: stand on it and press ↑"
+ON_MAP = "{} is on this map"
 NOT_LISTED = "Not in the map list yet, so no route from here"
 ACTIONS = (OPEN, HIDDEN)  # yellow: the player can act on these now; the rest are information
 MATCH_ROWS = 3  # visible matches; the list scrolls for the rest
@@ -116,7 +118,8 @@ class PathArrowTool:
         self._last: str | None = None  # the previous reading's title
         self._last_sized: MapInfo | None = None  # and the map its minimap size picked
         self._unread_since: float | None = None
-        self._arrived: tuple[str, float] | None = None  # (name, when)
+        self._arrived: tuple[str, float] | None = None  # (header text, when)
+        self._label: str | None = None  # the NPC the trip leads to
         self._note = ""  # why nothing started
         self._typing = False
         self._r: Reading | None = None
@@ -158,7 +161,7 @@ class PathArrowTool:
         self._start = primary_button("Start", self._on_start)
         self._route_list = text_label("", LABEL_PT + 1, _AHEAD)
         self._route_list.setTextFormat(Qt.RichText)
-        self._stop = secondary_button("Stop", self._on_stop)
+        self._stop = secondary_button("Stop", self.stop)
 
         self._choose, self._running = QWidget(), QWidget()
         for page, widgets in [
@@ -185,6 +188,8 @@ class PathArrowTool:
         self._r, self._rect, self._now = r, game_rect, now
         # No reading at all counts as an unreadable map name: the same 3 s clock.
         self._track(r.map_name if r else None, r.minimap if r else None, now)
+        if self.trip and self._here:
+            self._settle()
         self._render()
 
     def _unread(self) -> bool:
@@ -210,18 +215,27 @@ class PathArrowTool:
                 self._note = ""  # a new place: an old "No route" no longer holds
                 if self._here and self.trip:
                     self.trip.on_map(self._here.id)
-                    self._settle()
         self._last, self._last_sized = name, sized
 
     def _settle(self) -> None:
-        """End the trip once it has arrived, or when no route is left."""
-        goal = self.maps[self.trip.goal].name
-        if self.trip.steps is None:
+        """End the trip on arrival (at the NPC, if any), or when no route is left."""
+        trip, goal = self.trip, self.maps[self.trip.goal].name
+        line = None
+        if trip.steps is None:
             self._note = f"No route from here to {goal}"
             self.trip = None
-        elif self.trip.arrived:
-            self._arrived = (goal, self._now)
-            self.trip = None
+        elif trip.arrived:
+            name = self._label or goal
+            world, r, here = self._world(), self._r, self._here
+            if trip.at is None or (world and math.dist(world, trip.at) <= NPC_NEAR):
+                line = f"Arrived at {name}"
+            elif here.minimap is None or (
+                r and r.minimap and not can_place(r.minimap, here, picture(here.id))
+            ):
+                line = ON_MAP.format(name)  # no arrow can lead there
+            if line:
+                self._arrived = (line, self._now)
+                self.trip = None
 
     def _set_typing(self, on: bool) -> None:
         if on == self._typing:
@@ -259,8 +273,11 @@ class PathArrowTool:
         self._set_typing(False)
         self._render()
 
-    def go(self, map_id: str) -> None:
-        """Fill the field with that map and start, as picking it and pressing Start do."""
+    def go(self, map_id: str, at: tuple[int, int] | None = None, label: str | None = None) -> None:
+        """Fill the field with that map and start, as picking it and pressing Start do.
+
+        With `at`, the trip goes on to that spot on the map; `label` names it.
+        """
         m = self.maps[map_id]
         self._search.setText(m.name)  # fills the match list
         item = next(
@@ -276,9 +293,12 @@ class PathArrowTool:
             item.setData(Qt.UserRole, map_id)
             self._matches.addItem(item)
         self._pick(item)
-        self._on_start()
+        self._begin(at, label)
 
     def _on_start(self) -> None:
+        self._begin(None, None)
+
+    def _begin(self, at, label) -> None:
         item = self._matches.currentItem()
         self._set_typing(False)
         if self._here is None or self._unread() or item is None:
@@ -288,21 +308,34 @@ class PathArrowTool:
             self._settings["path_taxi"] = taxi
             self._changed()
         self._note = ""
-        self.trip = Trip(self.maps, self._here.id, item.data(Qt.UserRole), taxi)
+        self._label = label
+        self.trip = Trip(self.maps, self._here.id, item.data(Qt.UserRole), taxi, at)
         self._settle()
         self._render()
 
-    def _on_stop(self) -> None:
+    def stop(self) -> None:
         self.trip = None
         self._render()
+
+    def heading(self) -> tuple[str, tuple[int, int] | None, int] | None:
+        """(goal map, NPC spot, maps left) while a trip runs."""
+        t = self.trip
+        return (t.goal, t.at, len(t.steps) - 1 - t.index) if t else None
+
+    def hops(self, map_id: str) -> int | None:
+        """Maps to cross from the confirmed map to `map_id`, None if unknown or no route."""
+        if self._here is None:
+            return None
+        steps = plan(self.maps, self._here.id, map_id, self._taxi.isChecked())
+        return None if steps is None else len(steps) - 1
 
     def _render(self) -> None:
         if self._arrived and self._now - self._arrived[1] >= ARRIVED_S:
             self._arrived = None
         if self._arrived:
-            head = self._fit("Arrived at {}", self._arrived[0])
+            head = self._fit("{}", self._arrived[0])
         elif self.trip:
-            goal = self.maps[self.trip.goal].name
+            goal = self._label or self.maps[self.trip.goal].name
             n = f"{self.trip.index + 1} of {len(self.trip.steps)}"
             head = self._fit("To {} · " + n, goal)
             self._route_list.setText(self._route_html())
@@ -349,7 +382,8 @@ class PathArrowTool:
         rows = []
         for i, s in enumerate(self.trip.steps):
             room = self._tab_w - fm.horizontalAdvance("00  " + (" taxi" if s.cab else ""))
-            name = escape(fm.elidedText(self.maps[s.map_id].name, Qt.ElideRight, room))
+            # Cut in the middle: neighbours often share a long start (The Swamp of Despair I, II)
+            name = escape(fm.elidedText(self.maps[s.map_id].name, Qt.ElideMiddle, room))
             if i < self.trip.index:
                 row = f'<span style="color:{_DONE}"><s>{i + 1}&nbsp;&nbsp;{name}</s></span>'
             elif i == self.trip.index:

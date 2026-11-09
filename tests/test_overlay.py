@@ -710,3 +710,38 @@ def test_wrapped_text_takes_fewer_lines_in_a_wider_box(monkeypatch):
     box.set_tab_w(overlay.TAB_W)
     _settle()
     assert box.height() == narrow
+
+
+def test_four_tabs_and_a_dot_fit(monkeypatch):
+    from PySide6.QtWidgets import QWidget
+
+    box = _box(monkeypatch)
+    for title in ("EXP", "Path", "Class", "Quests"):
+        page = QWidget()
+        page.setFixedWidth(overlay.TAB_W)
+        box.add_tab(title, page)
+    box.set_tab_dot(1, True)
+    box.adjustSize()
+    assert box.width() == overlay.TAB_W + 24
+
+
+def test_current_and_touches(monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    box = _box(monkeypatch)
+    page = QWidget()
+    page.setFixedWidth(overlay.TAB_W)
+    row = overlay.Row("name", "sub", lambda: None)
+    QVBoxLayout(page).addWidget(row)
+    for title, p in (("A", page), ("B", QWidget()), ("C", QWidget())):
+        box.add_tab(title, p)
+    box.show()
+    assert box.current == 0
+    box.select(2)
+    assert (box.current, box.touches) == (2, 0)
+    QTest.mouseClick(box._tab_buttons[0], Qt.LeftButton)
+    assert (box.current, box.touches) == (0, 1)
+    QTest.mouseClick(row, Qt.LeftButton)
+    assert box.touches == 2

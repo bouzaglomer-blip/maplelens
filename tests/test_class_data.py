@@ -137,3 +137,13 @@ FIRST_AND_SECOND = [
 
 def test_every_first_and_second_job_has_a_plan():
     assert [j for j in FIRST_AND_SECOND if load().plan(j) is None] == []
+
+
+def test_line_includes_aliases_and_tree():
+    d = load()
+    assassin = {"Beginner", "Rogue", "Thief", "Assassin", "Hermit"}
+    assert d.line("Assassin") == assassin
+    assert d.line("Hermit") == assassin
+    assert d.line("Thief") >= {"Beginner", "Rogue", "Assassin", "Bandit", "Hermit", "Chief Bandit"}
+    assert "Bandit" not in d.line("Assassin")
+    assert d.line("Nobody") == {"Nobody"}

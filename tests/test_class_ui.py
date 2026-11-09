@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from maplelens import overlay
 from maplelens.readers import Reading
 from maplelens.readers.skill_window import SkillRow, SkillWindow
 from maplelens.readers.stat_window import StatWindow
@@ -163,7 +164,10 @@ def test_long_name_stays_one_line(make):
     long = Row("Victoria Road / " + "X" * 60, "mobs Lv 1–2", None)
     short = Row("Short", "mobs Lv 1–2", None)
     assert long.sizeHint().height() == short.sizeHint().height()
-    assert long.sizeHint().width() <= short.sizeHint().width() or long.sizeHint().width() <= 186
+    assert (
+        long.sizeHint().width() <= short.sizeHint().width()
+        or long.sizeHint().width() <= overlay.TAB_W
+    )
 
 
 def test_no_build_picker_or_marks_box_in_the_tab(make):
@@ -338,6 +342,7 @@ def test_stat_window_of_another_level_gets_no_marks(make):
 class _Quiet:
     running = False
     dot = False
+    open = False
 
     def update(self, *_):
         pass
@@ -353,7 +358,9 @@ def test_marks_survive_the_app_tick(make):
 
     tool = make()
     reading = R(level=20, stats=SW(level=20, ap=5, base=s(4, 25, 4, 30)))
-    app.update_tools(_Box(), _Quiet(), _Quiet(), tool, reading, RECT, 0.0, set())
+    app.update_tools(
+        _Box(), _Quiet(), _Quiet(), tool, _Quiet(), _Quiet(), reading, RECT, 0.0, set()
+    )
     assert tool.marks() == [("5 here", pos(*PLUS["LUK"]))]
 
 
@@ -368,7 +375,9 @@ def test_marks_hide_when_the_class_tool_raises(make, monkeypatch):
     tool.update(reading, RECT, 0)
     assert tool.marks()
     monkeypatch.setattr(tool, "_draw_marks", lambda: (_ for _ in ()).throw(ValueError("x")))
-    app.update_tools(_Box(), _Quiet(), _Quiet(), tool, reading, RECT, 1.0, set())
+    app.update_tools(
+        _Box(), _Quiet(), _Quiet(), tool, _Quiet(), _Quiet(), reading, RECT, 1.0, set()
+    )
     assert tool.marks() == []
 
 
@@ -422,7 +431,7 @@ def test_box_width_is_the_same_on_every_tab(box_with_tools):
             box.select(i)
             settle(box, cls, job, level)
             widths[(job, level, i)] = box.width()
-    assert set(widths.values()) == {210}, widths
+    assert set(widths.values()) == {overlay.TAB_W + 24}, widths
 
 
 def test_class_tab_text_never_overlaps(box_with_tools):
@@ -448,7 +457,7 @@ def test_box_width_holds_with_an_info_line_on_the_path_tab(box_with_tools):
         box.path.update(Reading(t, None, None, None, "Road / Nowhere"), RECT, t)
     settle(box)
     assert box.path._info.isVisibleTo(box.path.tab)
-    assert box.width() == 210
+    assert box.width() == overlay.TAB_W + 24
 
 
 def test_a_row_click_never_leaves_the_box_dragging(box_with_tools):
@@ -474,7 +483,9 @@ def test_header_keeps_the_level_when_points_crowd_it(make):
     (head,) = [w for w in tool.tab.findChildren(QLabel) if w.text().endswith("Lv 12")]
     (chip,) = [w for w in tool.tab.findChildren(QLabel) if w.objectName() == "chip"]
     assert chip.text() == "12 AP · 10 SP"
-    assert head.sizeHint().width() + 6 + chip.sizeHint().width() <= 186  # 6: the row's spacing
+    # 6: the row's spacing
+    used = head.sizeHint().width() + 6 + chip.sizeHint().width()
+    assert used <= overlay.TAB_W
 
 
 def test_a_long_job_name_is_cut_not_the_level(make):
@@ -499,3 +510,34 @@ def test_a_wider_tab_shows_more_of_a_long_row_name(make):
     tool.set_tab_w(480)  # the same items: drawn again all the same
     assert len(title(tool)) > len(narrow)
     assert tool.tab.maximumWidth() == 480
+
+
+def luk_mark(make, height):
+    """The LUK mark in a 16:9 client `height` px tall at dpr 1, and the game's scale there."""
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5)), (0, 0, height * 16 // 9, height), 0)
+    (mark,) = [m for m in tool._pool if not m.isHidden()]
+    return tool, mark, height / 768  # the tool keeps the layer, and so the mark, alive
+
+
+@pytest.mark.parametrize("height", [768, 1440])
+def test_mark_leaves_the_second_plus_button_uncovered(make, height):
+    from PySide6.QtGui import QColor
+
+    from maplelens.tools.class_helper.ui import RING_R
+
+    _tool, mark, s = luk_mark(make, height)
+    assert abs(mark.height() - 2 * RING_R * s) <= 1  # the ring grows with the + buttons
+    img, r, mid = mark.grab().toImage(), mark.height() // 2, mark.height() // 2
+    # Past the ring, up to where the pair ends (20 base px right of the + centre in
+    # stat_a_1366x768_100.png), the mark draws nothing.
+    clear = range(2 * r + 1, r + round(20 * s) + 1)
+    assert all(QColor.fromRgba(img.pixel(x, mid)).alpha() == 0 for x in clear)
+
+
+def test_mark_tag_has_a_dark_background(make):
+    from PySide6.QtGui import QColor
+
+    _tool, mark, _ = luk_mark(make, 1440)
+    behind = QColor.fromRgba(mark.grab().toImage().pixel(mark.width() - 3, mark.height() // 2))
+    assert behind.alpha() > 200 and behind.lightness() < 60
