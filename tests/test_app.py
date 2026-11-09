@@ -189,8 +189,10 @@ def test_a_tool_error_is_logged_once(log, monkeypatch):
 class _FocusBox:
     def __init__(self, current=0):
         self.current, self.touches = current, 0
+        self.selects = []
 
     def select(self, i):
+        self.selects.append(i)
         self.current = i
 
     def set_tab_dot(self, *_):
@@ -232,12 +234,21 @@ def test_touch_keeps_the_tab():
     assert box.current == 3
 
 
+def test_a_touch_before_opening_does_not_block_the_way_back():
+    box = _FocusBox(1)
+    box.touches = 5
+    f = _focus(box)
+    for o in (True, True, False, False):
+        f.update(o)
+    assert box.selects == [3, 1]
+
+
 def test_already_on_quests_stays():
     box = _FocusBox(3)
     f = _focus(box)
     for o in (True, True, False, False):
         f.update(o)
-    assert box.current == 3
+    assert box.selects == []
 
 
 def test_one_missed_reading_keeps_the_tab():
@@ -245,9 +256,9 @@ def test_one_missed_reading_keeps_the_tab():
     f = _focus(box)
     for o in (True, True, False, True):
         f.update(o)
-    assert box.current == 3
+    assert box.selects == [3]  # the single closed reading didn't switch back
     f.update(True)
-    assert box.current == 3
+    assert box.selects == [3]
 
 
 def test_no_reading_counts_as_closed():
@@ -258,7 +269,9 @@ def test_no_reading_counts_as_closed():
         app.update_tools(box, _Quiet(), _Quiet(), _Quiet(), q, f, r, None, 0.0, set())
         if r is None:
             assert not q.open
-    assert box.current == 2
+        if r == "r" and box.selects:
+            assert box.current == 3
+    assert box.selects == [3, 2]
 
 
 def test_quest_tool_error_does_not_stop_the_others(log, monkeypatch):
