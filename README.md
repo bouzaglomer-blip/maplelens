@@ -24,7 +24,7 @@ one click to set a route there, plus what comes next: job advancement, gear and 
 **Quest helper:** open a quest in the game and the Quests tab shows where to go for each
 NPC, monster and item it needs, one click to set a route there. Track quests to keep them.
 
-![The Quests tab next to the game's quest window: for The Filing Error it lists Torn Ledger Pages x25 from Fairy 4 at The Entrance of Golem's Temple and Chief Stan in Henesys to hand in, with a Track button](docs/screenshots/quests.jpg)
+![The Quests tab next to the game's quest window: The Filing Error's Torn Ledger Pages row is outlined with Going · 8 maps away and a Stop button, the Path tab shows its running dot, and a yellow arrow by the character points the way](docs/screenshots/quests.jpg)
 
 ## The promise: screen-reading only
 
