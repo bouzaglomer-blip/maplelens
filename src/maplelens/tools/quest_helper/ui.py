@@ -102,13 +102,14 @@ class QuestHelperTool:
         self._quest: QuestOpen | str | None = None  # the quest window, as shown
         self._misses = 0  # readings in a row without it
         self._shown: list | None = None  # the items now drawn
+        self._tab_w = TAB_W
         self.tab = QWidget()
-        self.tab.setFixedWidth(TAB_W)
+        self.tab.setFixedWidth(self._tab_w)
         self._scroll = QScrollArea()
         self._scroll.setFrameShape(QFrame.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll.setWidgetResizable(True)
-        self._scroll.setFixedWidth(TAB_W)
+        self._scroll.setFixedWidth(self._tab_w)
         self._scroll.viewport().setAutoFillBackground(False)  # the box shows through
         self._scroll.verticalScrollBar().setStyleSheet(_BAR_STYLE)
         for w in (self._scroll, self._scroll.verticalScrollBar()):
@@ -122,6 +123,15 @@ class QuestHelperTool:
         col = QVBoxLayout(self.tab)
         col.setContentsMargins(0, TOP, 0, 0)
         col.addWidget(self._scroll)
+        self._render()
+
+    def set_tab_w(self, width: int) -> None:
+        if width == self._tab_w:
+            return  # the box tells each tab its width at the start: nothing to redraw yet
+        self._tab_w = width
+        self.tab.setFixedWidth(width)
+        self._scroll.setFixedWidth(width)
+        self._shown = None  # the names are cut to the width
         self._render()
 
     def _clean(self) -> None:
@@ -247,14 +257,13 @@ class QuestHelperTool:
         if kind == "row":
             _, title, sub, map_id, at, npc, info = item
             go = (lambda: self._go_to(map_id, at, npc)) if map_id else None
-            row = Row(title, sub, go, info=info)
+            row = Row(title, sub, go, info=info, width=self._tab_w)
             row.setToolTip(sub)  # the sub-line is cut to fit
             return row
         if kind == "run":
             _, title, sub = item
-            return Row(
-                title, sub, None, outline=True, trailing=secondary_button(STOP, self._stop_trip)
-            )
+            stop = secondary_button(STOP, self._stop_trip)
+            return Row(title, sub, None, outline=True, trailing=stop, width=self._tab_w)
         if kind == "open":
             _, qid, name, tracked = item
             if tracked:
@@ -262,16 +271,15 @@ class QuestHelperTool:
             else:
                 end = primary_button(TRACK, lambda: self._track(qid))
             label = text_label("", LABEL_PT, VALUE_COLOR, bold=True)
-            _fit(label, name, TAB_W - BAR - end.sizeHint().width() - 6)
+            _fit(label, name, self._tab_w - BAR - end.sizeHint().width() - 6)
             return _line(label, end)
         _, qid, name, expanded = item  # a tracked quest's header
         close = mark_button(CLOSE, LABEL_PT, lambda: self._untrack(qid))
         head = mark_button("", LABEL_PT, lambda: self._expand(qid), color=VALUE_COLOR)
         head.setFont(QFont(FONT, LABEL_PT, QFont.Bold))
         mark = f"{SHOWN if expanded else SHUT} "
-        room = (
-            TAB_W - BAR - close.sizeHint().width() - 6 - head.fontMetrics().horizontalAdvance(mark)
-        )
+        taken = BAR + close.sizeHint().width() + 6 + head.fontMetrics().horizontalAdvance(mark)
+        room = self._tab_w - taken
         _fit(head, name, room)
         head.setText(mark + head.text())
         return _line(head, close)
@@ -298,5 +306,6 @@ class QuestHelperTool:
             self._holder.layout().removeWidget(self._body)
         self._body = body
         self._holder.layout().addWidget(body)
-        h = body.heightForWidth(TAB_W) if body.hasHeightForWidth() else body.sizeHint().height()
+        wrapped = body.hasHeightForWidth()
+        h = body.heightForWidth(self._tab_w) if wrapped else body.sizeHint().height()
         self._scroll.setFixedHeight(min(h, MAX_H - TOP))

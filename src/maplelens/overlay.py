@@ -52,10 +52,13 @@ QPushButton:disabled {{ background: {HERE_BG}; color: {LABEL_COLOR}; }}""",
 QPushButton {{ background: transparent; color: #e6edf7; border: 1px solid {EDGE};
     border-radius: 4px; padding: 3px; }}""",
 }
-# Every tab's width: the box's width less its 12 px side margins. It fits four tab titles
-# and the Path tab's dot at the strip's 14 px spacing, in FONT: on a real Windows window
-# (Segoe UI) the strip wants a 237 px box, so 238; Helvetica Neue on the Mac CI wants 244.
+# Every tab's width at first, and at least: the box's width less its 12 px side margins.
+# It fits four tab titles and the Path tab's dot at the strip's 14 px spacing, in FONT:
+# on a real Windows window (Segoe UI) the strip wants a 237 px box, so 238; Helvetica Neue
+# on the Mac CI wants 244.
 TAB_W = 220 if sys.platform == "darwin" else 214
+MAX_TAB_W = 480  # the widest the player can drag the tabs
+_GRIP = 12  # the corner handle's side: the box's right margin, so it never covers a tab
 # The box's menu button: three bullets. The midline ellipsis isn't in Segoe UI, and
 # the font Qt falls back to draws it faint and makes the box taller.
 MENU_MARK = "•••"
@@ -144,6 +147,13 @@ class InfoLine(QWidget):
         return self._text.text()
 
 
+def fit_tab_w(saved: object) -> int:
+    """A tab width within the limits; TAB_W for anything else a hand-edited file may hold."""
+    if not isinstance(saved, int) or isinstance(saved, bool):
+        return TAB_W
+    return min(max(saved, TAB_W), MAX_TAB_W)
+
+
 _PAD = 6  # a row's side padding
 
 
@@ -161,6 +171,7 @@ class Row(QWidget):
         outline: bool = False,
         trailing: QWidget | None = None,  # in place of the arrow, e.g. a button
         info: bool = False,  # the grey line is why it can't be clicked: an info mark leads it
+        width: int = TAB_W,  # what the names are cut to
     ):
         super().__init__()
         self.name, self.sub, self.best, self.outline = name, sub, best, outline
@@ -181,7 +192,7 @@ class Row(QWidget):
         col.setSpacing(0)
         arrow = text_label("\u203a", LABEL_PT + 2, ACCENT, bold=True)  # single right angle
         end = trailing or (arrow if self.clickable else None)
-        room = TAB_W - 2 * _PAD - 2 - (end.sizeHint().width() + 6 if end else 0)
+        room = width - 2 * _PAD - 2 - (end.sizeHint().width() + 6 if end else 0)
         title = text_label(name, LABEL_PT, VALUE_COLOR, bold=best or outline)
         title.setText(QFontMetrics(title.font()).elidedText(name, Qt.ElideRight, room))
         title.setToolTip(name)
@@ -259,6 +270,42 @@ class Layer(QWidget):
         super().showEvent(event)
 
 
+class _Grip(QWidget):
+    """The box's bottom-right corner: drag it sideways to make the tabs wider or narrower."""
+
+    def __init__(self, box: "Box"):
+        super().__init__(box)
+        self._box = box
+        self._from: tuple[float, int] | None = None  # the mouse's x and the width at the press
+        self.setFixedSize(_GRIP, _GRIP)
+        self.setCursor(Qt.SizeHorCursor)
+
+    @property
+    def dragging(self) -> bool:
+        return self._from is not None
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(QPen(QColor(LABEL_COLOR), 1.2))
+        p.drawLine(QPointF(10, 2), QPointF(2, 10))  # inside the box's rounded corner
+        p.drawLine(QPointF(10, 6), QPointF(6, 10))
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._from = (event.globalPosition().x(), self._box.tab_w)
+
+    def mouseMoveEvent(self, event):
+        if self._from is not None:
+            x, width = self._from
+            self._box.set_tab_w(width + round(event.globalPosition().x() - x))
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self._from is not None:
+            self._from = None
+            self._box.save_size()
+
+
 class _Touches(QObject):
     """Counts mouse presses on `box` or its children; never swallows an event.
 
@@ -280,11 +327,11 @@ class _Touches(QObject):
 class Box(QWidget):
     """A small dark box with a tab strip; drag it, its spot is saved per game window."""
 
-    def __init__(  # noqa: PLR0915 - the box's parts, built in order
-        self, name: str, settings: dict, on_moved: Callable[[], None]
-    ):
+    def __init__(self, name: str, settings: dict, on_moved: Callable[[], None]):
         super().__init__(None, _OVERLAY)
         self._name, self._settings, self._on_moved = name, settings, on_moved
+        self._tab_w = fit_tab_w(settings.get("tab_width"))
+        self._tab_w_listeners: list[Callable[[int], None]] = []
         self._origin: QPoint | None = None  # game client top-left, logical px
         self._game_w = 0
         self._drag_from: QPoint | None = None
@@ -318,6 +365,55 @@ class Box(QWidget):
             self._top.addWidget(part, 1)
         self._top.addWidget(self._about_close, 0, Qt.AlignVCenter)
         self._top.addWidget(self._menu_button, 0, Qt.AlignVCenter | Qt.AlignRight)
+        self._build_notice()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 10)
+        layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
+        layout.addLayout(self._top)
+        layout.addWidget(self._pages)
+        layout.addWidget(self._about)
+        layout.addWidget(self._notice)
+        self._grip = _Grip(self)  # not in the layout: it sits on the corner, resizeEvent keeps it
+
+    @property
+    def tab_w(self) -> int:
+        return self._tab_w
+
+    def set_tab_w(self, width: int) -> None:
+        """Make the tabs `width` wide, within the limits; the box hugs them, so it follows."""
+        width = fit_tab_w(width)
+        if width == self._tab_w:
+            return
+        self._tab_w = width
+        self._pages.setFixedWidth(width)
+        self._about.setFixedWidth(width)
+        for listener in self._tab_w_listeners:
+            listener(width)
+
+    def on_tab_w(self, listener: Callable[[int], None]) -> None:
+        """Tell `listener` the tabs' width: now, and whenever it changes."""
+        self._tab_w_listeners.append(listener)
+        listener(self._tab_w)
+
+    def save_size(self) -> None:
+        """Remember the width, and the spot: a default spot hangs from the box's right edge."""
+        self._settings["tab_width"] = self._tab_w
+        self._save_spot()
+        self._on_moved()
+
+    def _build_pages(self) -> None:
+        """The tabs' pages in a column, only the current one shown: hidden pages never size
+        the box. (A QStackedWidget sizes wrapped text by its tallest page, hidden ones too.)
+        """
+        self._pages = QWidget()
+        self._page_col = QVBoxLayout(self._pages)
+        self._page_col.setContentsMargins(0, 0, 0, 0)
+        # Every tab is TAB_W wide, but the column sizes from its pages' raw hints, which a
+        # page's fixed width doesn't bound (wrapped text hints wider): fix the column instead.
+        self._pages.setFixedWidth(self._tab_w)
+        self._current = 0
+
+    def _build_notice(self) -> None:
         self._notice = QWidget()  # a line of its own, so it shows with the tabs or the status
         self._notice_text = text_label("", NOTICE_PT, ACCENT)
         # a multiplication sign, the close mark
@@ -330,32 +426,13 @@ class Box(QWidget):
         row.addStretch()
         row.addWidget(self._notice_close)
         self._notice.hide()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 10)
-        layout.setSizeConstraint(QLayout.SetFixedSize)  # the box hugs the current tab
-        layout.addLayout(self._top)
-        layout.addWidget(self._pages)
-        layout.addWidget(self._about)
-        layout.addWidget(self._notice)
-
-    def _build_pages(self) -> None:
-        """The tabs' pages in a column, only the current one shown: hidden pages never size
-        the box. (A QStackedWidget sizes wrapped text by its tallest page, hidden ones too.)
-        """
-        self._pages = QWidget()
-        self._page_col = QVBoxLayout(self._pages)
-        self._page_col.setContentsMargins(0, 0, 0, 0)
-        # Every tab is TAB_W wide, but the column sizes from its pages' raw hints, which a
-        # page's fixed width doesn't bound (wrapped text hints wider): fix the column instead.
-        self._pages.setFixedWidth(TAB_W)
-        self._current = 0
 
     def _build_about(self) -> None:
         """The About view: a title and a close mark for the top row, and the panel under it."""
         self._about_title = text_label(ABOUT, 10, VALUE_COLOR, bold=True)  # the tabs' size
         self._about_close = mark_button("\u00d7", 10, self.close_about)
         self._about = QWidget()
-        self._about.setFixedWidth(TAB_W)  # the tabs' width: opening About keeps the box's
+        self._about.setFixedWidth(self._tab_w)  # the tabs' width: opening About keeps the box's
         self._about_version = text_label("", 10, VALUE_COLOR)
         self._about_updates = text_label("", 10, VALUE_COLOR)
         self._about_link = mark_button("GitHub page \u2197", 10, self._open_link, color=ACCENT)
@@ -454,6 +531,7 @@ class Box(QWidget):
         self._status.setVisible(status)
         self._strip_row.setVisible(not about and text is None)
         self._pages.setVisible(not about and text is None)
+        self._grip.setVisible(not status)  # the status line sets its own width
         row = Qt.AlignTop if status else Qt.AlignVCenter
         self._top.setAlignment(self._menu_button, row | Qt.AlignRight)
 
@@ -563,7 +641,7 @@ class Box(QWidget):
         return menu.menuAction()
 
     def place(self, game_rect: tuple[int, int, int, int]) -> None:
-        if self._drag_from is not None:
+        if self._drag_from is not None or self._grip.dragging:
             return  # don't fight the user's drag
         left, top, w, _ = game_rect  # physical pixels
         dpr = self.devicePixelRatioF()
@@ -581,6 +659,10 @@ class Box(QWidget):
     def showEvent(self, event):
         native_setup(self)
         super().showEvent(event)
+
+    def resizeEvent(self, event):
+        self._grip.move(self.width() - _GRIP, self.height() - _GRIP)
+        super().resizeEvent(event)
 
     def paintEvent(self, _event):
         p = QPainter(self)
@@ -602,6 +684,10 @@ class Box(QWidget):
             return
         self._drag_from = None
         if self._origin is not None:
+            self._save_spot()
+            self._on_moved()
+
+    def _save_spot(self) -> None:
+        if self._origin is not None:
             off = self.pos() - self._origin
             self._settings.setdefault("boxes", {})[self._name] = [off.x(), off.y()]
-            self._on_moved()

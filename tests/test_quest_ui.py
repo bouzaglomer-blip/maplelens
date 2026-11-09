@@ -352,3 +352,19 @@ def test_nothing_takes_focus(make):
     tool.update(opened(), RECT, 0)
     taking = [w for w in tool.tab.findChildren(QWidget) if w.focusPolicy() != Qt.NoFocus]
     assert taking == []
+
+
+def test_a_wider_tab_shows_more_of_a_long_quest_name(make):
+    from PySide6.QtWidgets import QLabel
+
+    tool = make()
+    item = ("open", 1001, "A very long quest name " * 6, True)
+
+    def name():
+        line = tool._widget(item)  # held: its label goes with it
+        return line.findChildren(QLabel)[0].text()
+
+    narrow = name()
+    tool.set_tab_w(480)
+    assert len(name()) > len(narrow)
+    assert tool.tab.maximumWidth() == tool._scroll.maximumWidth() == 480

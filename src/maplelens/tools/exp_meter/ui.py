@@ -143,6 +143,9 @@ class ExpMeterTool:
         self._texts: list[QLabel] = []
         self._show(box_lines(None, True))
 
+    def set_tab_w(self, width: int) -> None:
+        self.tab.setFixedWidth(width)
+
     def _show(self, lines: list[tuple[str, list[str]]]) -> None:
         texts = [t for label, values in lines for t in (label, *values)]
         shape = [len(values) for _, values in lines]

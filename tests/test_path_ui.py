@@ -330,6 +330,9 @@ class _Cls:
 
         self.tab = QLabel()
 
+    def set_tab_w(self, width):
+        self.tab.setFixedWidth(width)
+
     def update(self, *_):
         pass
 
@@ -531,6 +534,34 @@ def test_start_and_stop_kinds(make):
     tool = make()
     assert tool._start.property("kind") == "primary"
     assert tool._stop.property("kind") == "secondary"
+
+
+def test_a_wider_tab_shows_more_of_a_long_name(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    feed(tool, title("L"))
+    narrow = tool._header.text()
+    tool.set_tab_w(480)  # redraws at once, without waiting for the next reading
+    assert len(tool._header.text()) > len(narrow)
+    assert tool.tab.maximumWidth() == 480
+    tool._search.setText("Cherry")
+    tool._start.click()
+    wide_route = tool._route_list.text()
+    tool.set_tab_w(ui.TAB_W)
+    assert len(tool._route_list.text()) < len(wide_route)
+
+
+def test_build_box_gives_every_tool_the_saved_width(make):
+    from maplelens.app import build_box
+    from maplelens.tools.exp_meter.history import open_db
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+
+    path, cls = make(), _Cls()
+    exp = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(":memory:"))
+    box = build_box({"boxes": {}, "tab_width": 300}, lambda: None, [exp, path, cls])
+    assert [t.tab.maximumWidth() for t in (exp, path, cls)] == [300, 300, 300]
+    box.close()
 
 
 def _npc_world(tool, x, y):

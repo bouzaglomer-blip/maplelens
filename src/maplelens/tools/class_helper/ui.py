@@ -140,13 +140,22 @@ class ClassHelperTool:
         self._rect: tuple | None = None
         self._pool: list[_Mark] = []  # the layer owns them; they are hidden and reused
         self._marks: list[tuple[str, tuple[float, float], bool]] = []
+        self._tab_w = TAB_W
         self.tab = QWidget()
-        self.tab.setFixedWidth(TAB_W)
+        self.tab.setFixedWidth(self._tab_w)
         self._body = QWidget()
         col = QVBoxLayout(self.tab)
         col.setContentsMargins(0, 4, 0, 0)
         col.addWidget(self._body)
         self._render([("info", NO_CLASS)])
+
+    def set_tab_w(self, width: int) -> None:
+        if width == self._tab_w:
+            return  # the box tells each tab its width at the start: nothing to redraw yet
+        self._tab_w = width
+        self.tab.setFixedWidth(width)
+        items, self._shown = self._shown, None  # the names are cut to the width
+        self._render(items)
 
     def hide_marks(self) -> None:
         for m in self._pool:
@@ -401,13 +410,13 @@ class ClassHelperTool:
         if kind == "row":
             _, name, sub, map_id, best, outline = item
             go = (lambda m=map_id: self._go(m)) if map_id else None
-            return Row(name, sub, go, best=best, outline=outline)
+            return Row(name, sub, go, best=best, outline=outline, width=self._tab_w)
         _, job, level, chip = item  # the header
         head = QWidget()
         row = QHBoxLayout(head)
         row.setContentsMargins(0, 0, 0, 2)
         row.setSpacing(6)
-        room = TAB_W
+        room = self._tab_w
         badge = None
         if chip:
             badge = text_label(chip, LABEL_PT, ACCENT, bold=True)
