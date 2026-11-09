@@ -4,6 +4,8 @@ An open-source overlay for **MapleStory Classic** that keeps you in the game.
 Instead of alt-tabbing to price sites, class guides and route finders, MapleLens
 reads what's on your screen and shows what you need on top of the game window.
 
+![MapleLens over MapleStory Classic in the Kerning City subway: the Path tab lists a 12-map route to Sleepywood, and a yellow arrow over the character points to the next portal](docs/screenshots/hero.jpg)
+
 > **Status: Phase 3: class helper (in progress).** Three tools are built: the EXP meter
 > (EXP/min, time to level, History window), the path arrow (points you to the next portal on
 > your route) and the class helper (a Class tab with gear, training maps, AP and SP plans for
@@ -28,6 +30,21 @@ reads what's on your screen and shows what you need on top of the game window.
 >   [crossbowman-class-guide](https://meowdb.com/msclassic/guides/crossbowman-class-guide) ·
 >   [assassin-class-guide](https://meowdb.com/msclassic/guides/assassin-class-guide) ·
 >   [bandit-class-guide](https://meowdb.com/msclassic/guides/bandit-class-guide)
+
+## What it does
+
+**Path arrow** (above): pick a map, and the Path tab lists the route there while an arrow
+over your character points to the next portal.
+
+**EXP meter:** your EXP per hour and time to level, live. History keeps the average for
+every map you've trained on.
+
+![The EXP tab showing 39,588 EXP an hour and level up in 1h 18m, with the History window listing average EXP per hour for each map](docs/screenshots/exp.jpg)
+
+**Class helper:** where to train for your class and level, with your best spot first and
+one click to set a route there, plus what comes next: job advancement, gear and stats.
+
+![The Class tab for a level 28 Rogue: three training spots with Transfer Area marked as the best at 928 EXP a minute, then the level 30 advancement and gear](docs/screenshots/class.jpg)
 
 ## The promise: screen-reading only
 
