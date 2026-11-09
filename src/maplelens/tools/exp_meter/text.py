@@ -23,7 +23,8 @@ def box_lines(rate: Rate | None, waiting: bool) -> list[tuple[str, list[str]]]:
         exp = f"{rate.exp_per_min * 60:,.0f} /h"
         pct = f"{rate.pct_per_min * 60:.2f}% /h"
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
-    return [("EXP · last 5 min", [exp, pct]), ("Level up in", [eta])]
+    label = "EXP · paused" if rate and rate.paused else "EXP · last 5 min"
+    return [(label, [exp, pct]), ("Level up in", [eta])]
 
 
 def format_last(ts: float, now: float) -> str:
@@ -34,3 +35,22 @@ def format_last(ts: float, now: float) -> str:
     if days_ago == 1:
         return "yesterday"
     return f"{day:%b} {day.day}"
+
+
+def short_name(title: str) -> str:
+    """A map title without its street: "Victoria Island / Henesys" -> "Henesys"."""
+    return title.rpartition(" / ")[2]
+
+
+def best_lines(
+    job: str | None, level: int | None, rows: list[tuple[str, float, float]]
+) -> tuple[str, list[tuple[str, str, str]]]:
+    """The History strip: a header and (map, EXP/h, %/h) per row of `history.best_maps`."""
+    if job is None or level is None:
+        return "Best maps: waiting for your class and level", []
+    head = f"Best for {job}, Lv {level} (±3)"
+    if not rows:
+        return f"{head}: no 5-minute visits yet", []
+    return head, [
+        (short_name(m), f"{exp * 60:,.0f} EXP/h", f"{pct * 60:.2f}% /h") for m, exp, pct in rows
+    ]
