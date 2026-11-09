@@ -35,6 +35,7 @@ VALUE_PT, VALUE_COLOR = 12, "#ffffff"
 ACCENT = "#ffcc33"  # "do this": the selected tab, the main button, points to spend
 FIELD, DARK, HERE_BG, EDGE = "#0b0f15", "#2a1d00", "#2c3a50", "#3d4b63"
 CHIP_BG, INFO_ICON = "#3a2e08", "#7fa8ff"
+BOX_FILL = (16, 18, 24, 224)  # RGBA: the box, and the marks' tags over the game
 FIELD_STYLE = f"""
 QLineEdit {{ background: {FIELD}; color: {VALUE_COLOR}; border: 1px solid {EDGE};
     border-radius: 4px; padding: 2px 6px; }}
@@ -585,7 +586,7 @@ class Box(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setPen(QColor(255, 255, 255, 20))  # a thin edge, so the box reads on any map
-        p.setBrush(QColor(16, 18, 24, 224))
+        p.setBrush(QColor(*BOX_FILL))
         p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 8, 8)
 
     def mousePressEvent(self, event):

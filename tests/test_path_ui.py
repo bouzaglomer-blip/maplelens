@@ -572,3 +572,31 @@ def test_heading_stop_hops(make):
     assert tool.heading() == ("C", (5, 6), 2)
     tool.stop()
     assert tool.heading() is None and not tool.running
+
+
+def test_route_steps_with_a_long_shared_name_stay_apart(make):
+    import re
+
+    from maplelens.overlay import Layer
+    from maplelens.tools.path_arrow.ui import PathArrowTool
+
+    make()  # the app
+    swamp = "The Very Long Swamp of Despair Past The Old Forest Gate"
+    maps = {
+        m.id: m
+        for m in [
+            mk("S0", "Start", [(0, 0, "S1")]),
+            mk("S1", swamp + " I", [(0, 0, "S0"), (0, 0, "S2")]),
+            mk("S2", swamp + " II", [(0, 0, "S1"), (0, 0, "S3")]),
+            mk("S3", swamp + " III", [(0, 0, "S2")]),
+        ]
+    }
+    layer = Layer()
+    layer.show()
+    tool = PathArrowTool(dict(DEFAULTS, boxes={}), lambda: None, layer, lambda on: None, maps)
+    feed(tool, maps["S0"].title)
+    tool._search.setText(maps["S3"].name)
+    tool._start.click()
+    rows = [re.sub("<[^>]+>", "", r) for r in tool._route_list.text().split("<br>")]
+    for row, numeral in zip(rows[1:], (" I", " II", " III"), strict=True):
+        assert "…" in row and row.endswith(numeral)  # cut, but the end that differs stays

@@ -9,6 +9,7 @@ from shiboken6 import delete
 
 from maplelens.overlay import (
     ACCENT,
+    BOX_FILL,
     CHIP_BG,
     FONT,
     HERE_BG,
@@ -50,7 +51,9 @@ STAT_UNREAD = "Can't read your stat window: move it fully into view"
 SKILL_UNREAD = "Can't read your skill window: move it fully into view"
 SCROLL = "scroll the list once"
 TIERS = {0: "Beginner", 1: "1st job", 2: "2nd job"}
-RING_R, TAG_GAP = 11, 26  # ring radius; the tag starts this far right of the + centre
+# Ring radius, and where the tag starts from the ring's left edge: past the pair of + buttons,
+# which ends 20 px right of the ring's centre. Game base size; both grow with its buttons.
+RING_R, TAG_GAP = 11, 36
 MARK_PT = 9  # the tags over the game's windows keep their size; the box's labels grew
 
 DASH = "\u2013"
@@ -64,13 +67,15 @@ class _Mark(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFont(QFont(FONT, MARK_PT, QFont.Bold))
-        self.tag, self.centre, self.ring = "", (0, 0), False
+        self.tag, self.centre, self.ring, self.scale = "", (0, 0), False, 1.0
         self.hide()
 
-    def put(self, tag: str, centre: tuple[float, float], ring: bool) -> None:
-        self.tag, self.centre, self.ring = tag, centre, ring
-        w = TAG_GAP + QFontMetrics(self.font()).horizontalAdvance(tag) + 6
-        self.setGeometry(round(centre[0]) - RING_R, round(centre[1]) - RING_R, w, 2 * RING_R)
+    def put(self, tag: str, centre: tuple[float, float], ring: bool, scale: float = 1.0) -> None:
+        """`scale`: layer px per base game px, so the ring and gap follow the + buttons."""
+        self.tag, self.centre, self.ring, self.scale = tag, centre, ring, scale
+        r, gap = round(RING_R * scale), round(TAG_GAP * scale)
+        w = gap + QFontMetrics(self.font()).horizontalAdvance(tag) + 6
+        self.setGeometry(round(centre[0]) - r, round(centre[1]) - r, w, 2 * r)
         self.show()
         self.update()
 
@@ -78,14 +83,19 @@ class _Mark(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setFont(self.font())
+        r, gap = self.height() / 2, round(TAG_GAP * self.scale)
         colour = QColor(ACCENT if self.ring else LABEL_COLOR)
         if self.ring:
-            p.setPen(QPen(colour, 3))
-            p.drawEllipse(QRectF(2, 2, 2 * RING_R - 4, 2 * RING_R - 4))
+            pen = 3 * self.scale
+            p.setPen(QPen(colour, pen))
+            p.drawEllipse(QRectF(pen / 2 + 0.5, pen / 2 + 0.5, 2 * r - pen - 1, 2 * r - pen - 1))
+        th = QFontMetrics(self.font()).height() + 2
+        back = QRectF(gap - 4, r - th / 2, self.width() - gap + 3, th)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(*BOX_FILL))  # readable over any game art
+        p.drawRoundedRect(back, 4, 4)
         p.setPen(colour)
-        p.drawText(
-            QRectF(TAG_GAP, 0, self.width() - TAG_GAP, self.height()), Qt.AlignVCenter, self.tag
-        )
+        p.drawText(QRectF(gap, 0, self.width() - gap, self.height()), Qt.AlignVCenter, self.tag)
 
 
 def _tag(stat: str, a) -> str:
@@ -166,7 +176,7 @@ class ClassHelperTool:
         while len(self._pool) < len(found):
             self._pool.append(_Mark(self._layer))
         for m, (tag, (x, y), ring) in zip(self._pool, found, strict=False):
-            m.put(tag, game_to_layer(x * k, y * k, dpr), ring)
+            m.put(tag, game_to_layer(x * k, y * k, dpr), ring, k / dpr)
 
     def _ap_marks(self, r: Reading) -> list:
         st, level = r.stats, self._level

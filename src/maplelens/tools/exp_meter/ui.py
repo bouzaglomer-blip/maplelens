@@ -75,9 +75,13 @@ class HistoryWindow(QWidget):
         layout.addLayout(self._best)
         layout.addWidget(table, 1)
         self.setAttribute(Qt.WA_QuitOnClose, False)  # closing it must not end the app
-        if sys.platform == "darwin":  # native_setup makes it a panel that leaves the game active
-            self.setWindowFlag(Qt.Tool)
-            self.setAttribute(Qt.WA_ShowWithoutActivating)
+        # Over the game, leaving it the keyboard, as the box does. On the Mac, native_setup
+        # makes it a panel that does both.
+        self.setWindowFlag(Qt.Tool)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        if sys.platform != "darwin":
+            self.setWindowFlag(Qt.WindowStaysOnTopHint)
+            self.setWindowFlag(Qt.WindowDoesNotAcceptFocus)
         self.resize(880, 460)
 
     def _show_best(self, job: str | None, level: int | None) -> None:

@@ -496,3 +496,34 @@ def test_a_long_job_name_is_cut_not_the_level(make):
     )
     (head,) = [t for t in texts(tool) if t.endswith(" · Lv 34")]
     assert "…" in head
+
+
+def luk_mark(make, height):
+    """The LUK mark in a 16:9 client `height` px tall at dpr 1, and the game's scale there."""
+    tool = make()
+    tool.update(R(level=20, stats=SW(level=20, ap=5)), (0, 0, height * 16 // 9, height), 0)
+    (mark,) = [m for m in tool._pool if not m.isHidden()]
+    return tool, mark, height / 768  # the tool keeps the layer, and so the mark, alive
+
+
+@pytest.mark.parametrize("height", [768, 1440])
+def test_mark_leaves_the_second_plus_button_uncovered(make, height):
+    from PySide6.QtGui import QColor
+
+    from maplelens.tools.class_helper.ui import RING_R
+
+    _tool, mark, s = luk_mark(make, height)
+    assert abs(mark.height() - 2 * RING_R * s) <= 1  # the ring grows with the + buttons
+    img, r, mid = mark.grab().toImage(), mark.height() // 2, mark.height() // 2
+    # Past the ring, up to where the pair ends (20 base px right of the + centre in
+    # stat_a_1366x768_100.png), the mark draws nothing.
+    clear = range(2 * r + 1, r + round(20 * s) + 1)
+    assert all(QColor.fromRgba(img.pixel(x, mid)).alpha() == 0 for x in clear)
+
+
+def test_mark_tag_has_a_dark_background(make):
+    from PySide6.QtGui import QColor
+
+    _tool, mark, _ = luk_mark(make, 1440)
+    behind = QColor.fromRgba(mark.grab().toImage().pixel(mark.width() - 3, mark.height() // 2))
+    assert behind.alpha() > 200 and behind.lightness() < 60
