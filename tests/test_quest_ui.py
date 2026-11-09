@@ -192,6 +192,16 @@ def test_row_click_goes(make):
     assert tool.calls["go"] == [(SNAIL_MAP, None, None), (TOWN, (-46, 280), "Heena")]
 
 
+@pytest.mark.parametrize(
+    "n, sub", [(0, "Going · on this map"), (1, "Going · 1 map away"), (2, "Going · 2 maps away")]
+)
+def test_running_row_counts_maps(make, n, sub):
+    tool = make(heading=(TOWN, (-46, 280), n))
+    tool.update(opened(), RECT, 0)
+    (run,) = [r for r in rows(tool) if r.outline]
+    assert run.sub == sub
+
+
 def test_running_row_outlined_with_stop(make):
     from maplelens.tools.quest_helper.ui import GOING, STOP
 
@@ -263,16 +273,39 @@ def test_same_reading_keeps_the_same_body(make):
 
 
 def test_unreadable_unknown_and_shared_lines(make):
-    from maplelens.tools.quest_helper.ui import OPEN, SHARED_NAME, UNKNOWN, UNREAD
+    from maplelens.readers.quest_window import NAME_UNREADABLE
+    from maplelens.tools.quest_helper.ui import (
+        NAME_UNREAD,
+        OPEN,
+        SHARED_NAME,
+        UNKNOWN,
+        UNREAD,
+    )
 
     tool = make()
     for quest, line in (
         (UNREADABLE, UNREAD),
+        (NAME_UNREADABLE, NAME_UNREAD),
         (QuestOpen("Nobody's Quest", None), UNKNOWN),
         (QuestOpen(SHARED, None), SHARED_NAME),
     ):
         tool.update(R(quest), RECT, 0)
         assert line in texts(tool) and OPEN in texts(tool) and not rows(tool)
+
+
+def test_unreadable_window_is_yellow_and_name_unreadable_is_grey(make):
+    from PySide6.QtWidgets import QLabel
+
+    from maplelens.overlay import ACCENT
+    from maplelens.readers.quest_window import NAME_UNREADABLE
+    from maplelens.tools.quest_helper.ui import NAME_UNREAD, UNREAD
+
+    tool = make()
+    tool.update(R(UNREADABLE), RECT, 0)
+    (line,) = [w for w in visible(tool, QLabel) if w.text() == UNREAD]
+    assert ACCENT in line.styleSheet()
+    tool.update(R(NAME_UNREADABLE), RECT, 1)
+    assert NAME_UNREAD in texts(tool) and UNREAD not in texts(tool)
 
 
 def test_one_missed_reading_keeps_the_open_quest(make):

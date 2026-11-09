@@ -39,6 +39,38 @@ def test_self_check_fails_without_classes_json(monkeypatch, no_cache):
     assert app.self_check() == 1
 
 
+def test_self_check_fails_without_quests_json(monkeypatch, no_cache):
+    from maplelens.tools.quest_helper import data
+
+    monkeypatch.setattr(data, "load", lambda: (_ for _ in ()).throw(FileNotFoundError()))
+    assert app.self_check() == 1
+
+
+def test_self_check_fails_without_quest_names(monkeypatch, no_cache):
+    from maplelens.readers import quest_window
+
+    monkeypatch.setattr(
+        quest_window, "known_quest_names", lambda: (_ for _ in ()).throw(FileNotFoundError())
+    )
+    assert app.self_check() == 1
+
+
+class _Path:
+    def __init__(self, starts: bool):
+        self.starts, self.running, self.calls = starts, False, []
+
+    def go(self, *args):
+        self.calls.append(args)
+        self.running = self.starts
+
+
+@pytest.mark.parametrize("starts, selected", [(True, []), (False, [1])])
+def test_quest_go_shows_the_path_tab_only_when_no_trip_runs(starts, selected):
+    path, picked = _Path(starts), []
+    app.quest_go(path, picked.append)("town", (1, 2), "Heena")
+    assert path.calls == [("town", (1, 2), "Heena")] and picked == selected
+
+
 def test_self_check_fails_without_ocr(monkeypatch, no_cache):
     monkeypatch.setattr(ocr, "engine", lambda: None)
     assert app.self_check() == 1

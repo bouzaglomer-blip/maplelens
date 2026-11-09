@@ -7,8 +7,8 @@ reads what's on your screen and shows what you need on top of the game window.
 > **Status: Phase 3: class helper (in progress).** Four tools are built: the EXP meter
 > (EXP/min, time to level, History window), the path arrow (points you to the next portal on
 > your route) and the class helper (a Class tab with gear, training maps, AP and SP plans for
-> every 1st and 2nd job, plus marks on the game's stat and skill windows), and the quest helper (a Quests tab that tracks quests, with
-> their steps and rewards, and takes over while a quest window is open in the game).
+> every 1st and 2nd job, plus marks on the game's stat and skill windows), and the quest helper (a Quests tab that tracks quests, showing
+> where to go for each NPC, monster and item they need, and takes over while a quest window is open in the game).
 >
 > Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
 > Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).

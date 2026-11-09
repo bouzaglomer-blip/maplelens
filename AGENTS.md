@@ -40,7 +40,7 @@ with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
   - `overlay.py` — the see-through `Layer` and draggable `Box` (its ••• menu button, `attach_menu`); `overlay_mac.py` — the macOS panels
   - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures; `data/icon.ico` — the app icon (the exe, Setup and the tray)
   - `data/classes.json` — per-job advice (training maps, AP/SP plans, gear)
-  - `data/quests.json` — the quests (steps, rewards, NPCs)
+  - `data/quests.json` — the quests (the NPCs, monsters and items each quest needs)
   - `store.py` — settings file and data folder
   - `update.py` — the update check's pure part: GitHub's latest-release reply → `Release`, version compare, digest check (`MAPLELENS_UPDATE_REPO` overrides the repo)
   - `update_mac.py` — the Mac update helper: swaps the app from the downloaded dmg, then relaunches it

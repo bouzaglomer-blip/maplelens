@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QScrollArea, QVBoxLayout, QWi
 from shiboken6 import delete
 
 from maplelens.overlay import (
+    ACCENT,
     EDGE,
     FONT,
     LABEL_COLOR,
@@ -22,7 +23,7 @@ from maplelens.overlay import (
     text_label,
 )
 from maplelens.readers import Reading
-from maplelens.readers.quest_window import QuestOpen
+from maplelens.readers.quest_window import NAME_UNREADABLE, QuestOpen
 from maplelens.tools.quest_helper.data import Quest, QuestData, load
 from maplelens.tools.quest_helper.plan import (
     Target,
@@ -37,6 +38,7 @@ EMPTY = "Open a quest in the game to see where to go"
 UNKNOWN = "This quest isn't in MapleLens's list yet"
 SHARED_NAME = "Several quests have this name; MapleLens can't tell which yet"
 UNREAD = "Can't read the quest window: move it fully into view"
+NAME_UNREAD = "Can't read the quest's name: scroll its text to the top"
 OPEN = "Open in the game"
 TRACK = "Track"
 TRACKED = "Tracked ✓"
@@ -44,6 +46,8 @@ STOP = "Stop"
 TRACKING = "Tracking · {n} quests"
 TRACKING_ONE = "Tracking · 1 quest"
 GOING = "Going · {n} maps away"
+GOING_ONE = "Going · 1 map away"
+GOING_HERE = "Going · on this map"
 ALSO = "also for {quest}"
 SHUT, SHOWN = "▸", "▾"
 CLOSE = "\u00d7"  # the multiplication sign, the box's close mark
@@ -204,8 +208,10 @@ class QuestHelperTool:
 
     def _top(self, q: QuestOpen | str, tracked: list[int]) -> tuple[list, Quest | None]:
         """The top part's first lines, and the quest it shows rows for, if any."""
-        if not isinstance(q, QuestOpen):
-            return [("label", OPEN), ("info", UNREAD)], None
+        if q == NAME_UNREADABLE:
+            return [("label", OPEN), ("info", NAME_UNREAD)], None
+        if not isinstance(q, QuestOpen):  # UNREADABLE: one move fixes it, so yellow
+            return [("label", OPEN), ("action", UNREAD)], None
         if shared_name(self._data, q.name):
             return [("label", OPEN), ("info", SHARED_NAME)], None
         top = find_quest(self._data, q.name)
@@ -216,7 +222,12 @@ class QuestHelperTool:
     @staticmethod
     def _row(t: Target, others: list, going) -> tuple:
         if going is not None and t.map_id is not None and (t.map_id, t.at) == going[:2]:
-            return ("run", t.title, GOING.format(n=going[2]))
+            n = going[2]
+            return (
+                "run",
+                t.title,
+                GOING_HERE if n == 0 else GOING_ONE if n == 1 else GOING.format(n=n),
+            )
         sub = t.sub
         names = also_for(t.map_id, others) if t.map_id else []
         if names:
@@ -227,6 +238,10 @@ class QuestHelperTool:
         kind = item[0]
         if kind == "info":
             return InfoLine(item[1])
+        if kind == "action":
+            line = text_label(item[1], LABEL_PT, ACCENT)
+            line.setWordWrap(True)
+            return line
         if kind == "label":
             return text_label(item[1], LABEL_PT, LABEL_COLOR)
         if kind == "row":

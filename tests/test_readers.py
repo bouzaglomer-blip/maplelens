@@ -11,7 +11,7 @@ from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
-from maplelens.readers.quest_window import QuestOpen, read_quest_window
+from maplelens.readers.quest_window import NAME_UNREADABLE, QuestOpen, read_quest_window
 from maplelens.readers.skill_window import SkillRow, SkillWindow, read_skill_window
 from maplelens.readers.stat_window import UNREADABLE, StatWindow, parse_stat, read_stat_window
 
@@ -889,11 +889,11 @@ def test_no_open_tab_reads_none():
         ("quest_progress_1366x768_100.png", (199, 210)),
     ],
 )
-def test_quest_name_line_painted_white_is_unreadable(name, rows):
+def test_quest_name_line_painted_white_is_name_unreadable(name, rows):
     """Without its name line, the first white-body line is description text: not a name."""
     native = screen(name)
     native[rows[0] : rows[1], 256:524] = 255
-    assert read_quest_window(native) == UNREADABLE
+    assert read_quest_window(native) == NAME_UNREADABLE
 
 
 @pytest.mark.parametrize(
@@ -902,11 +902,11 @@ def test_quest_name_line_painted_white_is_unreadable(name, rows):
         (["Donating to Kerning City"], QuestOpen("Donating to Kerning City", True)),  # left out
         (["Donatinq to Kerning City"], QuestOpen("Donating to Kerning City", True)),  # snapped
         (["The Filing Error"], QuestOpen("The Filing Error", True)),
-        (["A Quest Nobody Ever Wrote"], UNREADABLE),  # name-shaped, in neither set
-        (["It seems that Casey in Henesys Park knows"], UNREADABLE),  # a description line
-        (["The Filing \ufffdrror"], UNREADABLE),
-        ([], UNREADABLE),
-        (None, UNREADABLE),  # no OCR engine
+        (["A Quest Nobody Ever Wrote"], NAME_UNREADABLE),  # name-shaped, in neither set
+        (["It seems that Casey in Henesys Park knows"], NAME_UNREADABLE),  # a description line
+        (["The Filing \ufffdrror"], NAME_UNREADABLE),
+        ([], NAME_UNREADABLE),
+        (None, NAME_UNREADABLE),  # no OCR engine
     ],
 )
 def test_quest_name_from_ocr_lines(monkeypatch, lines, want):

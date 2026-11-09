@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import maplelens
 from maplelens import capture, update, update_mac
 from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
-from maplelens.readers import glyphs, ocr, read_all
+from maplelens.readers import glyphs, ocr, quest_window, read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.class_helper import data as class_data
 from maplelens.tools.class_helper.ui import MARKS, ClassHelperTool
@@ -30,6 +30,7 @@ from maplelens.tools.exp_meter.history import best_rate, open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
 from maplelens.tools.path_arrow import maps
 from maplelens.tools.path_arrow.ui import PathArrowTool
+from maplelens.tools.quest_helper import data as quest_data
 from maplelens.tools.quest_helper.ui import QuestHelperTool
 
 _TICK_MS = 500
@@ -216,6 +217,17 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
     box.set_tab_dot(2, cls.dot)
 
 
+def quest_go(path_tool, select):
+    """The Quests tab's go: if no trip starts, show the Path tab, which says why."""
+
+    def go(map_id: str, at=None, label=None) -> None:
+        path_tool.go(map_id, at, label)
+        if not path_tool.running:
+            select(1)
+
+    return go
+
+
 def self_check() -> int:
     """0 if everything MapleLens ships loads, else 1: the build's smoke test.
 
@@ -227,6 +239,8 @@ def self_check() -> int:
         glyphs.load_all()
         maps.load()
         class_data.load()
+        quest_data.load()
+        quest_window.known_quest_names()
         pictures = sorted(maps.PICTURES.glob("*.png"))
         if not pictures or any(maps.picture(p.stem) is None for p in pictures):
             return 1
@@ -836,8 +850,13 @@ def main() -> int:
 
     cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t), cls_data)
     quest_tool = QuestHelperTool(
-        settings, save, path_tool.go, path_tool.heading, path_tool.stop, path_tool.hops
-    )  # its go stays on the Quests tab
+        settings,
+        save,
+        quest_go(path_tool, lambda i: box.select(i)),  # noqa: PLW0108 - box is built next
+        path_tool.heading,
+        path_tool.stop,
+        path_tool.hops,
+    )  # its go stays on the Quests tab while a trip runs
     box = build_box(settings, save, [tool, path_tool, cls_tool, quest_tool], pick)
     setup_screen_recording(box)
     add_build_menu(box, cls_tool)

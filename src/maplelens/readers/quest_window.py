@@ -16,6 +16,8 @@ import numpy as np
 from maplelens.readers import glyphs, map_name, ocr, window
 from maplelens.readers.window import UNREADABLE
 
+NAME_UNREADABLE = "name unreadable"  # a window is there; its name line isn't a known name
+
 
 @dataclass(frozen=True)
 class QuestOpen:
@@ -91,8 +93,11 @@ def read_quest_window(
     """The quest window in `frame` (normalized), read from `native` (default `frame`).
 
     None if no window is found, no tab is open (pink) or it's the Completed tab;
-    UNREADABLE if one is but its details body is off screen or its name doesn't read as
-    a known quest name.
+    UNREADABLE if one is but the frame's edge cuts its details body; NAME_UNREADABLE if
+    no name line is found (the text is scrolled) or it doesn't read as a known quest name.
+
+    Limit: the "QUEST" title is the anchor, at the window's top-left, so a window dragged
+    past the frame's left or top edge isn't found and reads None, as if closed.
     """
     native = frame if native is None else native
     scale = native.shape[0] / frame.shape[0] if scale is None else scale
@@ -109,10 +114,10 @@ def read_quest_window(
         return UNREADABLE
     line = _name_line(win)
     if line is None:
-        return UNREADABLE
+        return NAME_UNREADABLE
     box = (wx + x, wy + line[0], w, line[1] - line[0] + 1)
     lines = ocr.read_lines(glyphs.mask(ocr.crop(frame, native, box), INK_LO, OCR_INK_HI))
     text = " ".join(lines or []).strip()
     # OCR marks what it cannot read with replacement or control characters.
     name = _snap(text) if text.isprintable() and "\ufffd" not in text else None
-    return UNREADABLE if name is None else QuestOpen(name, TAKEN[tab])
+    return NAME_UNREADABLE if name is None else QuestOpen(name, TAKEN[tab])
