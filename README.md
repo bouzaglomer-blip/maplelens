@@ -14,7 +14,7 @@ over your character points to the next portal.
 **EXP meter:** your EXP per hour and time to level, live. History keeps the average for
 every map you've trained on.
 
-![The History window over the game: the best maps for a level 29 Rogue, with Transfer Area at 49,198 EXP an hour, above the average EXP per hour for each map, class and level. The EXP tab above it waits for the next kill](docs/screenshots/exp.jpg)
+![The EXP tab showing 21,433 EXP an hour and level up in 3h 49m, over the History window: the best maps for a level 29 Rogue, with Transfer Area at 49,198 EXP an hour, then the average EXP per hour for each map, class and level](docs/screenshots/exp.jpg)
 
 **Class helper:** where to train for your class and level, with your best spot first and
 one click to set a route there, plus what comes next: job advancement, gear and stats.
