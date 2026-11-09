@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from maplelens import overlay
 from maplelens.readers import Reading
 from maplelens.readers.skill_window import SkillRow, SkillWindow
 from maplelens.readers.stat_window import StatWindow
@@ -163,7 +164,10 @@ def test_long_name_stays_one_line(make):
     long = Row("Victoria Road / " + "X" * 60, "mobs Lv 1–2", None)
     short = Row("Short", "mobs Lv 1–2", None)
     assert long.sizeHint().height() == short.sizeHint().height()
-    assert long.sizeHint().width() <= short.sizeHint().width() or long.sizeHint().width() <= 186
+    assert (
+        long.sizeHint().width() <= short.sizeHint().width()
+        or long.sizeHint().width() <= overlay.TAB_W
+    )
 
 
 def test_no_build_picker_or_marks_box_in_the_tab(make):
@@ -422,7 +426,7 @@ def test_box_width_is_the_same_on_every_tab(box_with_tools):
             box.select(i)
             settle(box, cls, job, level)
             widths[(job, level, i)] = box.width()
-    assert set(widths.values()) == {210}, widths
+    assert set(widths.values()) == {overlay.TAB_W + 24}, widths
 
 
 def test_class_tab_text_never_overlaps(box_with_tools):
@@ -448,7 +452,7 @@ def test_box_width_holds_with_an_info_line_on_the_path_tab(box_with_tools):
         box.path.update(Reading(t, None, None, None, "Road / Nowhere"), RECT, t)
     settle(box)
     assert box.path._info.isVisibleTo(box.path.tab)
-    assert box.width() == 210
+    assert box.width() == overlay.TAB_W + 24
 
 
 def test_a_row_click_never_leaves_the_box_dragging(box_with_tools):
@@ -474,7 +478,9 @@ def test_header_keeps_the_level_when_points_crowd_it(make):
     (head,) = [w for w in tool.tab.findChildren(QLabel) if w.text().endswith("Lv 12")]
     (chip,) = [w for w in tool.tab.findChildren(QLabel) if w.objectName() == "chip"]
     assert chip.text() == "12 AP · 10 SP"
-    assert head.sizeHint().width() + 6 + chip.sizeHint().width() <= 186  # 6: the row's spacing
+    assert (
+        head.sizeHint().width() + 6 + chip.sizeHint().width() <= overlay.TAB_W
+    )  # 6: the row's spacing
 
 
 def test_a_long_job_name_is_cut_not_the_level(make):
