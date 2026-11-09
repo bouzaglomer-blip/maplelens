@@ -187,8 +187,12 @@ builder's; it must hold:
 
 - **Quests** (Victoria and Maple Island; Classic has nothing else yet, owner): id, name,
   giver NPC, hand-in NPC, required monsters with counts, required items with counts,
-  start items. Event, citizenship and crafting quests are left out *(my call: they aren't
-  "go somewhere" quests)*.
+  start items. Event quests are left out, and so is 80000 "Mar" the Fairy and the Water of
+  Life (no source names its NPC). Citizenship and crafting quests are in *(owner decided
+  2026-11-09; they were first left out as not "go somewhere" quests, but many are "talk
+  to this NPC" quests)*. Many citizenship quests share a name (e.g. "Donating to Kerning
+  City" x18), so the tab shows "Several quests have this name" for those. Left-out names
+  go in `other_names`, so the quest window still reads them.
 - **NPCs**: id, name, map id, world x/y.
 - **Monsters**: id, name, spawn count per map.
 - **Items**: id, name, sources (dropped by monster ids; sold by NPC ids).

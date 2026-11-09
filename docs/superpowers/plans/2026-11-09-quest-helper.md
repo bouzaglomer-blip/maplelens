@@ -121,7 +121,7 @@ File shape (JSON object keys are strings; map ids are maps.json's 9-digit string
 - [ ] **Step 3: Convert.** Write the one-off converter in the scratchpad, not the repo.
   - **From OSMS v1:** quests (name, `npc_id` giver, requirements of type mob/item, `start_items`) and monster spawns (`spawns` -> map id `str(id).zfill(9)`, count).
   - **From meowdb:** hand-in NPCs, item drops and shops, and NPC world positions (the `npcs[].x/y` of each meowdb map record, as for maps.json).
-  - Keep Victoria Island and Maple Island. Leave out event, citizenship and crafting quests, and keep only the entries some kept quest refers to.
+  - Keep Victoria Island and Maple Island. Leave out event quests (citizenship and crafting went in on 2026-11-09, owner), and keep only the entries some kept quest refers to.
   - Write `quests.json` compact, keys sorted.
 - [ ] **Step 4: Implement `load`** and the dataclasses in `data.py`.
 - [ ] **Step 5: Run** `uv run pytest tests/test_quest_data.py -v`. Expected: PASS.

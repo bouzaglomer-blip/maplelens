@@ -38,8 +38,14 @@ def test_npc_places_are_map_markers():
 
 def test_kept_quests():
     d = load()
-    assert len(d.quests) > 150  # Classic has 179 outside events, citizenship and crafting
-    assert not [q for q in d.quests.values() if "Citizen" in q.name]
+    names = {q.name for q in d.quests.values()}
+    assert len(d.quests) > 300  # Classic's quests, citizenship and crafting included, not events
+    assert not [n for n in names if n.startswith("[Event]")]  # event quests stay out
+    assert 80000 not in d.quests  # "Mar" the Fairy: no source names its NPC
+    q = d.quests[506001]  # citizenship (owner, 2026-11-09): Community Board -> Rina
+    assert (d.npcs[q.giver].name, d.npcs[q.taker].name) == ("Community Board", "Rina")
+    q = d.quests[80008]  # crafting: Silas Irons
+    assert (d.npcs[q.giver].name, d.npcs[q.taker].name) == ("Silas Irons", "Silas Irons")
     q = d.quests[1001]
     assert q.start_items == (4031000,)
     assert (q.giver, q.taker) == (2, 1)

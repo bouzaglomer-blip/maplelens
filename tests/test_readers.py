@@ -871,7 +871,7 @@ def test_known_quest_names():
 
     names = known_quest_names()
     assert "The Filing Error" in names and len(names) > 100
-    assert "Donating to Kerning City" in names  # left out of the quests on purpose
+    assert "[Event] Trick or Treat!" in names  # left out of the quests on purpose
 
 
 def test_no_open_tab_reads_none():
@@ -899,8 +899,8 @@ def test_quest_name_line_painted_white_is_name_unreadable(name, rows):
 @pytest.mark.parametrize(
     "lines, want",
     [
-        (["Donating to Kerning City"], QuestOpen("Donating to Kerning City", True)),  # left out
-        (["Donatinq to Kerning City"], QuestOpen("Donating to Kerning City", True)),  # snapped
+        (["[Event] Trick or Treat!"], QuestOpen("[Event] Trick or Treat!", True)),  # left out
+        (["[Event] Trick or Treat1"], QuestOpen("[Event] Trick or Treat!", True)),  # snapped
         (["The Filing Error"], QuestOpen("The Filing Error", True)),
         (["A Quest Nobody Ever Wrote"], NAME_UNREADABLE),  # name-shaped, in neither set
         (["It seems that Casey in Henesys Park knows"], NAME_UNREADABLE),  # a description line
