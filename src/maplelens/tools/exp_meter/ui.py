@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from maplelens.overlay import (
+    ACCENT,
     LABEL_COLOR,
     LABEL_PT,
     TAB_W,
@@ -38,6 +39,7 @@ from maplelens.tools.exp_meter.text import (
 )
 
 _FLUSH_S = 60
+_UNREAD_S = 10  # the bar unreadable this long, with the game found: say so
 _COLUMNS = ["Map", "Class", "Lvl", "Avg EXP/h", "Avg %/h", "Active time", "Last there"]
 
 
@@ -131,6 +133,7 @@ class ExpMeterTool:
         self._conn = conn
         self._meter = ExpMeter(settings["idle_cutoff_s"], settings["jump_factor"])
         self._last_flush: float | None = None
+        self._exp_seen: float | None = None  # last tick the bar was read, or the game was gone
         self._history = HistoryWindow(conn, job_line)
         self.title = "EXP"
         self.tab = QWidget()
@@ -189,7 +192,11 @@ class ExpMeterTool:
         if self._last_flush is None:
             self._last_flush = now
         self._save(now, flush_open=now - self._last_flush >= _FLUSH_S)
-        self._show(box_lines(self._meter.rate(now), r is None))
+        if r is None or r.exp is not None or self._exp_seen is None:
+            self._exp_seen = now
+        unread = now - self._exp_seen > _UNREAD_S
+        self._show(box_lines(self._meter.rate(now), r is None, unread))
+        self._texts[0].setStyleSheet(f"color: {ACCENT if unread else LABEL_COLOR};")
 
     def shutdown(self, now: float) -> None:
         self._meter.close(now)
