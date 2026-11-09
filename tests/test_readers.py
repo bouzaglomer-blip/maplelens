@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import cv2
@@ -10,6 +11,7 @@ from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
+from maplelens.readers.quest_window import QuestOpen, read_quest_window
 from maplelens.readers.skill_window import SkillRow, SkillWindow, read_skill_window
 from maplelens.readers.stat_window import UNREADABLE, StatWindow, parse_stat, read_stat_window
 
@@ -140,6 +142,16 @@ EXPECTED_SKILL = {
     "skill_edge_2560x1440_100.png": None,  # window mostly off the left edge
 }
 
+# Quest window crops: native, the window only. The details pane's bold line is the quest's
+# own name; the header and the list show its chain's name ("Caretaker's Ledger").
+EXPECTED_QUEST = {
+    "quest_progress_1366x768_100.png": QuestOpen("The Filing Error", True),
+    "quest_progress_1920x1080_100.png": QuestOpen("The Filing Error", True),
+    "quest_available_1366x768_100.png": QuestOpen("Make a Match Cards Set", False),
+    "quest_available_1920x1080_100.png": QuestOpen("Make a Match Cards Set", False),
+    "quest_offscreen_1366x768_100.png": UNREADABLE,  # the details pane cut by the screen edge
+}
+
 
 def screen(name: str):
     return cv2.imread(str(SCREENS / name), cv2.IMREAD_COLOR)
@@ -216,8 +228,8 @@ def test_expected_matches_fixture_files():
         "title_ellinia_1920x1080_100.png",
         "title_rainforest_1920x1080_100.png",
     }
-    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(
-        EXPECTED_SKILL
+    assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(EXPECTED_SKILL) | set(
+        EXPECTED_QUEST
     ) | native_map == {p.name for p in SCREENS.glob("*.png")}
 
 
@@ -606,9 +618,9 @@ def test_parse_stat(text, want):
 
 
 def _window_args(name):
-    """(frame, native, scale) of a native stat crop: frame is the 768-scale resize."""
+    """(frame, native, scale) of a native crop: frame is the 768-scale resize."""
     native = screen(name)
-    scale = int(name.split("_")[2].split("x")[1]) / 768
+    scale = int(re.search(r"_\d+x(\d+)_", name)[1]) / 768
     return _scaled(native, scale), native, scale
 
 
@@ -820,3 +832,58 @@ def test_skill_plus_off_frame_is_unreadable():
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("stat_a_*.png")))
 def test_no_skill_window_in_a_stat_window(name):
     assert read_skill_window(*_window_args(name)) is None
+
+
+@needs_ocr
+@pytest.mark.parametrize("name", [n for n, q in EXPECTED_QUEST.items() if q != UNREADABLE])
+def test_read_quest_window(name, monkeypatch):
+    from maplelens.readers import quest_window
+
+    read, seen = quest_window.ocr.read_lines, []
+    monkeypatch.setattr(quest_window.ocr, "read_lines", lambda m: seen.append(read(m)) or seen[-1])
+    assert read_quest_window(*_window_args(name)) == EXPECTED_QUEST[name], seen
+
+
+def test_quest_window_off_screen_is_unreadable():
+    assert read_quest_window(*_window_args("quest_offscreen_1366x768_100.png")) == UNREADABLE
+
+
+@pytest.mark.parametrize(
+    "name", sorted(p.name for p in SCREENS.glob("*.png") if p.name not in EXPECTED_QUEST)
+)
+def test_no_quest_window(name):
+    assert read_quest_window(*_window_args(name)) is None
+
+
+def test_completed_tab_reads_none():
+    """Nothing to help with on the Completed tab: the pink tab moved there reads None."""
+    native = screen("quest_progress_1366x768_100.png")
+    assert read_quest_window(native) is not None
+    tabs = native[24:42].copy()
+    native[24:42, 150:222] = tabs[:, 78:150]  # In Progress's pink onto Completed
+    native[24:42, 78:150] = tabs[:, 4:76]  # Available's grey onto In Progress
+    assert read_quest_window(native) is None
+
+
+def test_known_quest_names():
+    from maplelens.readers.quest_window import known_quest_names
+
+    names = known_quest_names()
+    assert "The Filing Error" in names and len(names) > 100
+
+
+@needs_ocr
+def test_read_all_fills_quest():
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    fixture = screen("quest_progress_1366x768_100.png")
+    frame[100 : 100 + fixture.shape[0], 300 : 300 + fixture.shape[1]] = fixture
+    assert read_all(frame, 1.0).quest == EXPECTED_QUEST["quest_progress_1366x768_100.png"]
+
+
+@needs_ocr
+@pytest.mark.parametrize("name", [n for n in EXPECTED_QUEST if "1920x1080" in n])
+def test_quest_reads_at_every_offset(name):
+    scale = 1080 / 768
+    for k in range(6):
+        native = screen(name)[k:, k:]
+        assert read_quest_window(_scaled(native, scale), native, scale) == EXPECTED_QUEST[name], k

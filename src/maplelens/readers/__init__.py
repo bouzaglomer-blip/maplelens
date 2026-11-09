@@ -41,6 +41,7 @@ def read_all(frame: np.ndarray, t: float) -> Reading:
         level,
         map_name,
         minimap_pos,
+        quest_window,
         skill_window,
         stat_window,
     )
@@ -58,4 +59,5 @@ def read_all(frame: np.ndarray, t: float) -> Reading:
         view,
         stat_window.read_stat_window(img, frame, scale),
         skill_window.read_skill_window(img, frame, scale),
+        quest_window.read_quest_window(img, frame, scale),
     )
