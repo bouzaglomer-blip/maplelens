@@ -322,6 +322,7 @@ def test_long_names_elide_to_the_box_width(make):
 
 class _Cls:
     dot = False
+    open = False
     title = "Class"
 
     def __init__(self):
@@ -362,11 +363,11 @@ def test_tick_feeds_both_tools_and_dots_path_tab(make):
         box.select(i)
         widths.add(box.sizeHint().width())
     assert len(widths) == 1  # same box width on both tabs
-    update_tools(box, exp, path, cls, None, None, 1.0, set())
+    update_tools(box, exp, path, cls, _Cls(), _Cls(), None, None, 1.0, set())
     assert box._tab_dots[1].isHidden()
     go(path, "A", "C", 1.0)
     assert path.running
-    update_tools(box, exp, path, cls, None, None, 2.0, set())
+    update_tools(box, exp, path, cls, _Cls(), _Cls(), None, None, 2.0, set())
     assert not box._tab_dots[1].isHidden()
     box.close()
     exp.shutdown(3.0)
@@ -456,7 +457,7 @@ def test_tool_errors_do_not_stop_the_other_tool(make, capsys):
     seen = set()
     for t in (1.0, 1.5):
         r = Reading(t, None, None, None, title("B"), minimap=MID)
-        update_tools(box, Broken(), path, _Cls(), r, RECT, t, seen)
+        update_tools(box, Broken(), path, _Cls(), _Cls(), _Cls(), r, RECT, t, seen)
     assert path._header.text() == "To Cherry · 2 of 3"  # path still ran
     assert not box._tab_dots[1].isHidden()
     assert capsys.readouterr().err.count("ValueError: boom") == 1  # printed once
@@ -465,7 +466,7 @@ def test_tool_errors_do_not_stop_the_other_tool(make, capsys):
         raise ValueError("bang")
 
     path.update = broken_path
-    update_tools(box, Broken(), path, _Cls(), None, RECT, 2.0, seen)
+    update_tools(box, Broken(), path, _Cls(), _Cls(), _Cls(), None, RECT, 2.0, seen)
     assert not path.arrow.isVisible()  # hidden, not frozen at its last spot
 
 

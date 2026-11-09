@@ -4,13 +4,15 @@ An open-source overlay for **MapleStory Classic** that keeps you in the game.
 Instead of alt-tabbing to price sites, class guides and route finders, MapleLens
 reads what's on your screen and shows what you need on top of the game window.
 
-> **Status: Phase 3: class helper (in progress).** Three tools are built: the EXP meter
+> **Status: Phase 3: class helper (in progress).** Four tools are built: the EXP meter
 > (EXP/min, time to level, History window), the path arrow (points you to the next portal on
 > your route) and the class helper (a Class tab with gear, training maps, AP and SP plans for
-> every 1st and 2nd job, plus marks on the game's stat and skill windows).
+> every 1st and 2nd job, plus marks on the game's stat and skill windows), and the quest helper (a Quests tab that tracks quests, with
+> their steps and rewards, and takes over while a quest window is open in the game).
 >
 > Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
 > Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
+> Quest data adapted from [meowdb](https://meowdb.com/msclassic) (NiaDB) and [OSMS Data Explorer](https://osmsdataexplorer.com) (CC BY 4.0).
 >
 > Class plans adapted from the NiaDB class guides:
 >   [beginners-guide-first-steps-in-maple-world](https://meowdb.com/msclassic/guides/beginners-guide-first-steps-in-maple-world) ·

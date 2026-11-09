@@ -30,6 +30,7 @@ from maplelens.tools.exp_meter.history import best_rate, open_db
 from maplelens.tools.exp_meter.ui import ExpMeterTool
 from maplelens.tools.path_arrow import maps
 from maplelens.tools.path_arrow.ui import PathArrowTool
+from maplelens.tools.quest_helper.ui import QuestHelperTool
 
 _TICK_MS = 500
 APP_NAME = "MapleLens"  # also the title of our own windows, which the picker leaves out
@@ -154,8 +155,39 @@ def poll_updates(updates: "UpdateCheck | None", now: float, seen: set[str]) -> N
         report_once(e, seen)
 
 
+class QuestFocus:
+    """Switch the box to the Quests tab while a quest window is open in the game.
+
+    The state flips only after two updates in a row agree. On close the box goes back to
+    the tab it came from, unless the player pressed in the box since.
+    """
+
+    def __init__(self, box: Box, index: int):
+        self._box, self._index = box, index
+        self._open = False  # the settled state
+        self._last = False  # the latest update
+        self._back: int | None = None
+        self._touches = 0
+
+    def update(self, open_: bool) -> None:
+        agreed = open_ == self._last
+        self._last = open_
+        if not agreed or open_ == self._open:
+            return
+        self._open = open_
+        box = self._box
+        if open_:
+            if box.current != self._index:
+                self._back, self._touches = box.current, box.touches
+                box.select(self._index)
+        else:
+            if self._back is not None and box.touches == self._touches:
+                box.select(self._back)
+            self._back = None
+
+
 def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bundle would hide them
-    box: Box, exp, path, cls, reading, rect, now: float, seen: set[str]
+    box: Box, exp, path, cls, quest, focus, reading, rect, now: float, seen: set[str]
 ) -> None:
     """Feed the tools the same reading; the Path tab shows a dot while a trip runs.
 
@@ -175,6 +207,11 @@ def update_tools(  # noqa: PLR0913, PLR0917 - one per tool plus the frame; a bun
     except Exception as e:
         report_once(e, seen)
         cls.hide_marks()  # never leave marks from a tick that failed
+    try:
+        quest.update(reading, rect, now)
+    except Exception as e:
+        report_once(e, seen)  # it draws nothing on the layer: nothing to hide
+    focus.update(quest.open)
     box.set_tab_dot(1, path.running)  # the tabs' indexes in build_box's tools list
     box.set_tab_dot(2, cls.dot)
 
@@ -677,6 +714,8 @@ class Tick:
     exp: ExpMeterTool
     path: PathArrowTool
     cls: ClassHelperTool
+    quest: QuestHelperTool
+    focus: QuestFocus
     updates: "UpdateCheck | None"
     seen: set[str]  # error types/messages already logged
     shown: Shown
@@ -694,7 +733,18 @@ class Tick:
         if rect is None:
             self.hwnd = None  # gone or minimized: look again next tick
             self.layer.hide()
-            update_tools(self.box, self.exp, self.path, self.cls, None, None, now, self.seen)
+            update_tools(
+                self.box,
+                self.exp,
+                self.path,
+                self.cls,
+                self.quest,
+                self.focus,
+                None,
+                None,
+                now,
+                self.seen,
+            )
             return
         self.layer.follow(rect)
         if self.shown.on:  # hidden by the player: the tools still run, nothing shows
@@ -704,7 +754,18 @@ class Tick:
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, self.seen)
             reading = None
-        update_tools(self.box, self.exp, self.path, self.cls, reading, rect, now, self.seen)
+        update_tools(
+            self.box,
+            self.exp,
+            self.path,
+            self.cls,
+            self.quest,
+            self.focus,
+            reading,
+            rect,
+            now,
+            self.seen,
+        )
         self.box.place(rect)
 
 
@@ -774,7 +835,10 @@ def main() -> int:
         box.select(1)
 
     cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t), cls_data)
-    box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
+    quest_tool = QuestHelperTool(
+        settings, save, path_tool.go, path_tool.heading, path_tool.stop, path_tool.hops
+    )  # its go stays on the Quests tab
+    box = build_box(settings, save, [tool, path_tool, cls_tool, quest_tool], pick)
     setup_screen_recording(box)
     add_build_menu(box, cls_tool)
     box.add_toggle(MARKS, settings["class_marks"], cls_tool.set_marks, at=-1)
@@ -782,7 +846,20 @@ def main() -> int:
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     shown = add_hide(box, layer, tray, click=sys.platform == "win32")
     add_about(box, updates)  # after Hide: just before Quit
-    tick = Tick(settings, save, box, layer, tool, path_tool, cls_tool, updates, seen, shown)
+    tick = Tick(
+        settings,
+        save,
+        box,
+        layer,
+        tool,
+        path_tool,
+        cls_tool,
+        quest_tool,
+        QuestFocus(box, 3),
+        updates,
+        seen,
+        shown,
+    )
     timer = QTimer()
     timer.timeout.connect(lambda: tick.run(time.time()))
     timer.start(_TICK_MS)
