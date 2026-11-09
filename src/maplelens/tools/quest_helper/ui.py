@@ -42,6 +42,7 @@ TRACK = "Track"
 TRACKED = "Tracked ✓"
 STOP = "Stop"
 TRACKING = "Tracking · {n} quests"
+TRACKING_ONE = "Tracking · 1 quest"
 GOING = "Going · {n} maps away"
 ALSO = "also for {quest}"
 SHUT, SHOWN = "▸", "▾"
@@ -174,7 +175,7 @@ class QuestHelperTool:
     def _items(self) -> list:
         """Items are tuples, drawn in order: ("info", text), ("label", text),
         ("open", id, name, tracked), ("head", id, name, expanded),
-        ("row", title, sub, map id, at, npc), ("run", title, sub)."""
+        ("row", title, sub, map id, at, npc, info), ("run", title, sub)."""
         d, q = self._data, self._quest
         tracked = self._settings["quests_tracked"]
         out, top = self._top(q, tracked) if q is not None else ([], None)
@@ -186,13 +187,14 @@ class QuestHelperTool:
         going = self._heading()
 
         def rows(qid: int) -> list:
-            others = [(d.quests[j].name, ts) for j, ts in plans.items() if j != qid]
+            others = [(d.quests[j].name, plans[j]) for j in tracked if j != qid]  # tracked only
             return [self._row(t, others, going) for t in plans[qid]]
 
         if top is not None:
             out += rows(top.id)
         if listed:
-            out.append(("label", TRACKING.format(n=len(listed))))
+            n = len(tracked)  # the open one too, though it shows only on top
+            out.append(("label", TRACKING_ONE if n == 1 else TRACKING.format(n=n)))
         for i in listed:
             expanded = i == self._settings["quests_expanded"]
             out.append(("head", i, d.quests[i].name, expanded))
@@ -219,7 +221,7 @@ class QuestHelperTool:
         names = also_for(t.map_id, others) if t.map_id else []
         if names:
             sub = f"{sub} · {ALSO.format(quest=', '.join(names))}"
-        return ("row", t.title, sub, t.map_id, t.at, t.npc)
+        return ("row", t.title, sub, t.map_id, t.at, t.npc, t.info)
 
     def _widget(self, item) -> QWidget:
         kind = item[0]
@@ -228,9 +230,9 @@ class QuestHelperTool:
         if kind == "label":
             return text_label(item[1], LABEL_PT, LABEL_COLOR)
         if kind == "row":
-            _, title, sub, map_id, at, npc = item
+            _, title, sub, map_id, at, npc, info = item
             go = (lambda: self._go_to(map_id, at, npc)) if map_id else None
-            row = Row(title, sub, go)
+            row = Row(title, sub, go, info=info)
             row.setToolTip(sub)  # the sub-line is cut to fit
             return row
         if kind == "run":

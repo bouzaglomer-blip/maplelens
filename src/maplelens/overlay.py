@@ -158,9 +158,11 @@ class Row(QWidget):
         best: bool = False,
         outline: bool = False,
         trailing: QWidget | None = None,  # in place of the arrow, e.g. a button
+        info: bool = False,  # the grey line is why it can't be clicked: an info mark leads it
     ):
         super().__init__()
         self.name, self.sub, self.best, self.outline = name, sub, best, outline
+        self.info = info and bool(sub)
         self.clickable, self._on_click = on_click is not None, on_click
         self.setObjectName("row")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -184,8 +186,15 @@ class Row(QWidget):
         col.addWidget(title)
         if sub:
             under = text_label(sub, LABEL_PT, LABEL_COLOR)
+            line = QHBoxLayout()
+            line.setSpacing(5)
+            if self.info:
+                mark = _InfoMark()
+                line.addWidget(mark, 0, Qt.AlignVCenter)
+                room -= mark.width() + line.spacing()
             under.setText(QFontMetrics(under.font()).elidedText(sub, Qt.ElideRight, room))
-            col.addWidget(under)
+            line.addWidget(under, 1)
+            col.addLayout(line)
         row.addLayout(col, 1)
         if end:
             row.addWidget(end, 0, Qt.AlignVCenter)

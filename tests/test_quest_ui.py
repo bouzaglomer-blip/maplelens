@@ -7,7 +7,7 @@ from maplelens.readers import Reading
 from maplelens.readers.quest_window import QuestOpen
 from maplelens.readers.window import UNREADABLE
 from maplelens.store import DEFAULTS
-from maplelens.tools.quest_helper.data import MAPS, Quest, load
+from maplelens.tools.quest_helper.data import MAPS, Item, Quest, load
 
 SMALL = Path(__file__).parent / "fixtures" / "quests_small.json"
 RECT = (0, 0, 1366, 768)
@@ -15,6 +15,7 @@ MIRROR = "Bringing a Mirror to Heena"  # 1001: Sera gives it, Snail x3, Heena ta
 SNAILS = 1002  # Snail Hunt: Snail x5 (the same map as 1001's), hand in to Heena
 BIG = 1003  # Big Hunt: Sera gives it, four Snail rows, Heena takes it: 6 rows
 SHARED = "Test of Qualification"  # 1004 and 1005
+MYSTERY = 1006  # Mystery Quest: one item nobody drops or sells, hand in to Heena
 SNAIL_MAP, TOWN = "000000040", "000000001"
 
 
@@ -26,8 +27,10 @@ def data():
         Quest(BIG, "Big Hunt", 2, 1, ((2, 1), (2, 2), (2, 3), (2, 4)), (), ()),
         replace(q, id=1004, name=SHARED),
         replace(q, id=1005, name=SHARED),
+        Quest(MYSTERY, "Mystery Quest", None, 1, (), ((9, 1),), ()),
     ]
-    return replace(d, quests={**d.quests, **{x.id: x for x in extra}})
+    items = {**d.items, 9: Item(9, "Odd Stone", (), ())}
+    return replace(d, quests={**d.quests, **{x.id: x for x in extra}}, items=items)
 
 
 def R(quest=None):
@@ -137,7 +140,7 @@ def test_open_quest_shows_rows_and_track(make):
 
 
 def test_track_saves_and_survives_close(make):
-    from maplelens.tools.quest_helper.ui import TRACK, TRACKING
+    from maplelens.tools.quest_helper.ui import TRACK, TRACKING_ONE
 
     tool = make()
     tool.update(opened(), RECT, 0)
@@ -146,17 +149,18 @@ def test_track_saves_and_survives_close(make):
     for t in (1, 2):
         tool.update(R(), RECT, t)
     assert not tool.open
-    assert TRACKING.format(n=1) in texts(tool)
+    assert TRACKING_ONE == "Tracking · 1 quest" and TRACKING_ONE in texts(tool)
     assert any(MIRROR in t for t in texts(tool))
 
 
 def test_tracked_open_quest_shows_tracked_mark_once(make):
-    from maplelens.tools.quest_helper.ui import TRACK, TRACKED
+    from maplelens.tools.quest_helper.ui import TRACK, TRACKED, TRACKING
 
     tool = make(tracked=[1001, SNAILS])
     tool.update(opened(), RECT, 0)
     shown = texts(tool)
     assert TRACKED in shown and TRACK not in shown
+    assert TRACKING.format(n=2) in shown  # the open one counts, though it shows only on top
     assert sum(MIRROR in t for t in shown) == 1  # on top, not again under Tracking
     assert any("Snail Hunt" in t for t in shown)
 
@@ -224,10 +228,38 @@ def test_also_for(make):
     snail = next(r for r in rows(tool) if r.name.startswith("Snail ×3"))
     assert snail.sub.endswith(" · " + ALSO.format(quest="Snail Hunt"))
     assert snail.toolTip() == snail.sub
-    hunt = next(r for r in rows(tool) if r.name == "Snail ×5")
-    assert hunt.sub.endswith(" · " + ALSO.format(quest=MIRROR))  # the open, untracked quest
     heena = next(r for r in rows(tool) if r.name == "Heena")  # the open quest's hand-in
     assert heena.sub.endswith(ALSO.format(quest="Snail Hunt"))  # Snail Hunt's is on that map
+    hunt = next(r for r in rows(tool) if r.name == "Snail ×5")
+    assert "also for" not in hunt.sub  # the open quest isn't tracked: it doesn't count
+    tool = make(tracked=[SNAILS, 1001], expanded=SNAILS)
+    tool.update(opened(taken=True), RECT, 0)
+    hunt = next(r for r in rows(tool) if r.name == "Snail ×5")
+    assert hunt.sub.endswith(" · " + ALSO.format(quest=MIRROR))  # tracked now
+
+
+def test_row_with_no_source_is_an_info_row(make):
+    from maplelens.tools.quest_helper.plan import NO_ITEM
+
+    tool = make()
+    tool.update(opened("Mystery Quest", taken=True), RECT, 0)
+    stone = next(r for r in rows(tool) if r.name == "Odd Stone ×1")
+    assert stone.sub == NO_ITEM and stone.info and not stone.clickable
+    from maplelens.overlay import _InfoMark
+
+    assert [m for m in stone.findChildren(_InfoMark) if m.isVisibleTo(stone)]
+    stone.click()
+    assert tool.calls["go"] == []
+    heena = next(r for r in rows(tool) if r.name == "Heena")
+    assert not heena.info and not heena.findChildren(_InfoMark)
+
+
+def test_same_reading_keeps_the_same_body(make):
+    tool = make(tracked=[SNAILS], expanded=SNAILS)
+    tool.update(opened(), RECT, 0)
+    body, first = tool._body, rows(tool)[0]
+    tool.update(opened(), RECT, 1)
+    assert tool._body is body and rows(tool)[0] is first
 
 
 def test_unreadable_unknown_and_shared_lines(make):
