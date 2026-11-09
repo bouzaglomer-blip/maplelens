@@ -125,7 +125,7 @@ def test_paused_stretch_adds_no_active_time():
     feed(m, 50, 1100, 10.5)
     seg = m.open_segment()
     assert seg.active_s == 0
-    assert seg.pct == pytest.approx(0.5)  # the first gain after the stretch still counts
+    assert seg.pct == 0  # the first gain after the stretch only starts the clock, as live
 
 
 def test_unreadable_map_keeps_the_segment():
@@ -239,3 +239,18 @@ def test_lasting_jump_is_learned_after_three_kills():
     rate = m.rate(511)
     assert rate.pct_per_min == pytest.approx((9.0 + 2.5) / 5)
     assert not rate.paused
+
+
+@pytest.mark.parametrize("first", [3, 15])  # the break right after the first kills, or later
+def test_a_break_between_kills_is_not_training_time(first):
+    """Buffing, walking to the spot, looting: a minute with no kill, under the idle cutoff."""
+    m = ExpMeter()
+    before = [2 * i for i in range(first)]
+    kills = before + [before[-1] + 60 + 2 * i for i in range(60)]  # then 2 min of a kill / 2 s
+    for i, t in enumerate(kills):
+        feed(m, t, 1000 + 10 * i, 10 + 0.01 * i)
+    # one kill per 2 s is 300 EXP/min; the break used to cut it until it left the window
+    assert m.rate(kills[-1] + 1).exp_per_min == pytest.approx(300)
+    seg = m.open_segment()  # the History row: the same sums
+    assert seg.active_s == pytest.approx(2 * (len(kills) - 2))
+    assert seg.exp / seg.active_s * 60 == pytest.approx(300)
