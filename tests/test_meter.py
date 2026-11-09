@@ -125,7 +125,7 @@ def test_paused_stretch_adds_no_active_time():
     feed(m, 50, 1100, 10.5)
     seg = m.open_segment()
     assert seg.active_s == 0
-    assert seg.pct == pytest.approx(0.5)  # the first gain after the stretch still counts
+    assert seg.pct == 0  # the first gain after the stretch only starts the clock, as live
 
 
 def test_unreadable_map_keeps_the_segment():
@@ -239,3 +239,58 @@ def test_lasting_jump_is_learned_after_three_kills():
     rate = m.rate(511)
     assert rate.pct_per_min == pytest.approx((9.0 + 2.5) / 5)
     assert not rate.paused
+
+
+@pytest.mark.parametrize("first", [3, 15])  # the break right after the first kills, or later
+def test_a_break_between_kills_is_not_training_time(first):
+    """Buffing, walking to the spot, looting: a minute with no kill, under the idle cutoff."""
+    m = ExpMeter()
+    before = [2 * i for i in range(first)]
+    kills = before + [before[-1] + 60 + 2 * i for i in range(60)]  # then 2 min of a kill / 2 s
+    for i, t in enumerate(kills):
+        feed(m, t, 1000 + 10 * i, 10 + 0.01 * i)
+    # one kill per 2 s is 300 EXP/min; the break used to cut it until it left the window
+    assert m.rate(kills[-1] + 1).exp_per_min == pytest.approx(300)
+    seg = m.open_segment()  # the History row: the same sums
+    assert seg.active_s == pytest.approx(2 * (len(kills) - 2))
+    assert seg.exp / seg.active_s * 60 == pytest.approx(300)
+
+
+def every(step, n, start=0):
+    return [start + step * i for i in range(n)]
+
+
+def pulls(kills, gap, wait, n):
+    """n pulls of `kills` kills `gap` s apart, `wait` s between pulls."""
+    return [((kills - 1) * gap + wait) * c + gap * i for c in range(n) for i in range(kills)]
+
+
+def with_break(before, brk, after):
+    b = every(2, before)
+    return b + every(2, after, b[-1] + brk)
+
+
+@pytest.mark.parametrize(
+    "kills, live, history",
+    [
+        pytest.param(every(2, 150), 18000, 18000, id="steady"),
+        pytest.param(with_break(3, 60, 40), 18000, 18000, id="60s setup after 3 kills"),
+        pytest.param(with_break(60, 45, 30), 18000, 18000, id="45s loot stop"),
+        # History is a little above the live rate: it starts and ends partway through a pull
+        pytest.param(pulls(4, 1, 28, 30), 4645, 4749, id="4 per pull, 28s wait"),
+        pytest.param(pulls(4, 1, 32, 30), 4114, 4208, id="4 per pull, 32s wait"),
+        pytest.param(pulls(4, 1, 40, 30), 3349, 3427, id="4 per pull, 40s wait"),
+        pytest.param(pulls(8, 2, 20, 15), 8471, 8743, id="8 per pull, 20s respawn"),
+        pytest.param(every(40, 30), 900, 900, id="slow killer"),
+        # breaks are 20% of the gaps, over the 10% the rule can find: they count, as on main
+        pytest.param(pulls(5, 2, 60, 12), 2647, 2810, id="60s break every 5 kills"),
+    ],
+)
+def test_rate_by_play_pattern(kills, live, history):
+    """Kills of 10 EXP: the live rate and the History row, in EXP per hour."""
+    m = ExpMeter()
+    for i, t in enumerate(kills):
+        feed(m, t, 1000 + 10 * i, 10 + 0.01 * i)
+    assert m.rate(kills[-1] + 1).exp_per_min * 60 == pytest.approx(live, abs=1)
+    seg = m.open_segment()
+    assert seg.exp / seg.active_s * 3600 == pytest.approx(history, abs=1)

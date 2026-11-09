@@ -1,8 +1,8 @@
 """EXP rate, idle time and per-map/class/level segments from a stream of readings."""
 
 from collections import deque
-from dataclasses import dataclass, replace
-from statistics import median
+from dataclasses import dataclass, field, replace
+from statistics import median, quantiles
 
 from maplelens.readers import ExpValue, Reading
 
@@ -25,6 +25,8 @@ class Segment:
     exp: int = 0
     pct: float = 0.0
     active_s: float = 0.0
+    # (t, raw, pct, gap) gains, as in ExpMeter._window; exp, pct and active_s are summed from them
+    gains: list[tuple[float, int, float, float]] = field(default_factory=list, repr=False)
 
 
 class _Confirmed:
@@ -43,6 +45,22 @@ class _Confirmed:
 
 # This many jumps in a row are real (a 2x event, a party, a richer map), not misreads
 _JUMPS_TO_ACCEPT = 3
+# A gap this many times a long usual one between gains (the 90th percentile, so the wait between
+# pulls of several kills each counts as usual), and this long, is a break (buffs, walking,
+# looting), not training, even under the idle cutoff; a wait for the respawn is shorter.
+# ponytail: a break is only found while breaks are under 10% of the gains
+_BREAK_FACTOR, _BREAK_MIN_S = 10, 30
+
+
+def _totals(gains, idle_cutoff_s: float) -> tuple[int, float, float]:
+    """(exp, %, active s) of (t, raw, pct, gap) gains, leaving out each gain after a break:
+    its gap and its EXP, as for the first gain after an idle stretch."""
+    gaps = [g[3] for g in gains]
+    cutoff = idle_cutoff_s
+    if len(gaps) >= 10:  # enough gaps to know the pace (the break's own among them)
+        cutoff = min(cutoff, max(_BREAK_MIN_S, _BREAK_FACTOR * quantiles(gaps, n=10)[-1]))
+    kept = [g for g in gains if g[3] <= cutoff]
+    return sum(g[1] for g in kept), sum(g[2] for g in kept), sum(g[3] for g in kept)
 
 
 class ExpMeter:
@@ -62,7 +80,7 @@ class ExpMeter:
         self._jumps = 0  # jumps rejected in a row
         self._seg: Segment | None = None
         self._closed: list[Segment] = []
-        self._last_event_t: float | None = None
+        self._last_event_t: float | None = None  # the segment's clock: its start or last gain
 
     def feed(self, r: Reading | None) -> None:
         t = r.t if r else None
@@ -133,30 +151,35 @@ class ExpMeter:
             self._event_t = t
         seg = self._seg
         if seg and not paused:  # gains while paused count in the live rate only
-            if self._last_event_t is not None and t - self._last_event_t <= self.idle_cutoff_s:
-                seg.active_s += t - self._last_event_t
             if gain:
-                seg.exp += gain[0]
-                seg.pct += gain[1]
-            seg.end = self._last_event_t = t
+                # the same gain as the live rate's, timed from the segment's own clock
+                last = self._last_event_t
+                if last is not None and (gap := t - last) <= self.idle_cutoff_s:
+                    seg.gains.append((t, *gain, gap))
+                self._last_event_t = t
+            seg.end = t
 
     def _close(self, t: float) -> None:
         if self._seg:
             self._seg.end = t
-            self._closed.append(self._seg)
+            self._closed.append(self._summed(self._seg))
         self._seg = self._last_event_t = None
+
+    def _summed(self, seg: Segment) -> Segment:
+        exp, pct, active = _totals(seg.gains, self.idle_cutoff_s)
+        return replace(seg, exp=exp, pct=pct, active_s=active)
 
     def rate(self, now: float) -> Rate | None:
         """EXP per minute of active time over the last `window_s` of it; None under a minute."""
-        active = sum(g[3] for g in self._window)
+        exp_sum, pct_sum, active = _totals(self._window, self.idle_cutoff_s)
         if active < 60:
             return None
         minutes = active / 60
-        pct_per_min = sum(g[2] for g in self._window) / minutes
+        pct_per_min = pct_sum / minutes
         exp = self._exp.value
         left = (100 - exp.pct) / pct_per_min if exp and pct_per_min > 0 else None
         paused = now - self._event_t > self.idle_cutoff_s
-        return Rate(sum(g[1] for g in self._window) / minutes, pct_per_min, left, paused)
+        return Rate(exp_sum / minutes, pct_per_min, left, paused)
 
     @property
     def job(self) -> str | None:
@@ -171,7 +194,7 @@ class ExpMeter:
         return closed
 
     def open_segment(self) -> Segment | None:
-        return replace(self._seg) if self._seg else None
+        return self._summed(self._seg) if self._seg else None
 
     def close(self, now: float) -> None:
         self._close(now)
