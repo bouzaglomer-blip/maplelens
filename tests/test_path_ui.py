@@ -23,8 +23,9 @@ MAPS = {
     m.id: m
     for m in [
         mk("A", "Apple", [(300, -300, "B")]),
-        mk("B", "Berry", [(0, 0, "A"), (0, 0, "C")]),
+        mk("B", "Berry", [(0, 0, "A"), (0, 0, "C"), (0, 0, "M")]),
         mk("C", "Cherry", [(0, 0, "B")]),
+        mk("M", "Hush", [(0, 0, "B")], minimap=None),  # reachable, but no minimap
         mk("D", "Date"),  # nothing leads here
         mk("X", "Xylo", [(0, 0, "C")], street="Bay"),
         mk("N", "Nomap", [(0, 0, "B")], minimap=None),
@@ -529,3 +530,44 @@ def test_start_and_stop_kinds(make):
     tool = make()
     assert tool._start.property("kind") == "primary"
     assert tool._stop.property("kind") == "secondary"
+
+
+def _npc_world(tool, x, y):
+    """A reading with the player at world (x, y) on the confirmed map."""
+    return MinimapView((125, 62), (62.5 + x / 16, 31.0 + y / 16), ())
+
+
+def test_npc_trip_points_then_arrives(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    feed(tool, title("B"))
+    tool.go("C", (0, 0), "Luke")
+    feed(tool, title("C"), 1.0, view=_npc_world(tool, 400, 0))
+    assert tool.running and tool.arrow.isVisible()
+    assert tool.heading() == ("C", (0, 0), 0)
+    feed(tool, title("C"), 2.0, view=_npc_world(tool, ui.NPC_NEAR - 10, 0))
+    assert tool._header.text() == "Arrived at Luke"
+    assert not tool.running
+
+
+def test_npc_trip_without_minimap_arrives_on_map(make):
+    from maplelens.tools.path_arrow import ui
+
+    tool = make()
+    feed(tool, title("B"))
+    tool.go("M", (0, 0), "Luke")
+    feed(tool, title("M"), 1.0)
+    assert tool._header.text() == ui.ON_MAP.format("Luke")
+    assert not tool.running
+
+
+def test_heading_stop_hops(make):
+    tool = make()
+    assert tool.hops("C") is None  # map not known yet
+    feed(tool, title("A"))
+    assert tool.hops("C") == 2
+    tool.go("C", (5, 6), "Luke")
+    assert tool.heading() == ("C", (5, 6), 2)
+    tool.stop()
+    assert tool.heading() is None and not tool.running
