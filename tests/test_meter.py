@@ -254,3 +254,15 @@ def test_a_break_between_kills_is_not_training_time(first):
     seg = m.open_segment()  # the History row: the same sums
     assert seg.active_s == pytest.approx(2 * (len(kills) - 2))
     assert seg.exp / seg.active_s * 60 == pytest.approx(300)
+
+
+def test_waits_between_pulls_are_not_breaks():
+    """Several kills per pull, then a wait over 30 s for the respawn: the wait is training time."""
+    m = ExpMeter()
+    kills = [35 * c + i for c in range(30) for i in range(4)]  # 4 kills 1 s apart, 32 s wait
+    for i, t in enumerate(kills):
+        feed(m, t, 1000 + 10 * i, 10 + 0.01 * i)
+    seg = m.open_segment()
+    assert seg.exp == 10 * (len(kills) - 1)
+    assert seg.active_s == pytest.approx(kills[-1] - kills[0])
+    assert m.rate(kills[-1] + 1).exp_per_min == pytest.approx(40 / 35 * 60)

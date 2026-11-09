@@ -2,7 +2,7 @@
 
 from collections import deque
 from dataclasses import dataclass, field, replace
-from statistics import median
+from statistics import median, quantiles
 
 from maplelens.readers import ExpValue, Reading
 
@@ -45,8 +45,10 @@ class _Confirmed:
 
 # This many jumps in a row are real (a 2x event, a party, a richer map), not misreads
 _JUMPS_TO_ACCEPT = 3
-# A gap this many times the usual one between gains, and this long, is a break (buffs, walking,
-# looting), not training, even under the idle cutoff; a wait for the respawn is shorter
+# A gap this many times a long usual one between gains (the 90th percentile, so the wait between
+# pulls of several kills each counts as usual), and this long, is a break (buffs, walking,
+# looting), not training, even under the idle cutoff; a wait for the respawn is shorter.
+# ponytail: a break is only found while breaks are under 10% of the gains
 _BREAK_FACTOR, _BREAK_MIN_S = 10, 30
 
 
@@ -55,8 +57,8 @@ def _totals(gains, idle_cutoff_s: float) -> tuple[int, float, float]:
     its gap and its EXP, as for the first gain after an idle stretch."""
     gaps = [g[3] for g in gains]
     cutoff = idle_cutoff_s
-    if len(gaps) >= 10:  # enough kills to know the pace
-        cutoff = min(cutoff, max(_BREAK_MIN_S, _BREAK_FACTOR * median(gaps)))
+    if len(gaps) >= 10:  # enough gaps to know the pace (the break's own among them)
+        cutoff = min(cutoff, max(_BREAK_MIN_S, _BREAK_FACTOR * quantiles(gaps, n=10)[-1]))
     kept = [g for g in gains if g[3] <= cutoff]
     return sum(g[1] for g in kept), sum(g[2] for g in kept), sum(g[3] for g in kept)
 
