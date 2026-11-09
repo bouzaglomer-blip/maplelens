@@ -13,8 +13,10 @@ def format_duration(minutes: float) -> str:
     return f"{h}h {m}m" if h else f"{m}m"
 
 
-def box_lines(rate: Rate | None, waiting: bool) -> list[tuple[str, list[str]]]:
-    """The EXP tab's content as (grey label, value lines) pairs."""
+def box_lines(
+    rate: Rate | None, waiting: bool, unread: bool = False
+) -> list[tuple[str, list[str]]]:
+    """The EXP tab's content as (grey label, value lines) pairs; `unread`: the bar is unreadable."""
     if waiting:
         return [("waiting for game", [])]
     if rate is None:
@@ -23,7 +25,10 @@ def box_lines(rate: Rate | None, waiting: bool) -> list[tuple[str, list[str]]]:
         exp = f"{rate.exp_per_min * 60:,.0f} /h"
         pct = f"{rate.pct_per_min * 60:.2f}% /h"
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
-    label = "EXP · paused" if rate and rate.paused else "EXP · last 5 min"
+    if unread:
+        label = "EXP · can't read bar"
+    else:
+        label = "EXP · paused" if rate and rate.paused else "EXP · last 5 min"
     return [(label, [exp, pct]), ("Level up in", [eta])]
 
 

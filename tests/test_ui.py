@@ -43,6 +43,29 @@ def test_tool_skips_visits_under_five_minutes(monkeypatch, tmp_path):
     assert history(conn) == []
 
 
+def test_tool_says_when_bar_unreadable(monkeypatch, tmp_path):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from maplelens.tools.exp_meter.ui import ExpMeterTool
+
+    QApplication.instance() or QApplication([])
+    tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"))
+
+    def label(t, exp):
+        tool.update(Reading(t, exp, 50, "Mage", "Ant Tunnel"), None, t)
+        return tool._texts[0].text()
+
+    assert label(0, ExpValue(1000, 10)) == "EXP · last 5 min"
+    assert label(10, None) == "EXP · last 5 min"  # 10 s: not yet
+    assert label(10.5, None) == "EXP · can't read bar"
+    assert "#ffcc33" in tool._texts[0].styleSheet()  # amber, to be seen
+    assert label(11, ExpValue(1000, 10)) == "EXP · last 5 min"
+    assert "#ffcc33" not in tool._texts[0].styleSheet()
+    tool.update(None, None, 100)  # game gone: the clock restarts when it's back
+    assert label(105, None) == "EXP · last 5 min"
+
+
 def test_closing_history_window_does_not_quit(monkeypatch, tmp_path):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import QTimer

@@ -50,6 +50,10 @@ def test_box_lines_paused():
     assert box_lines(Rate(100, 0.1, None, paused=True), False)[0][0] == "EXP · paused"
 
 
+def test_box_lines_unread():
+    assert box_lines(Rate(100, 0.1, None, paused=True), False, True)[0][0] == "EXP · can't read bar"
+
+
 def test_short_name():
     assert short_name("Victoria Island / Henesys Hunting Ground I") == "Henesys Hunting Ground I"
     assert short_name("No Street") == "No Street"
