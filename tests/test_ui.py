@@ -144,3 +144,40 @@ def test_history_is_a_secondary_button(monkeypatch, tmp_path):
     tool = ExpMeterTool(dict(DEFAULTS, boxes={}), open_db(tmp_path / "h.db"))
     (button,) = [b for b in tool.tab.findChildren(QPushButton) if b.text() == "History"]
     assert button.property("kind") == "secondary"
+
+
+def test_history_window_refresh_without_job(monkeypatch, tmp_path):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QLabel
+
+    from maplelens.tools.exp_meter.ui import HistoryWindow
+
+    QApplication.instance() or QApplication([])
+    win = HistoryWindow(open_db(tmp_path / "h.db"))
+    win.refresh(None, None)
+    texts = [w.text() for w in win.findChildren(QLabel)]
+    assert "Best maps: waiting for your class and level" in texts
+
+
+def test_history_map_cell_short_name_full_tooltip(monkeypatch, tmp_path):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QLabel, QTableWidget
+
+    from maplelens.tools.exp_meter.history import save_segment
+    from maplelens.tools.exp_meter.meter import Segment
+    from maplelens.tools.exp_meter.ui import HistoryWindow
+
+    QApplication.instance() or QApplication([])
+    conn = open_db(tmp_path / "h.db")
+    title = "Victoria Island / Henesys Hunting Ground I"
+    save_segment(conn, Segment(0, 300, title, "Hero", 44, 600, 1.2, 60.0))
+    win = HistoryWindow(conn, lambda j: {j})
+    win.refresh("Hero", 44)
+    (table,) = win.findChildren(QTableWidget)
+    assert table.item(0, 0).text() == "Henesys Hunting Ground I"
+    assert table.item(0, 0).toolTip() == title
+    shown = table.fontMetrics().horizontalAdvance("Henesys Hunting Ground I")
+    assert table.columnWidth(0) > shown  # the name fits, not cut to "Henesys …"
+    texts = [w.text() for w in win.findChildren(QLabel)]
+    assert "Best for Hero, Lv 44 (±3)" in texts
+    assert "36,000 EXP/h" in texts

@@ -792,7 +792,8 @@ def main() -> int:
         save_settings(path, settings)
 
     conn = open_db(data_dir() / "maplelens.db")
-    tool = ExpMeterTool(settings, conn)
+    cls_data = class_data.load()
+    tool = ExpMeterTool(settings, conn, cls_data.line)
     # the lambda defers the lookup: `box` is built from path_tool on the next line
     path_tool = PathArrowTool(settings, save, layer, lambda on: box.allow_typing(on))  # noqa: PLW0108
     seen: set[str] = set()  # error types/messages already logged
@@ -805,7 +806,7 @@ def main() -> int:
         path_tool.go(map_id)
         box.select(1)
 
-    cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t))
+    cls_tool = ClassHelperTool(settings, save, layer, go, lambda t: best_rate(conn, t), cls_data)
     box = build_box(settings, save, [tool, path_tool, cls_tool], pick)
     setup_screen_recording(box)
     add_build_menu(box, cls_tool)

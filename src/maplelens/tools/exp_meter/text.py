@@ -35,3 +35,22 @@ def format_last(ts: float, now: float) -> str:
     if days_ago == 1:
         return "yesterday"
     return f"{day:%b} {day.day}"
+
+
+def short_name(title: str) -> str:
+    """A map title without its street: "Victoria Island / Henesys" -> "Henesys"."""
+    return title.rpartition(" / ")[2]
+
+
+def best_lines(
+    job: str | None, level: int | None, rows: list[tuple[str, float, float]]
+) -> tuple[str, list[tuple[str, str, str]]]:
+    """The History strip: a header and (map, EXP/h, %/h) per row of `history.best_maps`."""
+    if job is None or level is None:
+        return "Best maps: waiting for your class and level", []
+    head = f"Best for {job}, Lv {level} (±3)"
+    if not rows:
+        return f"{head}: no 5-minute visits yet", []
+    return head, [
+        (short_name(m), f"{exp * 60:,.0f} EXP/h", f"{pct * 60:.2f}% /h") for m, exp, pct in rows
+    ]

@@ -1,7 +1,13 @@
 from datetime import datetime
 
 from maplelens.tools.exp_meter.meter import Rate
-from maplelens.tools.exp_meter.text import box_lines, format_duration, format_last
+from maplelens.tools.exp_meter.text import (
+    best_lines,
+    box_lines,
+    format_duration,
+    format_last,
+    short_name,
+)
 
 
 def test_box_lines_values():
@@ -42,3 +48,19 @@ def test_format_last():
 
 def test_box_lines_paused():
     assert box_lines(Rate(100, 0.1, None, paused=True), False)[0][0] == "EXP · paused"
+
+
+def test_short_name():
+    assert short_name("Victoria Island / Henesys Hunting Ground I") == "Henesys Hunting Ground I"
+    assert short_name("No Street") == "No Street"
+
+
+def test_best_lines_waiting():
+    assert best_lines(None, 28, []) == ("Best maps: waiting for your class and level", [])
+
+
+def test_best_lines_empty_and_rows():
+    assert best_lines("Rogue", 28, [])[0] == "Best for Rogue, Lv 28 (±3): no 5-minute visits yet"
+    head, rows = best_lines("Rogue", 28, [("Hidden Street / Pig Beach", 700.0, 0.03)])
+    assert head == "Best for Rogue, Lv 28 (±3)"
+    assert rows == [("Pig Beach", "42,000 EXP/h", "1.80% /h")]
