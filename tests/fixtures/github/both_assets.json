@@ -16,6 +16,12 @@
       "size": 50000000,
       "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "browser_download_url": "https://github.com/or-keren/maplelens/releases/download/v0.2.0/MapleLens-0.2.0.dmg"
+    },
+    {
+      "name": "MapleLens-0.2.0-intel.dmg",
+      "size": 52000000,
+      "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "browser_download_url": "https://github.com/or-keren/maplelens/releases/download/v0.2.0/MapleLens-0.2.0-intel.dmg"
     }
   ]
 }

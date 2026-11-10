@@ -327,6 +327,14 @@ def test_sign_only_without_identity_signs_adhoc_and_says_so(monkeypatch, capsys)
     assert "signing ad-hoc" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("machine", ["arm64", "x86_64"])
+def test_the_dmg_is_named_as_the_update_check_looks_for_it(machine):
+    from maplelens import update
+
+    dmg = build_installer.dmg_path("1.2.3", machine)
+    assert dmg.name == update.asset_name("1.2.3", "darwin", machine)
+
+
 def test_dmg_only_self_checks_then_makes_the_dmg(monkeypatch):
     made = []
     monkeypatch.setattr(build_installer, "make_dmg", lambda app, dmg, run: made.append(app))

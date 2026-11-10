@@ -140,16 +140,23 @@ def _step_index(steps: list[str], needle: str) -> int:
     return next(i for i, s in enumerate(steps) if needle in s)
 
 
+def _builds_on_both_macs(job: str) -> None:
+    """Apple silicon and Intel, each with the dmg name maplelens.update looks for."""
+    assert "runs-on: ${{ matrix.runner }}" in job
+    assert re.search(r"- runner: macos-latest\n\s+arch: arm64\n\s+dmg: \"\"\n", job)
+    assert re.search(r"- runner: macos-15-intel\n\s+arch: x86_64\n\s+dmg: -intel\n", job)
+
+
 def test_mac_build_can_only_read_and_sees_no_secrets():
     job = _job(_release(), "mac-build")
-    assert "macos-latest" in job
+    _builds_on_both_macs(job)
     assert "contents: read" in job
     assert "contents: write" not in job
     assert "secrets." not in job
     assert job.count("persist-credentials: false") == 1
     assert "--freeze-only" in job
     assert "ditto -c -k --keepParent dist/MapleLens.app" in job
-    assert "name: mac-app" in job
+    assert "name: mac-app-${{ matrix.arch }}" in job
 
 
 def test_only_mac_sign_sees_the_certificate():
@@ -161,6 +168,13 @@ def test_only_mac_sign_sees_the_certificate():
     assert "secrets.MAC_SIGN_P12_PASSWORD" in sign
     assert "contents: write" not in sign
     assert "persist-credentials: false" in sign
+
+
+def test_mac_sign_signs_on_the_mac_that_built_the_app():
+    sign = _job(_release(), "mac-sign")
+    _builds_on_both_macs(sign)
+    assert "name: mac-app-${{ matrix.arch }}" in sign
+    assert "path: dist/MapleLens-${{ env.VERSION }}${{ matrix.dmg }}.dmg" in sign
 
 
 def test_mac_sign_installs_no_packages():
@@ -178,7 +192,7 @@ def test_mac_sign_deletes_the_keychain_before_running_the_app():
     sign = _step_index(steps, "--sign-only")
     assert sign < _step_index(steps, "security delete-keychain") < _step_index(steps, "--dmg-only")
     assert "MAPLELENS_SIGN_IDENTITY: MapleLens Release" in steps[sign]
-    assert "name: mac-dmg" in steps[-1]
+    assert "name: mac-dmg-${{ matrix.arch }}" in steps[-1]
 
 
 def test_mac_sign_makes_the_identity_usable_and_cleans_up_the_key_files():
@@ -202,14 +216,21 @@ def test_mac_sign_fails_without_the_certificate():
     assert not re.search(r"run:.*\$\{\{\s*secrets", check)
 
 
-def test_publish_attaches_the_exe_and_the_dmg():
+def test_publish_attaches_the_exe_and_both_dmgs():
     text = _release()
     publish = _job(text, "publish")
     assert "mac-sign" in publish.split("steps:", 1)[0]
-    assert "name: mac-dmg" in publish
+    assert "pattern: mac-dmg-*" in publish
+    assert "merge-multiple: true" in publish
     cmd = publish.split("gh release create", 1)[1]
     assert "MapleLens-Setup-$VERSION.exe" in cmd
-    assert "MapleLens-$VERSION.dmg" in cmd
+    assert '"dist/MapleLens-$VERSION.dmg"' in cmd
+    assert '"dist/MapleLens-$VERSION-intel.dmg"' in cmd
+
+
+def test_ci_checks_on_both_macs():
+    ci = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+    assert "os: [windows-latest, macos-latest, macos-15-intel]" in ci
 
 
 def test_mac_sign_uses_only_apple_tools_and_a_failed_delete_fails_the_job():
