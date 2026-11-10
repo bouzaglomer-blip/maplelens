@@ -94,11 +94,16 @@ release, for the same reason.
 
 ## Building the Mac dmg
 
-On an Apple silicon Mac:
+On the Mac, the build makes the dmg for the Mac it runs on:
 
 ```
 uv run --group build python scripts/build_installer.py   # writes dist/MapleLens-X.Y.Z.dmg
 ```
+
+That's `MapleLens-X.Y.Z.dmg` on Apple silicon and `MapleLens-X.Y.Z-intel.dmg` on Intel. A
+release has both: the release workflow builds one on each kind of runner (`macos-latest`,
+`macos-15-intel`), since numpy and OpenCV publish no universal2 wheels to make one app for
+both. The installed app updates from its own CPU's dmg (`maplelens.update.asset_name`).
 
 Without `MAPLELENS_SIGN_IDENTITY` the app is signed ad-hoc, fine for trying it locally.
 The stages can run alone: `--freeze-only`, `--sign-only`, `--dmg-only`.

@@ -23,7 +23,7 @@ uv run pytest                                # tests
 uv run ruff check                            # lint
 uv run ruff format                           # format
 uv run python scripts/check_screen_only.py   # screen-only guard
-uv run --group build python scripts/build_installer.py   # Windows: dist\MapleLens-Setup-X.Y.Z.exe; Mac: dist/MapleLens-X.Y.Z.dmg
+uv run --group build python scripts/build_installer.py   # Windows: dist\MapleLens-Setup-X.Y.Z.exe; Mac: dist/MapleLens-X.Y.Z.dmg (Intel: -intel.dmg)
 ```
 
 The build needs Inno Setup 6 (`winget install JRSoftware.InnoSetup --scope user`);

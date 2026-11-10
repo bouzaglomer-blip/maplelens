@@ -6,6 +6,7 @@ reads the reply, compares versions and checks the downloaded file's digest.
 
 import hashlib
 import os
+import platform as _platform
 import re
 import sys
 from dataclasses import dataclass
@@ -29,11 +30,16 @@ def _version(text) -> tuple[int, int, int] | None:
     return tuple(int(g) for g in m.groups()) if m else None
 
 
-def asset_name(version: str, platform: str) -> str:
-    return f"MapleLens-{version}.dmg" if platform == "darwin" else f"MapleLens-Setup-{version}.exe"
+def asset_name(version: str, platform: str, machine: str | None = None) -> str:
+    """The release file this copy installs. The Mac has one dmg per CPU: Apple silicon's
+    keeps the plain name the first Mac releases used, so their copies still find it."""
+    if platform != "darwin":
+        return f"MapleLens-Setup-{version}.exe"
+    machine = machine or _platform.machine()
+    return f"MapleLens-{version}-intel.dmg" if machine == "x86_64" else f"MapleLens-{version}.dmg"
 
 
-def parse_latest(reply, platform: str | None = None) -> Release | None:
+def parse_latest(reply, platform: str | None = None, machine: str | None = None) -> Release | None:
     """A `releases/latest` reply -> this platform's asset, or None when there's nothing to offer."""
     platform = platform or sys.platform
     if not isinstance(reply, dict):
@@ -42,11 +48,12 @@ def parse_latest(reply, platform: str | None = None) -> Release | None:
     if not isinstance(tag, str) or not tag.startswith("v") or _version(tag[1:]) is None:
         return None
     version = tag[1:]
+    want = asset_name(version, platform, machine)
     assets = reply.get("assets")
     if not isinstance(assets, list):
         return None
     for asset in assets:
-        if not isinstance(asset, dict) or asset.get("name") != asset_name(version, platform):
+        if not isinstance(asset, dict) or asset.get("name") != want:
             continue
         url = asset.get("browser_download_url")
         if not isinstance(url, str):

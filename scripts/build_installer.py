@@ -18,6 +18,7 @@ standard library alone, so CI can split the stages into jobs.
 import argparse
 import importlib.metadata
 import os
+import platform as _platform
 import re
 import shutil
 import subprocess
@@ -205,8 +206,12 @@ def verify_cmd(app: Path) -> list[str]:
     return ["codesign", "--verify", "--deep", "--strict", str(app)]
 
 
-def dmg_path(version: str) -> Path:
-    return DIST / f"MapleLens-{version}.dmg"
+def dmg_path(version: str, machine: str | None = None) -> Path:
+    """One dmg per CPU, named as maplelens.update.asset_name names it (this script runs
+    where maplelens can't be imported). The build's CPU is the Mac it runs on."""
+    machine = machine or _platform.machine()
+    suffix = "-intel" if machine == "x86_64" else ""
+    return DIST / f"MapleLens-{version}{suffix}.dmg"
 
 
 def make_dmg(app: Path, dmg: Path, run: Callable[..., None] = _run) -> None:

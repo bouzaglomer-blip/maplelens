@@ -89,10 +89,12 @@ report.
 
 ## Download (Mac)
 
-Apple silicon (M1 or newer) only.
+Apple silicon (M1 or newer) or Intel, on macOS 14.4 or newer.
 
 1. Open the [latest release](https://github.com/or-keren/maplelens/releases/latest) and
-   download `MapleLens-X.Y.Z.dmg` under **Assets**.
+   download your Mac's dmg under **Assets**: `MapleLens-X.Y.Z.dmg` for Apple silicon,
+   `MapleLens-X.Y.Z-intel.dmg` for Intel. Not sure which you have? Apple menu → **About
+   This Mac**: "Chip … Apple M…" is Apple silicon, "Processor … Intel" is Intel.
 2. Open the dmg and drag **MapleLens** onto **Applications**.
 3. Open MapleLens from Applications. It isn't notarized by Apple, so macOS refuses the
    first time. Open **System Settings → Privacy & Security**, scroll down and click

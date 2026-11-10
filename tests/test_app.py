@@ -14,6 +14,12 @@ from maplelens.readers import glyphs, ocr
 from maplelens.tools.path_arrow import maps
 
 
+@pytest.fixture(autouse=True)
+def apple_silicon(monkeypatch):
+    """The Mac tests pick Apple silicon's dmg whatever CPU runs them."""
+    monkeypatch.setattr(maplelens.update._platform, "machine", lambda: "arm64")
+
+
 @pytest.fixture
 def no_cache():
     glyphs.clear_cache()
@@ -971,6 +977,17 @@ def test_mac_downloads_the_dmg_checks_it_and_hands_over(qt_box, make_check, tmp_
     assert dmg.read_bytes() == SETUP
     [(_, dest)] = download.calls
     assert dest.name == "MapleLens-0.2.0.dmg.part"
+
+
+def test_an_intel_mac_downloads_the_intel_dmg(qt_box, make_check, tmp_path, monkeypatch):
+    monkeypatch.setattr(maplelens.update._platform, "machine", lambda: "x86_64")
+    installs, download = [], _Download()
+    intel = _latest("0.2.0", GOOD, name="MapleLens-0.2.0-intel.dmg")
+    check = make_check(_Fetch(intel), download=download, install=installs.append, platform="darwin")
+    _run(check, 10.0)
+    qt_box.actions()[0].trigger()  # "Update to 0.2.0…"
+    _finish_download(check)
+    assert installs == [tmp_path / "updates" / "MapleLens-0.2.0-intel.dmg"]
 
 
 def test_mac_refuses_to_download_from_the_dmg(qt_box, make_check):

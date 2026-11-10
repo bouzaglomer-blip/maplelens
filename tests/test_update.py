@@ -81,17 +81,38 @@ def test_non_string_digest_is_treated_as_missing():
     assert parse_latest(data, "win32").digest is None
 
 
-def test_mac_picks_the_dmg_and_windows_the_exe():
+def test_mac_picks_its_cpus_dmg_and_windows_the_exe():
     data = reply("both_assets.json")
-    assert parse_latest(data, "darwin").url.endswith("MapleLens-0.2.0.dmg")
-    assert parse_latest(data, "darwin").digest == "sha256:" + "b" * 64
+    arm = parse_latest(data, "darwin", "arm64")
+    assert arm.url.endswith("MapleLens-0.2.0.dmg")
+    assert arm.digest == "sha256:" + "b" * 64
+    intel = parse_latest(data, "darwin", "x86_64")
+    assert intel.url.endswith("MapleLens-0.2.0-intel.dmg")
+    assert intel.digest == "sha256:" + "c" * 64
     assert parse_latest(data, "win32").url.endswith("MapleLens-Setup-0.2.0.exe")
 
 
 def test_a_release_without_the_dmg_is_no_update_on_the_mac():
     data = reply("no_dmg.json")
-    assert parse_latest(data, "darwin") is None
+    assert parse_latest(data, "darwin", "arm64") is None
+    assert parse_latest(data, "darwin", "x86_64") is None
     assert parse_latest(data, "win32") is not None
+
+
+def test_a_release_with_only_apple_silicons_dmg_is_no_update_on_intel():
+    # never offer an Intel Mac the arm64 app: it wouldn't start
+    data = reply("both_assets.json")
+    data["assets"] = [a for a in data["assets"] if not a["name"].endswith("-intel.dmg")]
+    assert parse_latest(data, "darwin", "x86_64") is None
+    assert parse_latest(data, "darwin", "arm64") is not None
+
+
+def test_the_mac_asset_defaults_to_this_cpu(monkeypatch):
+    monkeypatch.setattr(update._platform, "machine", lambda: "x86_64")
+    assert update.asset_name("1.2.3", "darwin") == "MapleLens-1.2.3-intel.dmg"
+    monkeypatch.setattr(update._platform, "machine", lambda: "arm64")
+    assert update.asset_name("1.2.3", "darwin") == "MapleLens-1.2.3.dmg"
+    assert update.asset_name("1.2.3", "win32") == "MapleLens-Setup-1.2.3.exe"
 
 
 # is_newer
