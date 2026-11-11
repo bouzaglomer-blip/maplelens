@@ -28,9 +28,11 @@ from maplelens.tools.quest_helper.data import Quest, QuestData, load
 from maplelens.tools.quest_helper.plan import (
     Target,
     also_for,
+    asked,
     find_quest,
     shared_name,
     show_giver,
+    starts_closest,
     targets,
 )
 
@@ -43,6 +45,7 @@ OPEN = "Open in the game"
 TRACK = "Track"
 TRACKED = "Tracked ✓"
 STOP = "Stop"
+CLOSEST, BEST = "Closest", "Best"  # the quest's switch: the nearest maps, or the most spawns
 TRACKING = "Tracking · {n} quests"
 TRACKING_ONE = "Tracking · 1 quest"
 GOING = "Going · {n} maps away"
@@ -71,15 +74,21 @@ def _fit(widget, text: str, room: int) -> None:
     widget.setToolTip(text)
 
 
-def _line(left: QWidget, right: QWidget) -> QWidget:
+def _line(left: QWidget, *right: QWidget) -> QWidget:
     line = QWidget()
     row = QHBoxLayout(line)
     row.setContentsMargins(0, 2, 0, 0)
     row.setSpacing(6)
     row.addWidget(left)
     row.addStretch()
-    row.addWidget(right, 0, Qt.AlignVCenter)
+    for w in right:
+        row.addWidget(w, 0, Qt.AlignVCenter)
     return line
+
+
+def _room(*right: QWidget) -> int:
+    """The width the widgets right of a name take, with the line's spacing."""
+    return sum(w.sizeHint().width() + 6 for w in right)
 
 
 class QuestHelperTool:
@@ -142,6 +151,11 @@ class QuestHelperTool:
         s["quests_tracked"] = list(dict.fromkeys(i for i in ids if type(i) is int and i in quests))
         if s.get("quests_expanded") not in s["quests_tracked"]:
             s["quests_expanded"] = None
+        picks = s.get("quests_closest")
+        picks = picks if isinstance(picks, dict) else {}
+        s["quests_closest"] = {
+            k: v for k, v in picks.items() if type(v) is bool and k.isdigit() and int(k) in quests
+        }
 
     def update(self, r: Reading | None, _game_rect, _now: float) -> None:
         quest = r.quest if r is not None else None
@@ -176,6 +190,17 @@ class QuestHelperTool:
         self._settings["quests_expanded"] = None if shown else qid
         self._save()
 
+    def _pick(self, qid: int, closest: bool) -> None:
+        self._settings["quests_closest"][str(qid)] = closest
+        self._save()
+
+    def _closest(self, quest: Quest) -> bool:
+        return self._settings["quests_closest"].get(str(quest.id), starts_closest(quest))
+
+    def _switch_at(self, quest: Quest) -> bool | None:
+        """The switch's side for the quest's name line; None: no switch, nothing to hunt."""
+        return self._closest(quest) if asked(quest) else None
+
     def _go_to(self, map_id: str, at: tuple[int, int] | None, npc: str | None) -> None:
         self._go(map_id, at, npc)
         self._render()  # outline the row now, not on the next tick
@@ -188,16 +213,23 @@ class QuestHelperTool:
 
     def _items(self) -> list:
         """Items are tuples, drawn in order: ("info", text), ("label", text),
-        ("open", id, name, tracked), ("head", id, name, expanded),
+        ("open", id, name, tracked, closest), ("head", id, name, expanded, closest),
         ("row", title, sub, map id, at, npc, info), ("run", title, sub)."""
         d, q = self._data, self._quest
         tracked = self._settings["quests_tracked"]
         out, top = self._top(q, tracked) if q is not None else ([], None)
         listed = [i for i in tracked if top is None or i != top.id]
-        plans = {i: targets(d, d.quests[i], giver=False, hops=self._hops) for i in listed}
+        plans = {
+            i: targets(
+                d, d.quests[i], giver=False, hops=self._hops, closest=self._closest(d.quests[i])
+            )
+            for i in listed
+        }
         if top is not None:
             giver = show_giver(q.taken, top.id in tracked)
-            plans[top.id] = targets(d, top, giver=giver, hops=self._hops)
+            plans[top.id] = targets(
+                d, top, giver=giver, hops=self._hops, closest=self._closest(top)
+            )
         going = self._heading()
 
         def rows(qid: int) -> list:
@@ -211,7 +243,7 @@ class QuestHelperTool:
             out.append(("label", TRACKING_ONE if n == 1 else TRACKING.format(n=n)))
         for i in listed:
             expanded = i == self._settings["quests_expanded"]
-            out.append(("head", i, d.quests[i].name, expanded))
+            out.append(("head", i, d.quests[i].name, expanded, self._switch_at(d.quests[i])))
             if expanded:
                 out += rows(i)
         return out or [("info", EMPTY)]
@@ -227,7 +259,8 @@ class QuestHelperTool:
         top = find_quest(self._data, q.name)
         if top is None:
             return [("label", OPEN), ("info", UNKNOWN)], None
-        return [("label", OPEN), ("open", top.id, top.name, top.id in tracked)], top
+        line = ("open", top.id, top.name, top.id in tracked, self._switch_at(top))
+        return [("label", OPEN), line], top
 
     @staticmethod
     def _row(t: Target, others: list, going) -> tuple:
@@ -265,24 +298,42 @@ class QuestHelperTool:
             stop = secondary_button(STOP, self._stop_trip)
             return Row(title, sub, None, outline=True, trailing=stop, width=self._tab_w)
         if kind == "open":
-            _, qid, name, tracked = item
+            _, qid, name, tracked, closest = item
             if tracked:
                 end = text_label(TRACKED, LABEL_PT, LABEL_COLOR)
             else:
                 end = primary_button(TRACK, lambda: self._track(qid))
+            ends = [*self._switch(qid, closest), end]
             label = text_label("", LABEL_PT, VALUE_COLOR, bold=True)
-            _fit(label, name, self._tab_w - BAR - end.sizeHint().width() - 6)
-            return _line(label, end)
-        _, qid, name, expanded = item  # a tracked quest's header
+            _fit(label, name, self._tab_w - BAR - _room(*ends))
+            return _line(label, *ends)
+        _, qid, name, expanded, closest = item  # a tracked quest's header
         close = mark_button(CLOSE, LABEL_PT, lambda: self._untrack(qid))
+        ends = [*self._switch(qid, closest), close]
         head = mark_button("", LABEL_PT, lambda: self._expand(qid), color=VALUE_COLOR)
         head.setFont(QFont(FONT, LABEL_PT, QFont.Bold))
         mark = f"{SHOWN if expanded else SHUT} "
-        taken = BAR + close.sizeHint().width() + 6 + head.fontMetrics().horizontalAdvance(mark)
-        room = self._tab_w - taken
+        room = self._tab_w - BAR - _room(*ends) - head.fontMetrics().horizontalAdvance(mark)
         _fit(head, name, room)
         head.setText(mark + head.text())
-        return _line(head, close)
+        return _line(head, *ends)
+
+    def _switch(self, qid: int, closest: bool | None) -> list[QWidget]:
+        """Closest | Best: the side that's on in yellow, the other a mark that picks it."""
+        if closest is None:
+            return []
+        box = QWidget()
+        row = QHBoxLayout(box)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+        for word, side in ((CLOSEST, True), (BEST, False)):
+            if not side:
+                row.addWidget(text_label("|", LABEL_PT, EDGE))
+            if side == closest:
+                row.addWidget(text_label(word, LABEL_PT, ACCENT, bold=True))
+            else:
+                row.addWidget(mark_button(word, LABEL_PT, lambda: self._pick(qid, not closest)))
+        return [box]
 
     def _render(self) -> None:
         """Redraw only when the items changed."""

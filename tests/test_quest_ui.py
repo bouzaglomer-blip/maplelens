@@ -16,6 +16,7 @@ SNAILS = 1002  # Snail Hunt: Snail x5 (the same map as 1001's), hand in to Heena
 BIG = 1003  # Big Hunt: Sera gives it, four Snail rows, Heena takes it: 6 rows
 SHARED = "Test of Qualification"  # 1004 and 1005
 MYSTERY = 1006  # Mystery Quest: one item nobody drops or sells, hand in to Heena
+TALK = 1007  # Small Talk: Sera gives it, Heena takes it, nothing to hunt
 SNAIL_MAP, TOWN = "000000040", "000000001"
 
 
@@ -28,9 +29,12 @@ def data():
         replace(q, id=1004, name=SHARED),
         replace(q, id=1005, name=SHARED),
         Quest(MYSTERY, "Mystery Quest", None, 1, (), ((9, 1),), ()),
+        Quest(TALK, "Small Talk", 2, 1, (), (), ()),
     ]
     items = {**d.items, 9: Item(9, "Odd Stone", (), ())}
-    return replace(d, quests={**d.quests, **{x.id: x for x in extra}}, items=items)
+    snail = replace(d.mobs[2], spawns={**d.mobs[2].spawns, TOWN: 1})  # a few in town too
+    quests = {**d.quests, **{x.id: x for x in extra}}
+    return replace(d, quests=quests, mobs={**d.mobs, 2: snail}, items=items)
 
 
 def R(quest=None):
@@ -50,12 +54,13 @@ def make(monkeypatch):
 
     QApplication.instance() or QApplication([])
 
-    def build(tracked=(), expanded=None, heading=None):
+    def build(tracked=(), expanded=None, heading=None, closest=None, hops=lambda m: None):
         calls = {"go": [], "stop": 0, "changed": 0, "heading": heading}
         settings = dict(
             DEFAULTS,
             quests_tracked=tracked if isinstance(tracked, str) else list(tracked),
             quests_expanded=expanded,
+            quests_closest={} if closest is None else closest,
         )
 
         def changed():
@@ -74,7 +79,7 @@ def make(monkeypatch):
             go,
             lambda: calls["heading"],
             stop,
-            lambda m: None,
+            hops,
             data(),
         )
         tool.settings, tool.calls = settings, calls
@@ -108,7 +113,7 @@ def rows(tool):
 def button(tool, text):
     from PySide6.QtWidgets import QPushButton
 
-    found = [b for b in visible(tool, QPushButton) if text in b.text()]
+    found = [b for b in visible(tool, QPushButton) if text in (b.toolTip() or b.text())]
     assert found, (text, texts(tool))
     return found[0]
 
@@ -358,7 +363,7 @@ def test_a_wider_tab_shows_more_of_a_long_quest_name(make):
     from PySide6.QtWidgets import QLabel
 
     tool = make()
-    item = ("open", 1001, "A very long quest name " * 6, True)
+    item = ("open", 1001, "A very long quest name " * 6, True, None)
 
     def name():
         line = tool._widget(item)  # held: its label goes with it
@@ -368,3 +373,58 @@ def test_a_wider_tab_shows_more_of_a_long_quest_name(make):
     tool.set_tab_w(480)
     assert len(name()) > len(narrow)
     assert tool.tab.maximumWidth() == tool._scroll.maximumWidth() == 480
+
+
+TOWN_FIRST = {TOWN: 0, SNAIL_MAP: 2}.get  # the town is nearer; most Snails are further
+
+
+def test_switch_starts_from_the_quest_size_and_flips_its_rows(make):
+    from maplelens.tools.quest_helper.ui import BEST, CLOSEST
+
+    tool = make(hops=TOWN_FIRST)
+    tool.update(opened(taken=True), RECT, 0)  # Snail x3, Shell x10: 13, a quick one
+    assert rows(tool)[0].sub == "Mushroom Town - West Entrance"
+    button(tool, BEST).click()
+    assert tool.settings["quests_closest"] == {"1001": False} and tool.calls["changed"] == 1
+    assert rows(tool)[0].sub == "Snail Hunting Ground I"
+    button(tool, CLOSEST).click()
+    assert tool.settings["quests_closest"] == {"1001": True}
+    assert rows(tool)[0].sub == "Mushroom Town - West Entrance"
+
+
+def test_a_saved_choice_wins_over_the_size(make):
+    tool = make(closest={"1001": False}, hops=TOWN_FIRST)
+    tool.update(opened(taken=True), RECT, 0)
+    assert rows(tool)[0].sub == "Snail Hunting Ground I"
+
+
+def test_each_tracked_quest_has_its_own_switch(make):
+    from PySide6.QtWidgets import QPushButton
+
+    from maplelens.tools.quest_helper.ui import BEST
+
+    tool = make(tracked=[1001, SNAILS], expanded=SNAILS, hops=TOWN_FIRST)
+    tool.update(R(), RECT, 0)
+    assert rows(tool)[0].sub.startswith("Mushroom Town - West Entrance")
+    bests = [b for b in visible(tool, QPushButton) if b.text() == BEST]
+    assert len(bests) == 2
+    bests[-1].click()  # Snail Hunt's
+    assert tool.settings["quests_closest"] == {str(SNAILS): False}
+    assert rows(tool)[0].sub.startswith("Snail Hunting Ground I")
+
+
+def test_no_switch_on_a_quest_with_nothing_to_hunt(make):
+    from maplelens.tools.quest_helper.ui import BEST, CLOSEST
+
+    tool = make(tracked=[TALK, SNAILS])
+    tool.update(R(), RECT, 0)
+    shown = texts(tool)
+    assert shown.count(BEST) + shown.count(CLOSEST) == 2  # Snail Hunt's only
+
+
+def test_bad_switch_settings_are_dropped(make):
+    tool = make(closest={"1001": False, "999999": True, "1002": "x", "abc": True})
+    tool.update(R(), RECT, 0)
+    assert tool.settings["quests_closest"] == {"1001": False}
+    tool = make(closest="oops")
+    assert tool.settings["quests_closest"] == {}

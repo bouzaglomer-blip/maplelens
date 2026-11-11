@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from .data import Item, Mob, Npc, Quest, QuestData
 
 NEAR_TIE = 0.8  # a map with this share of the top spawn count counts as tied
+QUICK = 30  # a quest asking for this many kills and items or fewer starts on Closest
 
 NO_ITEM = "Where to get it: unknown"
 NO_SPAWN = "Where it spawns: unknown"
@@ -40,6 +41,22 @@ def best_map(spawns: dict[str, int], listed: Collection[str], hops: Hops) -> str
     return min(near, key=lambda m: (_hops(hops, m), -here[m], m))
 
 
+def closest_map(spawns: dict[str, int], listed: Collection[str], hops: Hops) -> str | None:
+    here = {m: c for m, c in spawns.items() if m in listed}
+    return min(here, key=lambda m: (_hops(hops, m), -here[m], m), default=None)
+
+
+def asked(quest: Quest) -> int:
+    """The kills and items the quest asks for, added up; 0: nothing to hunt."""
+    return sum(n for _, n in quest.mobs) + sum(
+        n for i, n in quest.items if i not in quest.start_items
+    )
+
+
+def starts_closest(quest: Quest) -> bool:
+    return asked(quest) <= QUICK
+
+
 def npc_place(npc: Npc, listed: Collection[str], hops: Hops) -> tuple[str, int, int] | None:
     here = [p for p in npc.places if p[0] in listed]
     return min(here, key=lambda p: (_hops(hops, p[0]), p), default=None)
@@ -62,8 +79,8 @@ def also_for(map_id: str, others: list[tuple[str, list[Target]]]) -> list[str]:
     return [name for name, ts in others if any(t.map_id == map_id for t in ts)]
 
 
-def _mob_map(data: QuestData, mob: Mob, hops: Hops) -> str | None:
-    return best_map(mob.spawns, data.map_names.keys(), hops)
+def _mob_map(data: QuestData, mob: Mob, hops: Hops, closest: bool) -> str | None:
+    return (closest_map if closest else best_map)(mob.spawns, data.map_names.keys(), hops)
 
 
 def _info(title: str, why: str) -> Target:
@@ -79,21 +96,21 @@ def _npc_row(data: QuestData, npc_id: int, suffix: str, hops: Hops) -> Target:
     return Target(npc.name, sub, p[0], (p[1], p[2]), npc.name, False)
 
 
-def _top_dropper(data: QuestData, ids: list[int], hops: Hops) -> Mob:
-    # most spawns on its best map; one with no listed map comes last
-    def key(m: Mob) -> tuple[int, int]:
-        b = _mob_map(data, m, hops)
-        return (0, -m.spawns[b]) if b else (1, 0)
+def _top_dropper(data: QuestData, ids: list[int], hops: Hops, closest: bool) -> Mob:
+    # most spawns on its map (Closest: fewest hops first); one with no listed map comes last
+    def key(m: Mob) -> tuple[int, float, int]:
+        b = _mob_map(data, m, hops, closest)
+        return (0, _hops(hops, b) if closest else 0, -m.spawns[b]) if b else (1, 0, 0)
 
     return min((data.mobs[i] for i in ids), key=key)
 
 
-def _loose_item(data: QuestData, item: Item, n: int, hops: Hops) -> Target:
+def _loose_item(data: QuestData, item: Item, n: int, hops: Hops, closest: bool) -> Target:
     """The row for a quest item that doesn't ride on one of the quest's monsters."""
     title = f"{item.name} {TIMES}{n}"
     if item.drops:
-        m = _top_dropper(data, list(item.drops), hops)
-        b = _mob_map(data, m, hops)
+        m = _top_dropper(data, list(item.drops), hops, closest)
+        b = _mob_map(data, m, hops, closest)
         if b is None:
             return _info(title, NOT_LISTED if m.spawns else NO_SPAWN)
         return Target(title, f"{m.name} · {data.map_names[b]}", b, None, None, False)
@@ -108,7 +125,9 @@ def _loose_item(data: QuestData, item: Item, n: int, hops: Hops) -> Target:
     return _info(title, NO_ITEM)
 
 
-def targets(data: QuestData, quest: Quest, *, giver: bool, hops: Hops) -> list[Target]:
+def targets(
+    data: QuestData, quest: Quest, *, giver: bool, hops: Hops, closest: bool = False
+) -> list[Target]:
     on_mob: dict[int, list[str]] = {i: [] for i, _ in quest.mobs}
     loose: list[Target] = []
     for item_id, n in quest.items:
@@ -117,10 +136,10 @@ def targets(data: QuestData, quest: Quest, *, giver: bool, hops: Hops) -> list[T
         item = data.items[item_id]
         mine = [i for i in item.drops if i in on_mob]
         if mine:
-            m = _top_dropper(data, mine, hops)
+            m = _top_dropper(data, mine, hops, closest)
             on_mob[m.id].append(f"{item.name.removeprefix(m.name + ' ')} {TIMES}{n}")
         else:
-            loose.append(_loose_item(data, item, n, hops))
+            loose.append(_loose_item(data, item, n, hops, closest))
 
     rows: list[Target] = []
     same = quest.giver is not None and quest.giver == quest.taker
@@ -129,7 +148,7 @@ def targets(data: QuestData, quest: Quest, *, giver: bool, hops: Hops) -> list[T
     for mob_id, count in quest.mobs:
         mob = data.mobs[mob_id]
         title = " · ".join([f"{mob.name} {TIMES}{count}", *on_mob[mob_id]])
-        b = _mob_map(data, mob, hops)
+        b = _mob_map(data, mob, hops, closest)
         if b:
             rows.append(Target(title, data.map_names[b], b, None, None, False))
         else:
