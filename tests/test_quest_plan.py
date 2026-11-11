@@ -3,10 +3,12 @@ from maplelens.tools.quest_helper.plan import (
     Target,
     also_for,
     best_map,
+    closest_map,
     find_quest,
     npc_place,
     shared_name,
     show_giver,
+    starts_closest,
     targets,
 )
 
@@ -47,6 +49,7 @@ def data(quest: Quest) -> QuestData:
             2: Mob(2, "Slime", {"b": 3}),
             3: Mob(3, "Ghost", {}),
             4: Mob(4, "Ufo", {"x": 9}),
+            5: Mob(5, "Pig", {"a": 10, "c": 1}),
         },
         {
             10: Item(10, "Jr. Necki Skin", (1,), ()),
@@ -54,6 +57,7 @@ def data(quest: Quest) -> QuestData:
             12: Item(12, "Mirror", (), (2,)),
             13: Item(13, "Mystery", (), ()),
             14: Item(14, "Start", (), ()),
+            15: Item(15, "Hide", (1, 2), ()),
         },
         NAMES,
     )
@@ -134,3 +138,27 @@ def test_shared_name_finds_nothing():
 def test_also_for():
     t = Target("x", "y", "a", None, None, False)
     assert also_for("a", [("Q2", [t]), ("Q3", [])]) == ["Q2"]
+
+
+FAR_A = {"a": 3, "b": 1, "c": 1}.get
+
+
+def test_closest_map_fewest_hops_then_most_spawns():
+    assert closest_map({"a": 10, "b": 1}, {"a", "b"}, FAR_A) == "b"
+    assert closest_map({"b": 1, "c": 4}, {"b", "c"}, FAR_A) == "c"
+    assert closest_map({"a": 10, "b": 1}, {"a", "b"}, NONE) == "a"  # no route known
+    assert closest_map({"x": 5}, {"a"}, NONE) is None
+
+
+def test_closest_targets_a_monster_and_a_drop():
+    q = quest(mobs=((5, 10),), items=((15, 3),))
+    pig, hide = targets(data(q), q, giver=False, hops=FAR_A)
+    assert (pig.map_id, hide.map_id, hide.sub) == ("a", "a", "Jr. Necki · Map A")
+    pig, hide = targets(data(q), q, giver=False, hops=FAR_A, closest=True)
+    assert (pig.map_id, hide.map_id, hide.sub) == ("c", "b", "Slime · Map B")
+
+
+def test_starts_closest_up_to_30():
+    assert starts_closest(quest(mobs=((1, 20),), items=((10, 10),)))
+    assert not starts_closest(quest(mobs=((1, 20),), items=((10, 11),)))
+    assert starts_closest(quest(mobs=((1, 30),), items=((14, 50),), start_items=(14,)))

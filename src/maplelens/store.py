@@ -19,6 +19,7 @@ DEFAULTS = {
     "update_dismissed": None,  # the version whose notice line the player closed
     "quests_tracked": [],  # quest ids, in tracking order
     "quests_expanded": None,  # the tracked quest shown open in the Quests tab
+    "quests_closest": {},  # quest id (as text) -> True: Closest, False: Best; once switched
 }
 
 

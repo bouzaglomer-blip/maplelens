@@ -23,6 +23,8 @@ one click to set a route there, plus what comes next: job advancement, gear and 
 
 **Quest helper:** open a quest in the game and the Quests tab shows where to go for each
 NPC, monster and item it needs, one click to set a route there. Track quests to keep them.
+Each quest switches between Closest (the nearest map) and Best (the most monsters); quick
+quests start on Closest.
 
 ![The Quests tab next to the game's quest window: The Filing Error's Torn Ledger Pages row is outlined with Going · 5 maps away and a Stop button, the Path tab shows its running dot, and a yellow arrow by the character points the way](docs/screenshots/quests.jpg)
 
