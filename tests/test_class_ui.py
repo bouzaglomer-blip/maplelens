@@ -104,7 +104,7 @@ def test_no_plan_for_job(make):
 def test_training_rows_click_to_go_and_best_rate(make):
     tool = make(best_rate=lambda t: 1234.0 if t else None)
     tool.update(R(level=12), RECT, 0)
-    first, *rest = [r for r in rows(tool) if not r.name.startswith("Lv ")]  # not the footer
+    first, *rest = [r for r in rows(tool) if not r.name.startswith(("Lv ", "Build: "))]
     assert first.sub == "your best · 1,234/min" and first.clickable and first.best
     assert rest and all(r.sub.startswith("mobs Lv ") and not r.best for r in rest)
     first.click()
@@ -189,6 +189,47 @@ def test_pick_build_saves_and_tells(make):
     assert tool.build_name() == "Sindit"
     tool.update(R(job="Hermit", level=72), RECT, 1)
     assert tool.build_names() == []
+
+
+def click(row):
+    from PySide6.QtWidgets import QApplication
+
+    row.click()
+    QApplication.processEvents()  # the tab redraws after the click, not inside it
+
+
+def named(tool, name):
+    return next(r for r in rows(tool) if r.name == name)
+
+
+def test_beginner_picks_a_class_in_the_tab(make):
+    from maplelens.tools.class_helper.ui import CHOOSE
+
+    tool = make()
+    tool.update(R("Beginner", 5, stats=SW(level=5, ap=5, base=s(4, 4, 4, 4))), RECT, 0)
+    assert CHOOSE in texts(tool)
+    assert tool.marks() == []  # no class assumed, so no stat to point at
+    assert not any(r.name.startswith("Lv ") for r in rows(tool))  # nor its advance
+    assert named(tool, "Snail Field")  # training doesn't depend on the class
+    click(named(tool, "Magician"))
+    assert tool._settings["class_builds"] == {"Beginner": "Magician"}
+    assert CHOOSE not in texts(tool)
+    assert tool.marks() == [("5 here", pos(*PLUS["INT"]))]
+    assert named(tool, "Lv 8 · Advance").sub == "Magician"
+
+
+def test_build_row_opens_the_choices(make):
+    from maplelens.tools.class_helper.ui import CHANGE
+
+    tool = make()
+    tool.update(R(level=12), RECT, 0)
+    assert named(tool, "Build: LUK").sub == CHANGE
+    click(named(tool, "Build: LUK"))
+    assert named(tool, "LUK").best and not named(tool, "Sindit").best
+    click(named(tool, "Sindit"))
+    assert tool._settings["class_builds"] == {"Rogue": "Sindit"}
+    assert named(tool, "Build: Sindit")
+    assert not any(r.name == "LUK" for r in rows(tool))
 
 
 def test_stats_never_read_then_badge_until_level_changes(make):

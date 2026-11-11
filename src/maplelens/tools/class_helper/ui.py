@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from shiboken6 import delete
@@ -50,6 +50,9 @@ OPEN_STATS = "Open your stat window once"
 STAT_UNREAD = "Can't read your stat window: move it fully into view"
 SKILL_UNREAD = "Can't read your skill window: move it fully into view"
 SCROLL = "scroll the list once"
+CHOOSE = "Which class are you heading for?"
+BUILD = "Build: {}"
+CHANGE = "click to change"
 TIERS = {0: "Beginner", 1: "1st job", 2: "2nd job"}
 # Ring radius, and where the tag starts from the ring's left edge: past the pair of + buttons,
 # which ends 20 px right of the ring's centre. Game base size; both grow with its buttons.
@@ -135,6 +138,7 @@ class ClassHelperTool:
         self._shown: tuple | None = None  # the items now drawn
         self._content: tuple | None = None  # the level-up dot's key
         self._plan_job: str | None = None
+        self._picking = False  # the build row is open on the list of builds
         self._r: Reading | None = None
         self._seen_at = 0  # the level at the last update
         self._rect: tuple | None = None
@@ -192,6 +196,8 @@ class ClassHelperTool:
         plan = self._data.plan(self._job)
         if not isinstance(st, StatWindow) or st.level != level or plan is None:
             return []
+        if self._asking(plan):
+            return []
         band = band_at(plan.build(self._choices().get(plan.job)), level)
         if band is None:
             return []
@@ -239,6 +245,15 @@ class ClassHelperTool:
             return
         self._choices()[self._plan_job] = name
         self._changed()
+        self._picking = False
+        self._render_last()
+
+    def _asking(self, plan) -> bool:
+        """A Beginner's class is theirs to pick: nothing assumed until they do."""
+        return plan.tier == 0 and len(plan.builds) > 1 and plan.job not in self._choices()
+
+    def _open_builds(self) -> None:
+        self._picking = True
         self._render_last()
 
     def _tell_builds(self) -> None:
@@ -320,6 +335,13 @@ class ClassHelperTool:
         ap, sp = self._points()
         chip = " · ".join(f"{n} {w}" for n, w in ((ap, "AP"), (sp, "SP")) if n)
         out = [("header", job, level, chip)]
+        if self._asking(plan):  # the class first; training is the same for every class
+            return [
+                *out,
+                *self._build_items(plan, build),
+                *self._train_items(plan, level, best=True),
+                *hints,
+            ], (job,)
         adv = advance_ready(plan, build, level)
         if adv:
             where = short_name(adv.where.name) if adv.where else None
@@ -327,6 +349,7 @@ class ClassHelperTool:
             out.append(("row", READY, sub, _go_map(adv.where), False, True))
         out += self._train_items(plan, level, best=adv is None)
         out += self._next_items(plan, build, level)
+        out += self._build_items(plan, build)
         out += hints
         tkey = tuple(t.place.map_id or t.place.name for t in training(plan, level) if t.place)
         gkey = tuple(g.item.id for g in gear(build, level) if g)
@@ -346,6 +369,19 @@ class ClassHelperTool:
             )
             out.append(("row", short_name(t.place.name), sub, t.place.map_id, i == top, False))
         return out
+
+    def _build_items(self, plan, build) -> list:
+        """("pick", name, sub, build or None to open the list, current): a row per build."""
+        if len(plan.builds) < 2:
+            return []
+        if not (self._asking(plan) or self._picking):
+            return [("divider",), ("pick", BUILD.format(build.name), CHANGE, None, False)]
+        if self._asking(plan):  # right under the header: no divider
+            return [("label", CHOOSE, LABEL_COLOR)] + [
+                ("pick", b.name, "", b.name, False) for b in plan.builds
+            ]
+        picks = [("pick", b.name, "", b.name, b is build) for b in plan.builds]
+        return [("divider",), ("label", "Build", LABEL_COLOR), *picks]
 
     def _next_items(self, plan, build, level: int) -> list:
         steps = milestones(plan, build, level)
@@ -407,6 +443,13 @@ class ClassHelperTool:
             line.setAttribute(Qt.WA_StyledBackground, True)
             line.setStyleSheet(f"background: {HERE_BG};")
             return line
+        if kind == "pick":
+            _, name, sub, choice, current = item
+            act = self._open_builds if choice is None else (lambda c=choice: self.pick_build(c))
+            # after the click: the redraw deletes the row the click is still in
+            return Row(
+                name, sub, lambda: QTimer.singleShot(0, act), best=current, width=self._tab_w
+            )
         if kind == "row":
             _, name, sub, map_id, best, outline = item
             go = (lambda m=map_id: self._go(m)) if map_id else None
