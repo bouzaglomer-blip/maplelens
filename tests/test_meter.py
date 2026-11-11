@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 
 from maplelens.readers import ExpValue, Reading
-from maplelens.tools.exp_meter.meter import ExpMeter
+from maplelens.tools.exp_meter.meter import ExpMeter, monster_free_maps
 
 MAP = "Dungeon / Ant Tunnel III"
 
@@ -294,3 +294,38 @@ def test_rate_by_play_pattern(kills, live, history):
     assert m.rate(kills[-1] + 1).exp_per_min * 60 == pytest.approx(live, abs=1)
     seg = m.open_segment()
     assert seg.exp / seg.active_s * 3600 == pytest.approx(history, abs=1)
+
+
+TOWN = "Victoria Road / Henesys"
+
+
+def test_quest_reward_in_town_not_counted():
+    m = ExpMeter()
+    steady(m, 20, step_s=10)  # last pct 19.5 at t=190
+    before = m.rate(190.5).pct_per_min
+    feed(m, 230, 2190, 21.9, map_name=TOWN)  # a +2.4% reward after a 40 s walk
+    assert m.rate(230.5).pct_per_min == pytest.approx(before)
+    assert m.open_segment().pct == 0
+
+
+def test_quests_in_a_row_dont_teach_the_jump_filter():
+    m = ExpMeter()
+    steady(m, 20, step_s=10)
+    before = m.rate(190.5).pct_per_min
+    for i in range(3):  # three +10% rewards: a lasting jump if they were kills
+        feed(m, 230 + 5 * i, 2950 + 1000 * i, 29.5 + 10 * i, map_name=TOWN)
+    feed(m, 300, 4950, 49.5)  # back on the field: the walk only starts the clock
+    feed(m, 310, 6950, 69.5)  # and a +20% misread is still a misread
+    assert m.rate(310.5).pct_per_min == pytest.approx(before)
+
+
+def test_quests_only_no_rate():
+    m = ExpMeter()
+    for i in range(5):
+        feed(m, i * 20, 1000 + 300 * i, 10 + 3 * i, map_name=TOWN)
+    assert m.rate(80.5) is None
+
+
+def test_town_with_monsters_counts_kills():
+    assert TOWN in monster_free_maps()
+    assert "Maple Road / East Entrance to Mushroom Town" not in monster_free_maps()

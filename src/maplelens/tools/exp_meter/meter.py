@@ -1,10 +1,28 @@
 """EXP rate, idle time and per-map/class/level segments from a stream of readings."""
 
+import json
 from collections import deque
 from dataclasses import dataclass, field, replace
+from functools import cache
+from pathlib import Path
 from statistics import median, quantiles
 
 from maplelens.readers import ExpValue, Reading
+
+_DATA = Path(__file__).parents[2] / "data"
+
+
+@cache
+def monster_free_maps() -> frozenset[str]:
+    """Titles ("Street / Name") of the towns where no monster spawns: EXP gained there is a
+    quest's reward, never a kill's. quests.json lists only the monsters quests ask for, so it
+    can rule a town out (a tutorial town has some) but never a field in."""
+    maps = json.loads((_DATA / "maps.json").read_text("utf-8"))
+    mobs = json.loads((_DATA / "quests.json").read_text("utf-8"))["mobs"]
+    spawns = {map_id for mob in mobs.values() for map_id in mob["spawns"]}
+    return frozenset(
+        f"{m['street']} / {m['name']}" for m in maps if m["town"] and m["id"] not in spawns
+    )
 
 
 @dataclass
@@ -139,6 +157,12 @@ class ExpMeter:
         return gain
 
     def _on_exp(self, old: ExpValue, old_level, paused: bool, t: float) -> None:
+        if self._map.value in monster_free_maps():
+            # a quest's reward: not a gain, nor a jump to learn from, and the walk to the NPC
+            # is not training, so the next kill only starts the clock again
+            # ponytail: a quest handed in on a field still counts; tell it by the NPC's dialog
+            self._event_t = self._last_event_t = None
+            return
         gain = self._gain(old, old_level)
         if gain:
             self._recent.append(gain[1])
@@ -178,7 +202,7 @@ class ExpMeter:
         pct_per_min = pct_sum / minutes
         exp = self._exp.value
         left = (100 - exp.pct) / pct_per_min if exp and pct_per_min > 0 else None
-        paused = now - self._event_t > self.idle_cutoff_s
+        paused = self._event_t is None or now - self._event_t > self.idle_cutoff_s
         return Rate(exp_sum / minutes, pct_per_min, left, paused)
 
     @property
