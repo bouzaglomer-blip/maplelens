@@ -40,7 +40,9 @@ from maplelens.tools.path_arrow.route import Trip, plan
 # the head, under the 768-high frame the camera model works in.
 ARROW_DY = 100
 ARROW_SIZE = 36  # logical px, the arrow's square
-NPC_NEAR = 60  # world px: this close to the NPC counts as arrived
+# Arrived once the NPC's spot is on screen this many normalized px inside the side edges:
+# the camera can sit ~128 px off the model's sideways (see to_screen).
+SEEN_MARGIN = 130
 ARRIVED_S = 5.0  # "Arrived at …" stays this long
 UNREAD_S = 3.0  # map name unreadable this long before asking for the minimap
 OPEN = "Open your minimap to see the arrow"
@@ -227,7 +229,7 @@ class PathArrowTool:
         elif trip.arrived:
             name = self._label or goal
             world, r, here = self._world(), self._r, self._here
-            if trip.at is None or (world and math.dist(world, trip.at) <= NPC_NEAR):
+            if trip.at is None or self._seen(trip.at, world):
                 line = f"Arrived at {name}"
             elif here.minimap is None or (
                 r and r.minimap and not can_place(r.minimap, here, picture(here.id))
@@ -236,6 +238,16 @@ class PathArrowTool:
             if line:
                 self._arrived = (line, self._now)
                 self.trip = None
+
+    def _seen(self, at: tuple[int, int], world: tuple[float, float] | None) -> bool:
+        """The NPC's spot is well inside the game's view."""
+        if world is None or self._rect is None:
+            return False
+        _, _, w, h = self._rect
+        view = (w * glyphs.BASE_H / h, glyphs.BASE_H)
+        x, y = to_screen(at, world, self._here.minimap, view)
+        # The spot is the NPC's feet, so only they need to be on screen vertically.
+        return SEEN_MARGIN <= x <= view[0] - SEEN_MARGIN and 0 <= y <= view[1]
 
     def _set_typing(self, on: bool) -> None:
         if on == self._typing:

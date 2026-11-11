@@ -569,16 +569,20 @@ def _npc_world(tool, x, y):
     return MinimapView((125, 62), (62.5 + x / 16, 31.0 + y / 16), ())
 
 
-def test_npc_trip_points_then_arrives(make):
-    from maplelens.tools.path_arrow import ui
-
+def test_npc_trip_points_then_arrives_once_on_screen(make):
+    narrow = (0, 0, 400, 768)  # a 400 px view: the NPC at 0 is on screen 130..270 only
     tool = make()
     feed(tool, title("B"))
     tool.go("C", (0, 0), "Luke")
-    feed(tool, title("C"), 1.0, view=_npc_world(tool, 400, 0))
+    feed(tool, title("C"), 1.0, view=_npc_world(tool, 400, 0), rect=narrow)  # NPC at -200
     assert tool.running and tool.arrow.isVisible()
     assert tool.heading() == ("C", (0, 0), 0)
-    feed(tool, title("C"), 2.0, view=_npc_world(tool, ui.NPC_NEAR - 10, 0))
+    near_edge = _npc_world(tool, 100, -108)  # the NPC 100 px in from the left edge
+    feed(tool, title("C"), 1.5, view=near_edge, rect=narrow)
+    assert tool.running
+    # Standing by the NPC: the dot reads ~108 px above its foothold (Henesys, in game),
+    # so the model puts its feet at y 653 of 768, under the side margin.
+    feed(tool, title("C"), 2.0, view=_npc_world(tool, 50, -108), rect=narrow)
     assert tool._header.text() == "Arrived at Luke"
     assert not tool.running
 
