@@ -34,8 +34,12 @@ def parse_exp(text: str) -> ExpValue | None:
     return ExpValue(int(m[1].replace(",", "")), pct)
 
 
-def read_exp(frame: np.ndarray) -> ExpValue | None:
-    """EXP value from a normalized frame, or None if the label or any glyph is unreadable."""
+def read_exp(frame: np.ndarray, native: np.ndarray | None = None) -> ExpValue | None:
+    """EXP value from a normalized frame, or None if the label or any glyph is unreadable.
+
+    `native` is the same shot before normalizing: when no exact template fits, the
+    glyphs are read from its pixels (glyphs.read_scaled).
+    """
     y0 = max(0, frame.shape[0] - glyphs.STATUS_BAND)
     hit = glyphs.find_anchor(frame[y0:], "exp_label")
     if hit is None:
@@ -43,4 +47,7 @@ def read_exp(frame: np.ndarray) -> ExpValue | None:
     x, y = hit[0] + EXP_DX, y0 + hit[1] + EXP_DY
     m = glyphs.mask(frame[y : y + EXP_H, x : x + EXP_W], EXP_INK_LO, EXP_INK_HI)
     text = glyphs.read_text(m, "exp_font", space_px=EXP_SPACE_PX)
+    if text is None and native is not None:
+        box = (x, y, EXP_W, EXP_H)
+        text = glyphs.read_scaled(frame, native, box, "exp_font", EXP_SPACE_PX)
     return None if text is None else parse_exp(text)

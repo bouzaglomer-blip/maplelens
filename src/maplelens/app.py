@@ -771,14 +771,18 @@ class Tick:
                 self.seen,
             )
             return
-        self.layer.follow(rect)
-        if self.shown.on:  # hidden by the player: the tools still run, nothing shows
-            self.layer.show()
         try:
-            reading = read_all(capture.grab(self.hwnd, rect), now)
+            frame = capture.grab(self.hwnd, rect)
+            # Fullscreen on a screen of another shape: the game is its picture, bars left out
+            x, y, w, h = capture.picture_box(frame)
+            rect = (rect[0] + x, rect[1] + y, w, h)
+            reading = read_all(frame[y : y + h, x : x + w], now)
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, self.seen)
             reading = None
+        self.layer.follow(rect)
+        if self.shown.on:  # hidden by the player: the tools still run, nothing shows
+            self.layer.show()
         update_tools(
             self.box,
             self.exp,

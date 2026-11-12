@@ -182,6 +182,30 @@ def test_read_level(name):
     assert read_level(screen(name)) == EXPECTED[name]
 
 
+# Mac fullscreen: the game draws 1512x850 and the screen doubles it; no exact template
+# fits, so EXP and level are read from the native pixels (glyphs.read_scaled).
+FULLSCREEN = {
+    "fullscreen_exp_a_3024x1700_100.png": ExpValue(42138, 50.33),
+    "fullscreen_exp_b_3024x1700_100.png": ExpValue(42286, 50.51),  # 8 beats 9 by 0.06
+    "fullscreen_exp_c_3024x1700_100.png": ExpValue(42397, 50.64),
+    "fullscreen_level_a_3024x1700_100.png": 29,
+}
+
+
+@pytest.mark.parametrize("name", sorted(FULLSCREEN))
+def test_read_fullscreen(name):
+    frame, native, _ = _window_args(name)
+    read = read_exp if "_exp_" in name else read_level
+    assert read(frame) is None  # the exact templates miss
+    assert read(frame, native) == FULLSCREEN[name]
+
+
+def test_fullscreen_partial_text_is_none():
+    frame, native, _ = _window_args("fullscreen_exp_a_3024x1700_100.png")
+    native[:, int(native.shape[1] * 0.8) :] = 0
+    assert read_exp(frame, native) is None
+
+
 def test_exp_partial_text_is_none():
     img = screen("exp_a_2560x1440_100.png")
     x, _ = glyphs.find_anchor(img, "exp_label")
@@ -240,7 +264,9 @@ def test_expected_matches_fixture_files():
     }
     assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(EXPECTED_SKILL) | set(
         EXPECTED_QUEST
-    ) | set(EXPECTED_TRACKER) | native_map == {p.name for p in SCREENS.glob("*.png")}
+    ) | set(EXPECTED_TRACKER) | set(FULLSCREEN) | native_map == {
+        p.name for p in SCREENS.glob("*.png")
+    }
 
 
 def test_exp_one_px_noise_is_never_another_value():
@@ -491,9 +517,10 @@ def test_read_all_normalizes_once(monkeypatch):
     got = read_all(np.zeros((1440, 2560, 3), np.uint8), 12.5)
     assert got == Reading(12.5, ExpValue(1, 0.5), 7, "Rogue", "A / B")
     assert calls == [1]
-    # The word readers (OCR) also get the native frame: they crop their text from it.
+    # Every reader also gets the native frame: the word readers (OCR) crop their text
+    # from it, EXP and level read it when no exact template fits.
     small, native = (768, 1365, 3), (1440, 2560, 3)
-    assert seen == [[small], [small], [small, native], [small, native]]
+    assert seen == [[small, native]] * 4
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("pos_*.png")))
