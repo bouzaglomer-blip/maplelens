@@ -34,10 +34,17 @@ def test_steady_gain_rate():
     assert rate.minutes_to_level == pytest.approx((100 - 16.0) / 1.0)
 
 
-def test_rate_none_before_a_minute():
-    m = ExpMeter()
-    steady(m, 3, step_s=20)
-    assert m.rate(40.5) is None
+def test_rate_from_the_second_gain_marked_early_under_a_minute():
+    def meter(kills):
+        m = ExpMeter()
+        steady(m, kills, step_s=20)
+        return m.rate(20 * kills)
+
+    assert meter(1) is None  # one reading only sets the baseline
+    assert meter(2) is None  # the first gain only starts the clock
+    rate = meter(3)  # 40 s of active time
+    assert rate.early and rate.exp_per_min == pytest.approx(150)
+    assert not meter(5).early  # 80 s
 
 
 def test_short_gaps_count_long_gaps_dont():

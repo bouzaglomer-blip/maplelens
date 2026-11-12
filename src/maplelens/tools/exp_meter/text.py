@@ -27,8 +27,10 @@ def box_lines(
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
     if unread:
         label = "EXP · can't read bar"
+    elif rate is None or rate.early:
+        label = "EXP · measuring"
     else:
-        label = "EXP · paused" if rate and rate.paused else "EXP · last 5 min"
+        label = "EXP · paused" if rate.paused else "EXP · last 5 min"
     return [(label, [exp, pct]), ("Level up in", [eta])]
 
 
