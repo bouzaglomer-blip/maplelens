@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from maplelens.tools.exp_meter.meter import Rate
+from maplelens.tools.exp_meter.meter import Rate, SessionRate
 from maplelens.tools.exp_meter.text import (
     best_lines,
     box_lines,
@@ -11,25 +11,34 @@ from maplelens.tools.exp_meter.text import (
 
 
 def test_box_lines_values():
-    assert box_lines(Rate(12480, 0.42, 137), False) == [
-        ("EXP · last 5 min", ["748,800 /h", "25.20% /h"]),
-        ("Level up in", ["2h 17m"]),
+    assert box_lines(Rate(12480, 0.42, 137), SessionRate(10000, 7800), False) == [
+        [("Last 5 min", ["748,800 /h", "25.20% /h"]), ("Session · 2h 10m", ["600,000 /h", ""])],
+        [("Level up in", ["2h 17m"])],
     ]
 
 
 def test_box_lines_no_rate():
-    assert box_lines(None, False) == [
-        ("EXP · last 5 min", ["— /h", "—% /h"]),
-        ("Level up in", ["—"]),
+    assert box_lines(None, None, False) == [
+        [("Last 5 min", ["— /h", "—% /h"]), ("Session", ["— /h", ""])],
+        [("Level up in", ["—"])],
     ]
 
 
+def test_box_lines_session_under_a_minute():
+    assert box_lines(None, SessionRate(None, 20), False)[0][1] == ("Session · <1m", ["— /h", ""])
+
+
+def test_box_lines_left_label_states():
+    assert box_lines(Rate(100, 0.1, 5, paused=True), None, False)[0][0][0] == "Paused"
+    assert box_lines(Rate(100, 0.1, 5), None, False, unread=True)[0][0][0] == "Can't read bar"
+
+
 def test_box_lines_no_level_eta():
-    assert box_lines(Rate(100, 0.1, None), False)[1] == ("Level up in", ["—"])
+    assert box_lines(Rate(100, 0.1, None), None, False)[1] == [("Level up in", ["—"])]
 
 
 def test_box_lines_waiting():
-    assert box_lines(None, True) == [("waiting for game", [])]
+    assert box_lines(None, None, True) == [[("waiting for game", [])]]
 
 
 def test_format_duration():
@@ -46,12 +55,9 @@ def test_format_last():
     assert format_last(datetime(2026, 10, 5, 12, 0).timestamp(), now) == "Oct 5"
 
 
-def test_box_lines_paused():
-    assert box_lines(Rate(100, 0.1, None, paused=True), False)[0][0] == "EXP · paused"
-
-
-def test_box_lines_unread():
-    assert box_lines(Rate(100, 0.1, None, paused=True), False, True)[0][0] == "EXP · can't read bar"
+def test_box_lines_unread_wins_over_paused():
+    rate = Rate(100, 0.1, None, paused=True)
+    assert box_lines(rate, None, False, True)[0][0][0] == "Can't read bar"
 
 
 def test_short_name():
