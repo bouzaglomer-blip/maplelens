@@ -222,3 +222,59 @@ def test_find_anchor_searches_again_when_the_anchor_is_gone():
     assert glyphs.find_anchor(np.zeros_like(band), "exp_label") is None
     assert "exp_label" not in glyphs._last_hit
     assert glyphs.find_anchor(band, "exp_label") == cold
+
+
+def _recorded(monkeypatch):
+    calls = []
+    real = cv2.matchTemplate
+    monkeypatch.setattr(
+        glyphs.cv2,
+        "matchTemplate",
+        lambda img, tpl, m: calls.append(img.shape[:2]) or real(img, tpl, m),
+    )
+    return calls
+
+
+def _padded():
+    return np.pad(_band(), ((20, 20), (20, 20), (0, 0)), mode="edge")
+
+
+def _shift(img, dx, dy):
+    m = np.float32([[1, 0, dx], [0, 1, dy]])
+    return cv2.warpAffine(img, m, (img.shape[1], img.shape[0]), borderMode=cv2.BORDER_REPLICATE)
+
+
+def _is_near(calls):
+    th, tw = glyphs.load("exp_label_1366").shape[:2]
+    return all(h <= th + 2 * glyphs.NEAR and w <= tw + 2 * glyphs.NEAR for h, w in calls)
+
+
+@pytest.mark.parametrize("dx, dy", [(2, 0), (-2, 0), (0, 2), (0, -2)])
+def test_find_anchor_ignores_a_peak_on_the_boxs_edge(monkeypatch, dx, dy):
+    # Anchor well inside the frame: a peak on a box edge may continue outside, so search all.
+    band = _padded()
+    moved = _shift(band, dx, dy)
+    glyphs.clear_cache()
+    glyphs.find_anchor(band, "exp_label")
+    calls = _recorded(monkeypatch)
+    warm = glyphs.find_anchor(moved, "exp_label")
+    assert not _is_near(calls)  # a full search ran
+    assert warm == _cold(moved)
+
+
+def test_find_anchor_accepts_a_peak_on_the_frames_right_edge(monkeypatch):
+    frame = _padded()[:, :48]  # the template ends at the frame's right edge
+    glyphs.clear_cache()
+    assert glyphs.find_anchor(frame, "exp_label") == (22, 21)
+    calls = _recorded(monkeypatch)
+    assert glyphs.find_anchor(_shift(frame, 1, 0), "exp_label") == (23, 21)
+    assert _is_near(calls)
+
+
+def test_find_anchor_accepts_a_peak_on_the_frames_edge(monkeypatch):
+    band = _band()
+    glyphs.clear_cache()
+    assert glyphs.find_anchor(band[:, 1:], "exp_label") == (1, 1)
+    calls = _recorded(monkeypatch)
+    assert glyphs.find_anchor(band[:, 2:], "exp_label") == (0, 1)
+    assert _is_near(calls)
