@@ -28,7 +28,12 @@ def box_lines(
         exp = f"{rate.exp_per_min * 60:,.0f} /h"
         pct = f"{rate.pct_per_min * 60:.2f}% /h"
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
-    label = "Can't read bar" if unread else "Paused" if rate and rate.paused else "Last 5 min"
+    if unread:
+        label = "Can't read bar"
+    elif rate is None or rate.early:
+        label = "Measuring"
+    else:
+        label = "Paused" if rate.paused else "Last 5 min"
     s_label, s_exp = "Session", "— /h"
     if session:
         hours = session.active_s / 3600

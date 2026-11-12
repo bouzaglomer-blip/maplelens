@@ -85,7 +85,8 @@ meter already takes.
 ## The box
 
 - **Left column label:** "Last 5 min" (my call: no "EXP ·" prefix, the tab says EXP; owner
-  agreed for now). It changes to "Paused" when the live rate is paused and to
+  agreed for now). It changes to "Measuring" under a minute of active time (from main's
+early estimate), to "Paused" when the live rate is paused and to
   "Can't read bar" in the accent colour when the bar is unreadable, as the label does
   today.
 - **Right column label:** "Session · " + the session's active time via `format_duration`

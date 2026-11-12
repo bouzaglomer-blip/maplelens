@@ -5,12 +5,32 @@ import cv2
 import numpy as np
 import pytest
 
-from maplelens.readers import ExpValue, Reading, glyphs, job, map_name, ocr, read_all, skill_window
+from maplelens.readers import (
+    OPTIONAL,
+    ExpValue,
+    Reading,
+    due,
+    found,
+    glyphs,
+    job,
+    map_name,
+    ocr,
+    read_all,
+    skill_window,
+    window,
+)
 from maplelens.readers.exp import EXP_DX, EXP_DY, EXP_H, EXP_INK_HI, EXP_INK_LO, EXP_W, read_exp
 from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
 from maplelens.readers.map_name import known_titles, read_map_name, snap_title
 from maplelens.readers.minimap_pos import read_player, read_view
+from maplelens.readers.quest_tracker import (
+    PARTLY,
+    Tracker,
+    TrackerLine,
+    TrackerQuest,
+    read_quest_tracker,
+)
 from maplelens.readers.quest_window import NAME_UNREADABLE, QuestOpen, read_quest_window
 from maplelens.readers.skill_window import SkillRow, SkillWindow, read_skill_window
 from maplelens.readers.stat_window import UNREADABLE, StatWindow, parse_stat, read_stat_window
@@ -163,6 +183,7 @@ def screen(name: str):
 @pytest.fixture(autouse=True)
 def fresh_cache():
     glyphs.clear_cache()
+    window.clear_cache()
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("exp_*.png")))
@@ -173,6 +194,30 @@ def test_read_exp(name):
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("level_*.png")))
 def test_read_level(name):
     assert read_level(screen(name)) == EXPECTED[name]
+
+
+# Mac fullscreen: the game draws 1512x850 and the screen doubles it; no exact template
+# fits, so EXP and level are read from the native pixels (glyphs.read_scaled).
+FULLSCREEN = {
+    "fullscreen_exp_a_3024x1700_100.png": ExpValue(42138, 50.33),
+    "fullscreen_exp_b_3024x1700_100.png": ExpValue(42286, 50.51),  # 8 beats 9 by 0.06
+    "fullscreen_exp_c_3024x1700_100.png": ExpValue(42397, 50.64),
+    "fullscreen_level_a_3024x1700_100.png": 29,
+}
+
+
+@pytest.mark.parametrize("name", sorted(FULLSCREEN))
+def test_read_fullscreen(name):
+    frame, native, _ = _window_args(name)
+    read = read_exp if "_exp_" in name else read_level
+    assert read(frame) is None  # the exact templates miss
+    assert read(frame, native) == FULLSCREEN[name]
+
+
+def test_fullscreen_partial_text_is_none():
+    frame, native, _ = _window_args("fullscreen_exp_a_3024x1700_100.png")
+    native[:, int(native.shape[1] * 0.8) :] = 0
+    assert read_exp(frame, native) is None
 
 
 def test_exp_partial_text_is_none():
@@ -233,7 +278,9 @@ def test_expected_matches_fixture_files():
     }
     assert set(EXPECTED) | set(EXPECTED_POS) | set(EXPECTED_STAT) | set(EXPECTED_SKILL) | set(
         EXPECTED_QUEST
-    ) | native_map == {p.name for p in SCREENS.glob("*.png")}
+    ) | set(EXPECTED_TRACKER) | set(FULLSCREEN) | native_map == {
+        p.name for p in SCREENS.glob("*.png")
+    }
 
 
 def test_exp_one_px_noise_is_never_another_value():
@@ -484,9 +531,98 @@ def test_read_all_normalizes_once(monkeypatch):
     got = read_all(np.zeros((1440, 2560, 3), np.uint8), 12.5)
     assert got == Reading(12.5, ExpValue(1, 0.5), 7, "Rogue", "A / B")
     assert calls == [1]
-    # The word readers (OCR) also get the native frame: they crop their text from it.
+    # Every reader also gets the native frame: the word readers (OCR) crop their text
+    # from it, EXP and level read it when no exact template fits.
     small, native = (768, 1365, 3), (1440, 2560, 3)
-    assert seen == [[small], [small], [small, native], [small, native]]
+    assert seen == [[small, native]] * 4
+
+
+def test_due_takes_turns():
+    assert [due(t, {}) for t in range(4)] == [{p} for p in OPTIONAL]
+    assert due(4, {}) == {"stats"}
+
+
+def test_due_keeps_a_part_seen_within_grace():
+    for t in range(8, 13):
+        assert "tracker" in due(t, {"tracker": 8}), t
+    assert "tracker" not in due(13, {"tracker": 8})  # 13 % 4 is "skills"
+
+
+def test_found_names_what_is_on_screen():
+    r = Reading(1.0, None, None, None, "A / B", stats="unreadable")
+    assert found(r) == {"stats"}  # the minimap is read always: not a part
+    assert found(Reading(1.0, None, None, None, None)) == set()
+
+
+def test_read_all_reads_only_what_is_due(monkeypatch):
+    from maplelens.readers import (
+        exp,
+        level,
+        minimap_pos,
+        quest_tracker,
+        quest_window,
+        stat_window,
+    )
+
+    called, view = [], minimap_pos.MinimapView((10, 20), (5.0, 5.0), ())
+    for mod, fn in [
+        (exp, "read_exp"),
+        (level, "read_level"),
+        (job, "read_job"),
+        (map_name, "read_map_name"),
+        (minimap_pos, "read_view"),
+        (stat_window, "read_stat_window"),
+        (skill_window, "read_skill_window"),
+        (quest_window, "read_quest_window"),
+        (quest_tracker, "read_quest_tracker"),
+    ]:
+        value = view if fn == "read_view" else fn
+        monkeypatch.setattr(mod, fn, lambda *a, fn=fn, v=value: called.append(fn) or v)
+    got = read_all(np.zeros((768, 1366, 3), np.uint8), 1.0, {"stats"})
+    assert sorted(called) == sorted(
+        ["read_exp", "read_level", "read_job", "read_map_name", "read_view", "read_stat_window"]
+    )
+    assert got == Reading(
+        1.0,
+        "read_exp",
+        "read_level",
+        "read_job",
+        "read_map_name",
+        view.fraction,
+        view,
+        stats="read_stat_window",
+    )
+
+
+def _in_frame(name):
+    """A 1366x768 fixture pasted into a black frame where the game shows it."""
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    fixture = screen(name)
+    h, w = fixture.shape[:2]
+    if name.startswith("tracker_"):
+        frame[:h, -w:] = fixture
+    elif name.startswith(("pos_", "minimap_")):
+        frame[:h, :w] = fixture
+    elif name.startswith("exp_"):
+        frame[-h:, :w] = fixture
+    else:
+        frame[100 : 100 + h, 300 : 300 + w] = fixture
+    return frame
+
+
+@needs_ocr
+def test_read_all_warm_matches_cold():
+    names = sorted(
+        p.name
+        for p in SCREENS.glob("*_1366x768_100.png")
+        if p.name.startswith(("exp_", "stat_", "skill_", "quest_", "tracker_", "pos_", "minimap_"))
+    )
+    for name in names:  # each on the caches the previous ones left
+        frame = _in_frame(name)
+        warm = read_all(frame, 0)
+        glyphs.clear_cache()
+        window.clear_cache()
+        assert warm == read_all(frame, 0), name  # MinimapView leaves its pixels out of ==
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("pos_*.png")))
@@ -686,6 +822,88 @@ def test_stat_reads_at_every_offset(name, ks):
             assert abs(got.plus[key][1] - (y - k / scale)) <= 1, (k, key, got.plus)
 
 
+ALIGNED = ["stat_a_2560x1440_100.png", "skill_a_1920x1080_100.png", "tracker_two_1920x1080_100.png"]
+
+
+def _align(name, native, scale, frame=None):
+    """window.align for the reader whose fixture is `name`, on `native` at `scale`."""
+    from maplelens.readers import quest_tracker, stat_window
+
+    if name.startswith("stat"):
+        m, size = stat_window, (stat_window.WIN_W, stat_window.WIN_H)
+    elif name.startswith("skill"):
+        m, size = skill_window, (skill_window.WIN_W, skill_window.WIN_H)
+    else:
+        m, size = quest_tracker, (quest_tracker.PANEL_W, quest_tracker.WIN_H)
+    frame = _scaled(native, scale) if frame is None else frame
+    return window.align(frame, native, scale, m.ANCHORS, size)
+
+
+def _same_hit(a, b):
+    assert a is not None and b is not None
+    assert a[1] == b[1]
+    assert np.array_equal(a[0], b[0])
+
+
+def _cold(name, native, scale):
+    window.clear_cache()
+    return _align(name, native, scale)
+
+
+@pytest.mark.parametrize("name", ALIGNED)
+def test_align_reuses_the_last_spot(name, monkeypatch):
+    frame, native, scale = _window_args(name)
+    first = _align(name, native, scale, frame)
+    calls = []
+    real = window.cv2.resize
+    monkeypatch.setattr(window.cv2, "resize", lambda *a, **k: calls.append(1) or real(*a, **k))
+    _same_hit(_align(name, native, scale, frame), first)
+    assert len(calls) <= 9 + 1
+
+
+@pytest.mark.parametrize("name", ALIGNED)
+def test_align_after_a_one_pixel_drag_matches_a_fresh_search(name):
+    _, native, scale = _window_args(name)
+    _align(name, native, scale)
+    right = np.concatenate([native[:, :1], native[:, :-1]], axis=1)
+    down = np.concatenate([right[:1], right[:-1]], axis=0)
+    for moved in (right, down):
+        warm = _align(name, moved, scale)
+        _same_hit(warm, _cold(name, moved, scale))
+
+
+def test_align_forgets_a_spot_from_another_scale():
+    _, native, scale = _window_args("stat_a_2560x1440_100.png")
+    _align("stat", native, scale)
+    _, native, scale = _window_args("stat_a_1920x1080_100.png")
+    warm = _align("stat", native, scale)
+    _same_hit(warm, _cold("stat", native, scale))
+
+
+def test_align_finds_the_other_anchor_when_the_last_one_is_covered():
+    from maplelens.readers import stat_window
+
+    _, native, scale = _window_args("stat_a_2560x1440_100.png")
+    _, (x, y) = _align("stat", native, scale)
+    key = tuple(n for n, _ in stat_window.ANCHORS)
+    won = window._last_spot[key][0]  # stat_bottom here, not the title
+    ax, ay = dict(stat_window.ANCHORS)[won]
+    x0, y0 = round((x + ax) * scale), round((y + ay) * scale)
+    t = glyphs.load(won)
+    covered = native.copy()
+    covered[y0 : y0 + round(t.shape[0] * scale), x0 : x0 + round(t.shape[1] * scale)] = 128
+    warm = _align("stat", covered, scale)
+    assert window._last_spot[key][0] != won
+    _same_hit(warm, _cold("stat", covered, scale))
+
+
+def test_align_forgets_a_closed_window():
+    _, native, scale = _window_args("stat_a_2560x1440_100.png")
+    assert _align("stat", native, scale) is not None
+    assert _align("stat", np.zeros_like(native), scale) is None
+    assert window._last_spot == {}
+
+
 def test_stat_ap_check(monkeypatch):
     from maplelens.readers import stat_window
 
@@ -718,14 +936,14 @@ def test_number_text_ambiguous_glyph_is_none(monkeypatch):
     from maplelens.readers import window
 
     win = np.full((20, 40, 3), 222, np.uint8)
-    g = next(t for c, t in window._glyphs() if c == "8")
+    g = next(t for c, t in window.font() if c == "8")
     win[3:16, 5 : 5 + g.shape[1]] = g[..., None].astype(np.uint8)
     box = (0, 0, 40, 20)
     assert window.read_number_text(win, box) == "8"
     # An "8" that is mostly a "0": blend the middle row in.
     win[3 + 6, 5:12] = 222
     assert window.read_number_text(win, box) in (None, "0")  # never a confident wrong read
-    monkeypatch.setattr(window, "_font", [("8", g), ("B", g)])
+    monkeypatch.setitem(window._fonts, "window_font", [("8", g), ("B", g)])
     assert window.read_number_text(win, box) is None  # identical scores: no margin
 
 
@@ -734,7 +952,7 @@ def test_number_text_light_patch_off_the_glyphs_is_none():
     from maplelens.readers import window
 
     win = np.full((20, 40, 3), 222, np.uint8)
-    g = next(t for c, t in window._glyphs() if c == "8")
+    g = next(t for c, t in window.font() if c == "8")
     win[3:16, 5 : 5 + g.shape[1]] = g[..., None].astype(np.uint8)
     box = (0, 0, 40, 20)
     assert window.read_number_text(win, box) == "8"
@@ -982,3 +1200,186 @@ def test_quest_reads_at_every_offset(name):
     for k in range(6):
         native = screen(name)[k:, k:]
         assert read_quest_window(_scaled(native, scale), native, scale) == EXPECTED_QUEST[name], k
+
+
+# Quest Helper crops: native, the panel's corner (it touches the crop's top and right
+# edges, as in the full frame). Names and targets are snapped to quests.json's, so a cut
+# name reads as the full name; "Maple Leaf" isn't in the data and reads as is.
+RAINBOW = "A rainbow snail shell that makes wishes come true!?"
+ARWEN = TrackerQuest("Arwen and the Glass Shoe", (TrackerLine(0, 1, "Arwen's Glass Shoe"),))
+FILING = TrackerQuest("The Filing Error", (TrackerLine(0, 25, "Torn Ledger Pages"),))
+SHELL = TrackerQuest(RAINBOW, (TrackerLine(0, 1, "Rainbow-colored Snail Shell"),))
+EVENT = TrackerQuest("[Event] The Journey Begins", (TrackerLine(0, 30, "Maple Leaf"),))
+
+
+def donating(have):
+    return TrackerQuest("Donating to Kerning City", (TrackerLine(have, 30, "Red Snail Shell"),))
+
+
+EXPECTED_TRACKER = {
+    "tracker_one_1920x1080_100.png": Tracker(1, False, (FILING,)),
+    "tracker_three_1920x1080_100.png": Tracker(3, False, (FILING, SHELL, donating(0))),
+    "tracker_min_1920x1080_100.png": Tracker(3, True, ()),
+    "tracker_empty_1920x1080_100.png": Tracker(0, False, ()),
+    "tracker_a_1366x768_100.png": Tracker(3, False, (ARWEN, FILING, SHELL)),
+    "tracker_eight_1920x1080_100.png": Tracker(4, False, (ARWEN, FILING, SHELL, donating(28))),
+    "tracker_event_1920x1080_100.png": Tracker(4, False, (ARWEN, FILING, SHELL, EVENT)),
+    "tracker_dark_1920x1080_100.png": Tracker(
+        5, False, (ARWEN, FILING, SHELL, donating(10), EVENT)
+    ),
+    "tracker_two_1920x1080_100.png": Tracker(2, False, (EVENT, FILING)),  # over black
+}
+
+
+def _loose(t):
+    """`t` with the event quest's target cut to its first word. "Maple Leaf" isn't in the
+    data, so nothing snaps it, and the Intel Mac's OCR reads it "Maple Leat". The event
+    quest is never matched to the data, so its target's exact text doesn't matter."""
+    from dataclasses import replace
+
+    if not isinstance(t, Tracker):
+        return t
+
+    def cut(q):
+        if q.name != EVENT.name:
+            return q
+        return replace(q, lines=tuple(replace(ln, text=ln.text.split()[0]) for ln in q.lines))
+
+    return replace(t, quests=tuple(cut(q) for q in t.quests))
+
+
+@needs_ocr
+@pytest.mark.parametrize("name", sorted(EXPECTED_TRACKER))
+def test_read_quest_tracker(name):
+    assert _loose(read_quest_tracker(*_window_args(name))) == _loose(EXPECTED_TRACKER[name])
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "quest_progress_1920x1080_100.png",
+        "stat_a_1920x1080_100.png",
+        "title_ellinia_1920x1080_100.png",
+        "minimap_a_1920x1080_100.png",
+    ],
+)
+def test_no_tracker(name):
+    assert read_quest_tracker(*_window_args(name)) is None
+
+
+def test_tracker_cut_by_the_frame_edge_is_unreadable():
+    native = screen("tracker_three_1920x1080_100.png")[:, :-120]  # the right edge cuts it
+    scale = 1080 / 768
+    assert read_quest_tracker(_scaled(native, scale), native, scale) == UNREADABLE
+
+
+@needs_ocr
+def test_tracker_block_painted_over_is_partly():
+    """A block covered (here: painted with the panel's own colour) reads fewer than n."""
+    native = screen("tracker_three_1920x1080_100.png")
+    native[168:210, 40:340] = (130, 130, 142)  # the third block's name and line; title 3/5
+    scale = 1080 / 768
+    assert read_quest_tracker(_scaled(native, scale), native, scale) == PARTLY
+
+
+@needs_ocr
+@pytest.mark.parametrize("cols", [(56, 63), (65, 72), (77, 82), (86, 93), (94, 101)])
+def test_tracker_digit_painted_over_is_partly(cols):
+    """Any one glyph of "28 / 30" gone (2, 8, /, 3, 0) leaves no number to misread."""
+    from maplelens.readers import quest_tracker
+
+    quest_tracker._words.clear()
+    native = screen("tracker_eight_1920x1080_100.png")
+    native[260:276, slice(*cols)] = (130, 130, 142)  # the fourth block's line
+    scale = 1080 / 768
+    assert read_quest_tracker(_scaled(native, scale), native, scale) == PARTLY
+
+
+@needs_ocr
+def test_tracker_line_that_doesnt_read_is_partly():
+    """A second line under the last block reads (two lines), but with its need hidden
+    ("0 /") it makes the panel PARTLY: below the last block the map leaves too much ink
+    to tell a line from it, so the line's own glyphs must tell."""
+    native = screen("tracker_a_1366x768_100.png")  # 768: the panel at (30, 0), 1:1
+    y = 138  # the last block's line
+    native[y + 13 : y + 29] = native[y - 3 : y + 13]  # the line again, 16 rows lower
+    native[y + 15 : y + 27, 54:61] = native[y + 15 : y + 27, 33:34]  # its need digit gone
+    assert read_quest_tracker(native, native, 1.0) == PARTLY
+
+
+@needs_ocr
+@pytest.mark.parametrize("middle", ["0", None])
+def test_tracker_three_digit_need_with_its_middle_hidden_is_partly(middle):
+    """ "0 / 1 Arwen's..." made "0 / 2?0 Arwen's..." (200 is the largest need in
+    quests.json): with the middle digit there it reads 200; hidden, the last "0" must not
+    pass as the text after a need of 2."""
+    from maplelens.readers import quest_tracker
+    from maplelens.readers.window import font
+
+    quest_tracker._words.clear()
+    glyph = dict(font("tracker_font"))
+    native = screen("tracker_a_1366x768_100.png")  # 768: the panel at (30, 0), 1:1
+    rows = slice(40, 53)  # the first block's line, as its glyph templates' 13 rows
+    native[rows, 66:] = native[rows, 54:-12].copy()  # the text: two digits later
+    native[rows, 54:72] = native[rows, 33:34]  # the need's three slots (x 54, 60, 66) blank
+    for x, ch in ((54, "2"), (60, middle), (66, "0")):
+        if ch:
+            native[rows, x : x + 7][glyph[ch] < 128] = 0
+    line = TrackerLine(0, 200, ARWEN.lines[0].text)
+    want = Tracker(3, False, (TrackerQuest(ARWEN.name, (line,)), FILING, SHELL))
+    want = want if middle else PARTLY
+    assert read_quest_tracker(native, native, 1.0) == want
+
+
+def test_tracker_block_past_the_count_is_partly(monkeypatch):
+    """A title digit read low (2 of 3 blocks) leaves a block past the count."""
+    from maplelens.readers import quest_tracker
+
+    monkeypatch.setattr(quest_tracker, "_count", lambda ink: 2)
+    assert read_quest_tracker(*_window_args("tracker_three_1920x1080_100.png")) == PARTLY
+
+
+def test_tracker_garbled_name_is_partly(monkeypatch):
+    """A name that snaps to no known quest (a busy map behind it) never reads as a quest."""
+    from maplelens.readers import quest_tracker
+
+    monkeypatch.setattr(quest_tracker, "_words", {})
+    monkeypatch.setattr(quest_tracker.ocr, "read_lines", lambda m: ["Al wen nnd tl{e GIass"])
+    assert read_quest_tracker(*_window_args("tracker_one_1920x1080_100.png")) == PARTLY
+
+
+@needs_ocr
+@pytest.mark.parametrize(
+    "name",
+    [
+        "tracker_three_1920x1080_100.png",
+        "tracker_eight_1920x1080_100.png",
+        "tracker_two_1920x1080_100.png",
+    ],
+)
+def test_tracker_reads_at_every_offset(name):  # native drops 0-5: to ceil(2 * 1080/768) = 3 px
+    """Dropping native rows and columns moves the panel to another sub-pixel offset."""
+    from maplelens.readers import quest_tracker
+
+    scale = 1080 / 768
+    for k in range(6):
+        quest_tracker._words.clear()  # OCR every offset, not just the first
+        native = screen(name)[k:, k:]
+        got = read_quest_tracker(_scaled(native, scale), native, scale)
+        assert _loose(got) == _loose(EXPECTED_TRACKER[name]), k
+
+
+@needs_ocr
+def test_read_all_fills_tracker():
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    fixture = screen("tracker_a_1366x768_100.png")
+    frame[: fixture.shape[0], -fixture.shape[1] :] = fixture
+    assert read_all(frame, 1.0).tracker == EXPECTED_TRACKER["tracker_a_1366x768_100.png"]
+
+
+def test_tracker_title_zero_over_visible_blocks_is_partly(monkeypatch):
+    """A title digit misread as 0 while blocks show must not read as an empty panel."""
+    from maplelens.readers import quest_tracker
+
+    monkeypatch.setattr(quest_tracker, "_count", lambda ink: 0)
+    assert read_quest_tracker(*_window_args("tracker_three_1920x1080_100.png")) == PARTLY

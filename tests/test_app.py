@@ -5,12 +5,13 @@ import threading
 import types
 from typing import ClassVar
 
+import numpy as np
 import pytest
 from PySide6.QtCore import QObject, Signal
 
 import maplelens
-from maplelens import app, overlay, update_mac
-from maplelens.readers import glyphs, ocr
+from maplelens import app, overlay, reader, update_mac
+from maplelens.readers import Reading, glyphs, ocr
 from maplelens.tools.path_arrow import maps
 
 
@@ -1255,12 +1256,12 @@ def game_found(monkeypatch):
     rect = (0, 0, 800, 600)
     monkeypatch.setattr(app, "find_game", lambda settings, save: 42)
     monkeypatch.setattr(app.capture, "client_rect", lambda hwnd: rect)
-    monkeypatch.setattr(app.capture, "grab", lambda hwnd, r: "frame")
-    monkeypatch.setattr(app, "read_all", lambda frame, now: READING)
+    monkeypatch.setattr(app.capture, "grab", lambda hwnd, r: np.full((600, 800, 3), 60, np.uint8))
+    monkeypatch.setattr(reader, "read_all", lambda frame, now, due=None: READING)
     return rect
 
 
-READING = object()
+READING = Reading(5.0, None, None, None, None)  # nothing on screen: found() is empty
 
 
 def _tick(box, layer, shown, updates=None):
@@ -1305,6 +1306,76 @@ def test_a_tick_with_the_game_shows_the_layer(hide, game_found):
     tick.run(5.0)
     assert layer.isVisible() and box.isVisible()
     assert exp.updates == [(READING, game_found, 5.0)]
+
+
+def test_a_tick_leaves_fullscreen_black_bars_out(hide, game_found, monkeypatch):
+    box, layer, _, shown = hide
+    frame = np.zeros((600, 800, 3), np.uint8)
+    frame[50:550] = 60  # the picture, between two 50-row bars
+    monkeypatch.setattr(app.capture, "grab", lambda hwnd, r: frame)
+    seen = []
+    monkeypatch.setattr(
+        reader, "read_all", lambda f, now, due=None: seen.append(f.shape) or READING
+    )
+    tick, exp = _tick(box, layer, shown)
+    tick.run(5.0)
+    assert seen == [(500, 800, 3)]
+    assert exp.updates == [(READING, (0, 50, 800, 500), 5.0)]
+
+
+def test_a_tick_without_an_answer_leaves_the_tools_alone(hide, game_found):
+    box, layer, _, shown = hide
+    layer.hide()
+    tick, exp = _tick(box, layer, shown)
+    tick.reader = types.SimpleNamespace(ask=lambda job: None, take=lambda: None)
+    tick.run(5.0)
+    assert exp.updates == []
+    assert layer.isVisible()
+
+
+def test_a_tick_searches_a_closed_window_on_its_turn(hide, game_found, monkeypatch):
+    box, layer, _, shown = hide
+    dues = []
+
+    def read_all(f, now, due=None):
+        dues.append(due)
+        tracker = "a tracker" if len(dues) > 2 and "tracker" in due else None  # open from tick 2
+        return Reading(now, None, None, None, None, tracker=tracker)
+
+    monkeypatch.setattr(reader, "read_all", read_all)
+    tick, _ = _tick(box, layer, shown)
+    for i in range(7):
+        tick.run(float(i))
+    assert [i for i, d in enumerate(dues) if "tracker" in d] == [3, 4, 5, 6]  # its turn, then seen
+    assert [i for i, d in enumerate(dues) if "stats" in d] == [0, 4]
+
+
+def test_a_window_found_in_a_lagging_answer_is_due_on_the_next_job(hide, game_found):
+    box, layer, _, shown = hide
+    tick, _ = _tick(box, layer, shown)
+    jobs = []
+
+    class Lagging:  # like ProcessReader: an answer is there on the next tick, not this one
+        inflight, fresh = None, False
+
+        def ask(self, job):
+            jobs.append(job)
+            self.inflight = (game_found, Reading(5.0, None, None, None, None, stats="s"))
+            self.fresh = True
+
+        def take(self):
+            if self.fresh:
+                self.fresh = False
+                return None
+            answer, self.inflight = self.inflight, None
+            return answer
+
+    tick.reader = Lagging()
+    for i in range(3):
+        tick.run(float(i))
+    assert "stats" in jobs[0][3]  # its search turn (turn 0)
+    assert "stats" in jobs[1][3]  # found in the answer taken first thing on tick 1
+    assert "stats" in jobs[2][3]
 
 
 def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypatch):
@@ -1540,3 +1611,28 @@ def test_build_menu_lists_and_picks(qt_box):
     assert [a.text() for a in menu.actions()] == ["LUK", "Sindit"]
     menu.actions()[1].trigger()
     assert tool.picked == ["Sindit"]
+
+
+def test_make_reader_uses_a_helper_on_the_mac():
+    assert isinstance(app.make_reader("darwin"), reader.ProcessReader)
+    assert isinstance(app.make_reader("win32"), reader.InlineReader)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the helper process is the Mac's")
+def test_self_check_fails_when_the_helper_never_answers(monkeypatch, no_cache):
+    class Silent:
+        def __init__(self, work=None):
+            pass
+
+        def ask(self, job):
+            pass
+
+        def take(self):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app, "ProcessReader", Silent)
+    monkeypatch.setattr(app, "HELPER_CHECK_S", 0.2)
+    assert app.self_check() == 1

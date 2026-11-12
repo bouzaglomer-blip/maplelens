@@ -2,6 +2,10 @@
 
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
+from functools import lru_cache
+
+from maplelens.readers.map_name import snap_title
+from maplelens.readers.quest_tracker import TrackerLine, TrackerQuest
 
 from .data import Item, Mob, Npc, Quest, QuestData
 
@@ -13,6 +17,11 @@ NO_SPAWN = "Where it spawns: unknown"
 NOT_LISTED = "Not in the map list yet"
 
 TIMES = chr(0xD7)  # the multiplication sign
+
+UNKNOWN = "unknown"  # the name is no single quest in the data
+SEVERAL = "several"  # several quests fit the name and their targets can't settle it
+
+Part = tuple[str, int]  # ("mob", monster id) or ("item", item id)
 
 Hops = Callable[[str], int | None]  # map changes from the player; None: unknown or no route
 
@@ -125,19 +134,68 @@ def _loose_item(data: QuestData, item: Item, n: int, hops: Hops, closest: bool) 
     return _info(title, NO_ITEM)
 
 
-def targets(
-    data: QuestData, quest: Quest, *, giver: bool, hops: Hops, closest: bool = False
+def _part(data: QuestData, quest: Quest, line: TrackerLine) -> Part | None:
+    """The target of `quest` that `line` names (by name and need), if any."""
+    named: dict[str, Part] = {}
+    for i, n in quest.mobs:
+        if n == line.need:
+            named[data.mobs[i].name] = ("mob", i)
+    for i, n in quest.items:
+        if n == line.need and i not in quest.start_items:
+            named[data.items[i].name] = ("item", i)
+    return named.get(snap_title(line.text, named.keys()))
+
+
+@lru_cache(maxsize=256)
+def _snap_quest(name: str, names: frozenset[str]) -> str:
+    """snap_title, cached: an unknown (event) name scans every title, every tick."""
+    return snap_title(name, names)
+
+
+def block_candidates(data: QuestData, block: TrackerQuest) -> list[Quest]:
+    """The quests a block's name can be: by prefix when cut, else by the snapped name."""
+    name = block.name
+    if name.endswith((".", "…")):
+        head = name.rstrip(".…")
+        return [q for q in data.quests.values() if q.name.startswith(head)]
+    name = _snap_quest(name, frozenset(q.name for q in data.quests.values()))
+    return [q for q in data.quests.values() if q.name == name]
+
+
+def match_block(data: QuestData, block: TrackerQuest) -> int | str:
+    found = block_candidates(data, block)
+    if not found:
+        return UNKNOWN
+    if len(found) > 1:
+        found = [q for q in found if all(_part(data, q, ln) for ln in block.lines)]
+    return found[0].id if len(found) == 1 else SEVERAL
+
+
+def done_parts(data: QuestData, quest: Quest, lines: tuple[TrackerLine, ...]) -> frozenset[Part]:
+    parts = ((_part(data, quest, ln), ln) for ln in lines)
+    return frozenset(p for p, ln in parts if p and ln.have >= ln.need)
+
+
+def targets(  # noqa: PLR0913 - the quest, its map ranking and its progress
+    data: QuestData,
+    quest: Quest,
+    *,
+    giver: bool,
+    hops: Hops,
+    done: frozenset[Part] = frozenset(),
+    closest: bool = False,
 ) -> list[Target]:
     on_mob: dict[int, list[str]] = {i: [] for i, _ in quest.mobs}
     loose: list[Target] = []
     for item_id, n in quest.items:
-        if item_id in quest.start_items:
+        if item_id in quest.start_items or ("item", item_id) in done:
             continue
         item = data.items[item_id]
         mine = [i for i in item.drops if i in on_mob]
         if mine:
             m = _top_dropper(data, mine, hops, closest)
-            on_mob[m.id].append(f"{item.name.removeprefix(m.name + ' ')} {TIMES}{n}")
+            name = item.name if ("mob", m.id) in done else item.name.removeprefix(m.name + " ")
+            on_mob[m.id].append(f"{name} {TIMES}{n}")
         else:
             loose.append(_loose_item(data, item, n, hops, closest))
 
@@ -147,7 +205,10 @@ def targets(
         rows.append(_npc_row(data, quest.giver, "" if same else "gives the quest", hops))
     for mob_id, count in quest.mobs:
         mob = data.mobs[mob_id]
-        title = " · ".join([f"{mob.name} {TIMES}{count}", *on_mob[mob_id]])
+        gone = ("mob", mob_id) in done
+        if gone and not on_mob[mob_id]:
+            continue
+        title = " · ".join(([] if gone else [f"{mob.name} {TIMES}{count}"]) + on_mob[mob_id])
         b = _mob_map(data, mob, hops, closest)
         if b:
             rows.append(Target(title, data.map_names[b], b, None, None, False))

@@ -31,6 +31,7 @@ class Rate:
     pct_per_min: float
     minutes_to_level: float | None
     paused: bool = False  # no gain for longer than the idle cutoff: the numbers are the last ones
+    early: bool = False  # under a minute of active time: a rough first estimate
 
 
 @dataclass
@@ -214,16 +215,17 @@ class ExpMeter:
         return replace(seg, exp=exp, pct=pct, active_s=active)
 
     def rate(self, now: float) -> Rate | None:
-        """EXP per minute of active time over the last `window_s` of it; None under a minute."""
+        """EXP per minute of active time over the last `window_s` of it; None before the
+        first timed gain (the second kill), `early` under a minute."""
         exp_sum, pct_sum, active = _totals(self._window, self.idle_cutoff_s)
-        if active < 60:
+        if active <= 0:
             return None
         minutes = active / 60
         pct_per_min = pct_sum / minutes
         exp = self._exp.value
         left = (100 - exp.pct) / pct_per_min if exp and pct_per_min > 0 else None
         paused = self._event_t is None or now - self._event_t > self.idle_cutoff_s
-        return Rate(exp_sum / minutes, pct_per_min, left, paused)
+        return Rate(exp_sum / minutes, pct_per_min, left, paused, early=active < 60)
 
     def session(self) -> SessionRate | None:
         """Active EXP per minute since the session began: the sum of its segments' totals;

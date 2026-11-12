@@ -19,9 +19,16 @@ def test_box_lines_values():
 
 def test_box_lines_no_rate():
     assert box_lines(None, None, False) == [
-        [("Last 5 min", ["— /h", "—% /h"]), ("Session", ["— /h", ""])],
+        [("Measuring", ["— /h", "—% /h"]), ("Session", ["— /h", ""])],
         [("Level up in", ["—"])],
     ]
+
+
+def test_box_lines_early_rate():
+    assert box_lines(Rate(12480, 0.42, 137, early=True), None, False)[0][0] == (
+        "Measuring",
+        ["748,800 /h", "25.20% /h"],
+    )
 
 
 def test_box_lines_session_under_a_minute():
@@ -29,6 +36,7 @@ def test_box_lines_session_under_a_minute():
 
 
 def test_box_lines_left_label_states():
+    assert box_lines(Rate(100, 0.1, 5), None, False)[0][0][0] == "Last 5 min"
     assert box_lines(Rate(100, 0.1, 5, paused=True), None, False)[0][0][0] == "Paused"
     assert box_lines(Rate(100, 0.1, 5), None, False, unread=True)[0][0][0] == "Can't read bar"
 
