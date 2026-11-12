@@ -31,7 +31,9 @@ def box_lines(
     label = "Can't read bar" if unread else "Paused" if rate and rate.paused else "Last 5 min"
     s_label, s_exp = "Session", "— /h"
     if session:
-        s_label += f" · {format_duration(session.active_s / 60)}"
+        hours = session.active_s / 3600
+        # from 10 h, hours only: "Session · 12h 10m" fills half the box to the pixel
+        s_label += f" · {int(hours)}h" if hours >= 10 else f" · {format_duration(hours * 60)}"
         if session.exp_per_min is not None:
             s_exp = f"{session.exp_per_min * 60:,.0f} /h"
     # the session has no %/h: a percent doesn't add up across levels

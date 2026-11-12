@@ -74,3 +74,9 @@ def test_best_lines_empty_and_rows():
     head, rows = best_lines("Rogue", 28, [("Hidden Street / Pig Beach", 700.0, 0.03)])
     assert head == "Best for Rogue, Lv 28 (±3)"
     assert rows == [("Pig Beach", "42,000 EXP/h", "1.80% /h")]
+
+
+def test_box_lines_long_session_drops_minutes():
+    # "Session · 12h 10m" fills the column to the pixel at 214 px: from 10 h, hours only
+    assert box_lines(None, SessionRate(100, 9.99 * 3600), False)[0][1][0] == "Session · 9h 59m"
+    assert box_lines(None, SessionRate(100, 12.2 * 3600), False)[0][1][0] == "Session · 12h"

@@ -397,3 +397,19 @@ def test_session_skips_town_quest_rewards():
     before = m.session()
     feed(m, 160, 9000, 40.0, map_name=TOWN)
     assert m.session() == before
+
+
+def test_session_is_the_sum_of_its_segments_at_different_paces():
+    # a fast map then a slow one, 10+ gains each so the break filter runs: the slow map's
+    # kills must not look like breaks next to the fast map's
+    m = ExpMeter()
+    pct = 10.0
+    for i in range(200):  # a kill every 3 s: over 90% of the gains
+        feed(m, i * 3, int(pct * 100), pct)
+        pct += 0.1
+    for i in range(1, 21):  # a kill every 40 s on another map
+        feed(m, 597 + i * 40, int(pct * 100), pct, map_name="Other Map")
+        pct += 0.1
+    segs = [*m.pop_closed(), m.open_segment()]
+    assert m.session().active_s == pytest.approx(sum(s.active_s for s in segs))
+    assert segs[-1].active_s > 600  # the slow map counts

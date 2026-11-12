@@ -109,7 +109,10 @@ class ExpMeter:
         self._seg: Segment | None = None
         self._closed: list[Segment] = []
         self._last_event_t: float | None = None  # the segment's clock: its start or last gain
-        self._session: list[tuple[float, int, float, float]] = []  # every segment's gains
+        # the session's gains, one list per segment: each learns its own pace for the break
+        # filter, as History's segments do, so a slow map's kills aren't breaks next to a fast one's
+        self._session: list[list[tuple[float, int, float, float]]] = []
+        self._session_seg: Segment | None = None  # whose gains the last list holds
 
     def feed(self, r: Reading | None) -> None:
         t = r.t if r else None
@@ -191,9 +194,12 @@ class ExpMeter:
                 last = self._last_event_t
                 if last is not None and (gap := t - last) <= self.idle_cutoff_s:
                     seg.gains.append((t, *gain, gap))
-                    if self._session and t - self._session[-1][0] > SESSION_BREAK_S:
-                        self._session.clear()
-                    self._session.append(seg.gains[-1])
+                    if self._session and t - self._session[-1][-1][0] > SESSION_BREAK_S:
+                        self._session = []
+                    if not self._session or self._session_seg is not seg:
+                        self._session.append([])
+                        self._session_seg = seg
+                    self._session[-1].append(seg.gains[-1])
                 self._last_event_t = t
             seg.end = t
 
@@ -220,13 +226,14 @@ class ExpMeter:
         return Rate(exp_sum / minutes, pct_per_min, left, paused)
 
     def session(self) -> SessionRate | None:
-        """Active EXP per minute over every segment's gains since the session began; None
-        before its first counted gain."""
+        """Active EXP per minute since the session began: the sum of its segments' totals;
+        None before its first counted gain."""
         if not self._session:
             return None
-        # ponytail: _totals re-sorts the whole session each tick; keep running totals if long
-        # sessions show up in a profile
-        exp, _, active = _totals(self._session, self.idle_cutoff_s)
+        # ponytail: re-sums every segment's gains each tick; cache closed segments' totals if
+        # long sessions show up in a profile
+        totals = [_totals(gains, self.idle_cutoff_s) for gains in self._session]
+        exp, active = sum(t[0] for t in totals), sum(t[2] for t in totals)
         return SessionRate(exp / active * 60 if active >= 60 else None, active)
 
     @property

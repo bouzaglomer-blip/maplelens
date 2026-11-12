@@ -70,10 +70,10 @@ meter already takes.
   timed from the segment clock, under the idle cutoff, not while map/job/level is
   unreadable, not in monster-free towns (quest rewards). The session is all such gains
   since it began, across segments.
-- **Totals:** the same `_totals(gains, idle_cutoff_s)` the segments use, run once over the
-  session's whole list of gains (my call: not a sum of per-segment totals), so the break
-  filter (buffs, walking, looting) applies too, with its pace learned from the whole
-  session. EXP/h = exp / active_s × 3600.
+- **Totals:** the same `_totals(gains, idle_cutoff_s)` the segments use, run per segment
+  and summed, so the break filter (buffs, walking, looting) applies too, with each map's
+  own pace. (Run once over the pooled session, a fast map's pace made a slower map's kills
+  look like breaks and dropped that map; found in review.) EXP/h = exp / active_s × 3600.
 - **Under a minute of active time:** "— /h", as the live rate does.
 - **The 30-minute split:** when a counted gain arrives more than 30 minutes after the
   previous counted gain, the session is cleared first and that gain starts the new one. A constant in
