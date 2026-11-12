@@ -46,6 +46,15 @@ slowdown, which it did.
 - With no rate yet, the EXP box shows dashes for the first minute of play (`Meter.rate` needs 60 s of active time). The owner noticed: "in the first 20 seconds it didn't give exp numbers without any warning". The behaviour isn't new.
 - Spawn re-imports the main script: a script that wraps `app.main()` needs its own `__name__` guard (the tracer did not, which ran a second app in the child).
 
+### Task 3, the frozen app (25c6b09, `--freeze-only`, run from `~/MapleLens-test`)
+
+- `--self-check` exits 0. Once Screen Recording was granted to the build, its helper read the game: the EXP box filled in, so the app's permission covers its child.
+- While it ran there were three processes: the app, the helper (`--multiprocessing-fork`) and multiprocessing's resource tracker. There was no Dock icon and one menu-bar icon.
+- Quitting from the menu ended all three.
+- A locally built app is signed ad hoc, so macOS asks for Screen Recording again. The installed copy shares its bundle id, which is why the owner had to reset it (`tccutil reset ScreenCapture io.github.or-keren.maplelens`). `open` sometimes launched the installed copy instead of the build.
+
+Not redone: part 2's capture tasks. The child's work is 131 ms a tick at full speed, so they would save about 40 ms of it and none of the UI thread's time.
+
 The prototype (scratchpad `helper_child.py` and `live_helper.py`) was unchanged
 MapleLens, with grab, trim and `read_all` sent to a plain child process. Opting the app
 out of App Nap changed nothing (95 ms `normalize`), so the slowdown follows the app,
