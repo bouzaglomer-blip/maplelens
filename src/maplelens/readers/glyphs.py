@@ -39,6 +39,7 @@ _images: dict[str, np.ndarray] = {}
 _fonts: dict[str, Font] = {}
 _anchors: dict[str, list[str]] = {}
 _last_hit: dict[str, tuple[int, tuple[int, int]]] = {}  # name -> (variant, spot)
+_scaled_reads: dict[tuple, str | None] = {}  # read_scaled's inputs -> its result
 
 
 def clear_cache() -> None:
@@ -46,6 +47,7 @@ def clear_cache() -> None:
     _fonts.clear()
     _anchors.clear()
     _last_hit.clear()
+    _scaled_reads.clear()
     _scaled_font.cache_clear()
 
 
@@ -227,7 +229,19 @@ def read_scaled(
     text = native[int(y * s) : int((y + h) * s), x0:x1].min(axis=2)
     # 2 px above and below, so a glyph can slide onto its template
     strip = native[max(0, int((y - 2) * s)) : int((y + h + 2) * s), x0:x1].min(axis=2)
-    strip = strip.astype(np.float32)
+    key = (font, round(s, 3), space_px, strip.shape, strip.tobytes())
+    if key in _scaled_reads:
+        return _scaled_reads[key]
+    out = _read_scaled(strip.astype(np.float32), text, s, font, space_px)
+    if len(_scaled_reads) >= 64:
+        _scaled_reads.clear()
+    _scaled_reads[key] = out
+    return out
+
+
+def _read_scaled(
+    strip: np.ndarray, text: np.ndarray, s: float, font: str, space_px: int
+) -> str | None:
     cols = np.flatnonzero((text >= SCALED_INK).any(axis=0))
     if cols.size == 0:
         return None

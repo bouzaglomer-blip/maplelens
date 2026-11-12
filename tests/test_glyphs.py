@@ -278,3 +278,22 @@ def test_find_anchor_accepts_a_peak_on_the_frames_edge(monkeypatch):
     calls = _recorded(monkeypatch)
     assert glyphs.find_anchor(band[:, 2:], "exp_label") == (0, 1)
     assert _is_near(calls)
+
+
+def test_read_scaled_reads_the_same_digits_once(monkeypatch):
+    from maplelens.readers.exp import read_exp
+
+    glyphs.clear_cache()
+    native = cv2.imread(
+        str(Path(__file__).parent / "fixtures/screens/fullscreen_exp_a_3024x1700_100.png"),
+        cv2.IMREAD_COLOR,
+    )
+    frame = cv2.resize(native, None, fx=768 / 1700, fy=768 / 1700, interpolation=cv2.INTER_AREA)
+    first = read_exp(frame, native)
+    assert first is not None
+    calls = []
+    real = cv2.matchTemplate
+    monkeypatch.setattr(cv2, "matchTemplate", lambda *a, **k: calls.append(1) or real(*a, **k))
+    assert read_exp(frame, native) == first
+    assert len(calls) <= 3
+    glyphs.clear_cache()
