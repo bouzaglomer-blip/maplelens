@@ -89,8 +89,9 @@ class ProcessReader:
 
     def _kill(self) -> None:
         if self._proc is not None:
-            self._proc.kill()
-            self._proc.join()
+            if self._proc.is_alive():  # a Process that never started has nothing to kill
+                self._proc.kill()
+                self._proc.join()
             self._conn.close()
         self._proc = self._conn = self._held = self._sent_at = None
 
@@ -103,8 +104,15 @@ class ProcessReader:
         if self._proc is None:
             ctx = multiprocessing.get_context("spawn")
             self._conn, child = ctx.Pipe()
-            self._proc = ctx.Process(target=serve, args=(child, self._work), daemon=True)
-            self._proc.start()
+            try:
+                proc = ctx.Process(target=serve, args=(child, self._work), daemon=True)
+                proc.start()
+            except BaseException:  # leave no child, so the next ask tries again
+                self._conn.close()
+                child.close()
+                self._conn = None
+                raise
+            self._proc = proc
             child.close()  # so the child's recv ends when this side closes
         if self._sent_at is None:
             try:

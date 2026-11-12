@@ -3,6 +3,7 @@ import time
 import types
 
 import numpy as np
+import pytest
 
 from maplelens import reader
 from maplelens.readers import Reading
@@ -207,3 +208,26 @@ def test_serve_adds_the_helpers_traceback_to_the_error():
 
 def test_serve_returns_quietly_when_the_parent_is_gone():
     reader.serve(_OneJob(fail=BrokenPipeError()), repr)
+
+
+def test_process_reader_retries_after_the_child_fails_to_start(monkeypatch):
+    import multiprocessing
+
+    cls = multiprocessing.get_context("spawn").Process
+    real, calls = cls.start, []
+
+    def start(self):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("bootstrapping")
+        real(self)
+
+    monkeypatch.setattr(cls, "start", start)
+    r = reader.ProcessReader(work=repr)
+    try:
+        with pytest.raises(RuntimeError, match="bootstrapping"):
+            r.ask(JOB)
+        r.ask(JOB)
+        assert _wait(r) == repr(JOB)
+    finally:
+        r.close()
