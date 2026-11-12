@@ -172,3 +172,53 @@ def test_templates_load_from_non_ascii_folder(tmp_path, monkeypatch):
 def test_missing_template_raises(templates):
     with pytest.raises(FileNotFoundError):
         glyphs.load("nope")
+
+
+def _band():
+    img = cv2.imread(
+        str(Path(__file__).parent / "fixtures/screens/fullscreen_exp_a_3024x1700_100.png")
+    )
+    return cv2.resize(img, None, fx=768 / 1700, fy=768 / 1700, interpolation=cv2.INTER_AREA)
+
+
+def _cold(frame):
+    glyphs.clear_cache()
+    return glyphs.find_anchor(frame, "exp_label")
+
+
+def test_find_anchor_looks_near_its_last_spot(monkeypatch):
+    band = _band()
+    glyphs.clear_cache()
+    first = glyphs.find_anchor(band, "exp_label")
+    assert first is not None
+    calls = []
+    real = cv2.matchTemplate
+    monkeypatch.setattr(
+        glyphs.cv2,
+        "matchTemplate",
+        lambda img, tpl, m: calls.append(img.shape[:2]) or real(img, tpl, m),
+    )
+    assert glyphs.find_anchor(band, "exp_label") == first
+    assert calls
+    for name in glyphs._anchor_names("exp_label"):
+        th, tw = glyphs.load(name).shape[:2]
+        assert all(h <= th + 2 * glyphs.NEAR and w <= tw + 2 * glyphs.NEAR for h, w in calls)
+
+
+@pytest.mark.parametrize("dx", [1, 5])
+def test_find_anchor_follows_a_moved_anchor(dx):
+    band = _band()
+    moved = np.pad(band, ((0, 0), (dx, 0), (0, 0)), mode="edge")[:, :-dx]
+    glyphs.clear_cache()
+    glyphs.find_anchor(band, "exp_label")
+    warm = glyphs.find_anchor(moved, "exp_label")
+    assert warm == _cold(moved)
+
+
+def test_find_anchor_searches_again_when_the_anchor_is_gone():
+    band = _band()
+    glyphs.clear_cache()
+    cold = glyphs.find_anchor(band, "exp_label")
+    assert glyphs.find_anchor(np.zeros_like(band), "exp_label") is None
+    assert "exp_label" not in glyphs._last_hit
+    assert glyphs.find_anchor(band, "exp_label") == cold

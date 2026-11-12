@@ -10,7 +10,7 @@ import numpy as np
 TEMPLATES = Path(__file__).parent / "templates"
 BASE_H = 768
 # A cached anchor spot is trusted only on a pixel-exact match.
-EXACT = 0.9999
+NEAR = 2  # find_anchor looks this many normalized px around its last spot first
 # Bottom rows of a normalized frame that hold the status bar (EXP, level, job):
 # anchors there are searched in this band only.
 STATUS_BAND = 60
@@ -102,25 +102,49 @@ def _anchor_names(name: str) -> list[str]:
     return _anchors[name]
 
 
+def _best(img: np.ndarray, tpls: list[np.ndarray], threshold: float):
+    """(variant, top-left) of the best match in `img` scoring >= threshold, else None."""
+    best, hit = threshold, None
+    for i, tpl in enumerate(tpls):
+        if img.shape[0] < tpl.shape[0] or img.shape[1] < tpl.shape[1]:
+            continue
+        _, score, _, loc = cv2.minMaxLoc(cv2.matchTemplate(img, tpl, cv2.TM_CCOEFF_NORMED))
+        if score >= best:
+            best, hit = score, (i, loc)
+    return hit
+
+
+def _near(frame: np.ndarray, tpls: list[np.ndarray], last, threshold: float):
+    """Best match within NEAR px of `last` = (variant, spot), or None.
+
+    A peak on an edge of that box may continue outside it, so it doesn't count (edges at
+    the frame's own edge excepted: nothing continues past those).
+    """
+    i, (x, y) = last
+    th, tw = tpls[i].shape[:2]
+    fh, fw = frame.shape[:2]
+    x0, y0 = max(x - NEAR, 0), max(y - NEAR, 0)
+    x1, y1 = min(x + tw + NEAR, fw), min(y + th + NEAR, fh)
+    hit = _best(frame[y0:y1, x0:x1], tpls, threshold)
+    if hit is None:
+        return None
+    j, (lx, ly) = hit
+    h, w = tpls[j].shape[:2]
+    on_edge = (
+        (lx == 0 and x0 > 0)
+        or (ly == 0 and y0 > 0)
+        or (lx + w == x1 - x0 and x1 < fw)
+        or (ly + h == y1 - y0 and y1 < fh)
+    )
+    return None if on_edge else (j, (x0 + lx, y0 + ly))
+
+
 def find_anchor(frame: np.ndarray, name: str, threshold: float = 0.9) -> tuple[int, int] | None:
     """Top-left of the best match of anchor `name` (any variant) scoring >= threshold, else None."""
     tpls = [load(n) for n in _anchor_names(name)]
-    # Fast path: a pixel-exact match at the last spot cannot be beaten (ties aside).
-    if name in _last_hit:
-        i, (x, y) = _last_hit[name]
-        th, tw = tpls[i].shape[:2]
-        crop = frame[y : y + th, x : x + tw]
-        same = crop.shape == tpls[i].shape
-        if same and cv2.matchTemplate(crop, tpls[i], cv2.TM_CCOEFF_NORMED)[0, 0] >= EXACT:
-            return x, y
-    best, hit = threshold, None
-    for i, tpl in enumerate(tpls):
-        if frame.shape[0] < tpl.shape[0] or frame.shape[1] < tpl.shape[1]:
-            continue
-        _, score, _, loc = cv2.minMaxLoc(cv2.matchTemplate(frame, tpl, cv2.TM_CCOEFF_NORMED))
-        if score >= best:
-            best, hit = score, (i, loc)
-    if hit is None:
+    hit = name in _last_hit and _near(frame, tpls, _last_hit[name], threshold)
+    hit = hit or _best(frame, tpls, threshold)
+    if not hit:
         _last_hit.pop(name, None)
         return None
     _last_hit[name] = hit
