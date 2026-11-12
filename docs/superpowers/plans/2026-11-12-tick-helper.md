@@ -30,6 +30,22 @@ slowdown, which it did.
 | grab + `picture_box` | 240 ms | 75 ms |
 | readings per second | 1.22 | 2 (one per 500 ms tick; EXP read on 112 of 117 ticks) |
 
+### Task 3, from source (2026-11-12, 06e78de, fullscreen, 238 s, the owner playing)
+
+| median | part 1 | part 3 |
+|---|---|---|
+| tick (UI thread) | 701 ms | 40 ms |
+| UI lag (50 ms probe, worst per tick) | 682 ms | 101 ms (p90 130) |
+| the child's `read_game` | — | 131 ms (`normalize` 9.2 ms: full speed; max 903) |
+| readings per second | 1.22 | 1.98 |
+| EXP read | 340 / 342 | 470 / 472 |
+
+- The first 4 ticks (about 2 s) had no answer while the child started. Every tick after that had one, with no errors.
+- The stat window was read on 24 ticks, the skill window on 46 and the tracker on 455. The quest window was never read.
+- Quitting left no MapleLens or helper process.
+- With no rate yet, the EXP box shows dashes for the first minute of play (`Meter.rate` needs 60 s of active time). The owner noticed: "in the first 20 seconds it didn't give exp numbers without any warning". The behaviour isn't new.
+- Spawn re-imports the main script: a script that wraps `app.main()` needs its own `__name__` guard (the tracer did not, which ran a second app in the child).
+
 The prototype (scratchpad `helper_child.py` and `live_helper.py`) was unchanged
 MapleLens, with grab, trim and `read_all` sent to a plain child process. Opting the app
 out of App Nap changed nothing (95 ms `normalize`), so the slowdown follows the app,
