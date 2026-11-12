@@ -9,7 +9,6 @@ import numpy as np
 
 TEMPLATES = Path(__file__).parent / "templates"
 BASE_H = 768
-# A cached anchor spot is trusted only on a pixel-exact match.
 NEAR = 2  # find_anchor looks this many normalized px around its last spot first
 # Bottom rows of a normalized frame that hold the status bar (EXP, level, job):
 # anchors there are searched in this band only.

@@ -91,6 +91,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("frames", nargs="+")
     ap.add_argument("--passes", type=int, default=3)
     args = ap.parse_args(argv)
+    if args.passes < 1:
+        ap.error("--passes must be at least 1")
     frames = [_load(p) for p in args.frames]
 
     totals: dict[str, list[float]] = {}  # label -> [seconds, calls]

@@ -212,6 +212,7 @@ def test_find_anchor_follows_a_moved_anchor(dx):
     glyphs.clear_cache()
     glyphs.find_anchor(band, "exp_label")
     warm = glyphs.find_anchor(moved, "exp_label")
+    assert warm is not None
     assert warm == _cold(moved)
 
 
