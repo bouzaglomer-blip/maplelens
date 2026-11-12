@@ -12,7 +12,7 @@ import time
 import traceback
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
 
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import maplelens
 from maplelens import capture, update, update_mac
 from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
-from maplelens.readers import glyphs, ocr, quest_window, read_all
+from maplelens.readers import due, found, glyphs, ocr, quest_window, read_all
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.class_helper import data as class_data
 from maplelens.tools.class_helper.ui import MARKS, ClassHelperTool
@@ -745,6 +745,8 @@ class Tick:
     seen: set[str]  # error types/messages already logged
     shown: Shown
     hwnd: int | None = None
+    turn: int = 0  # ticks that tried to read a frame: whose turn it is (readers.due)
+    seen_at: dict[str, int] = field(default_factory=dict)  # part -> turn it was last on screen
 
     def run(self, now: float) -> None:
         poll_updates(self.updates, now, self.seen)  # before the game lookup: shows with no game
@@ -776,10 +778,13 @@ class Tick:
             # Fullscreen on a screen of another shape: the game is its picture, bars left out
             x, y, w, h = capture.picture_box(frame)
             rect = (rect[0] + x, rect[1] + y, w, h)
-            reading = read_all(frame[y : y + h, x : x + w], now)
+            reading = read_all(frame[y : y + h, x : x + w], now, due(self.turn, self.seen_at))
+            for p in found(reading):
+                self.seen_at[p] = self.turn
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             report_once(e, self.seen)
             reading = None
+        self.turn += 1  # bad ticks too: the turns keep going
         self.layer.follow(rect)
         if self.shown.on:  # hidden by the player: the tools still run, nothing shows
             self.layer.show()

@@ -2,7 +2,8 @@
 
 Usage: profile_reads.py FRAME... [--passes N]
 Each frame is cropped with `capture.picture_box`, then all frames are read in order N times
-(default 3) after one warm-up pass, the way a tick would. Prints the median and max of one
+(default 3) after one warm-up pass, the way a tick would: a turn counter and `due` pick what
+each call reads, `found` keeps what was on screen due. Prints the median and max of one
 `read_all` call, then ms per tick and calls per tick for each reader (R) and each inner cost
 (normalize, find_anchor, window.align, read_scaled). Inner costs sit inside the readers' time.
 It never captures: it only reads the PNG files it is given.
@@ -11,6 +12,7 @@ a worse case than Game Mode (15x vs 8.7x measured).
 """
 
 import argparse
+import itertools
 import statistics
 import time
 from pathlib import Path
@@ -19,7 +21,9 @@ import cv2
 
 from maplelens import capture
 from maplelens.readers import (
+    due,
     exp,
+    found,
     glyphs,
     job,
     level,
@@ -76,6 +80,12 @@ def _wrap(totals, originals, mod, name, label):
     setattr(mod, name, timed)
 
 
+def _tick(frame, turn: int, seen_at: dict[str, int]) -> None:
+    """Read `frame` as app.Tick.run does on that turn."""
+    for p in found(read_all(frame, 0.0, due(turn, seen_at))):
+        seen_at[p] = turn
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("frames", nargs="+")
@@ -95,16 +105,18 @@ def main(argv: list[str]) -> int:
             name,
             name if mod is glyphs else f"{mod.__name__.rsplit('.', 1)[-1]}.{name}",
         )
+    seen_at: dict[str, int] = {}
+    turns = itertools.count()
     try:
         for f in frames:  # warm-up: fills the caches a running tick would have
-            read_all(f, 0.0)
+            _tick(f, next(turns), seen_at)
         for v in totals.values():
             v[:] = [0.0, 0]
         times = []
         for _ in range(args.passes):
             for f in frames:
                 t0 = time.perf_counter()
-                read_all(f, 0.0)
+                _tick(f, next(turns), seen_at)
                 times.append((time.perf_counter() - t0) * 1000)
     finally:
         for mod, name, fn in originals:

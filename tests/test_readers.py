@@ -6,8 +6,11 @@ import numpy as np
 import pytest
 
 from maplelens.readers import (
+    OPTIONAL,
     ExpValue,
     Reading,
+    due,
+    found,
     glyphs,
     job,
     map_name,
@@ -532,6 +535,82 @@ def test_read_all_normalizes_once(monkeypatch):
     # from it, EXP and level read it when no exact template fits.
     small, native = (768, 1365, 3), (1440, 2560, 3)
     assert seen == [[small, native]] * 4
+
+
+def test_due_takes_turns():
+    assert [due(t, {}) for t in range(5)] == [{p} for p in OPTIONAL]
+    assert due(5, {}) == {"minimap"}
+
+
+def test_due_keeps_a_part_seen_within_grace():
+    for t in range(10, 15):
+        assert "tracker" in due(t, {"tracker": 10}), t
+    assert "tracker" not in due(15, {"tracker": 10})  # 15 % 5 is "minimap"
+
+
+def test_found_names_what_is_on_screen():
+    r = Reading(1.0, None, None, None, "A / B", stats="unreadable")
+    assert found(r) == {"minimap", "stats"}
+    assert found(Reading(1.0, None, None, None, None)) == set()
+
+
+def test_read_all_reads_only_what_is_due(monkeypatch):
+    from maplelens.readers import (
+        exp,
+        level,
+        minimap_pos,
+        quest_tracker,
+        quest_window,
+        stat_window,
+    )
+
+    called = []
+    for mod, fn in [
+        (exp, "read_exp"),
+        (level, "read_level"),
+        (job, "read_job"),
+        (map_name, "read_map_name"),
+        (minimap_pos, "read_view"),
+        (stat_window, "read_stat_window"),
+        (skill_window, "read_skill_window"),
+        (quest_window, "read_quest_window"),
+        (quest_tracker, "read_quest_tracker"),
+    ]:
+        monkeypatch.setattr(mod, fn, lambda *a, fn=fn: called.append(fn) or fn)
+    got = read_all(np.zeros((768, 1366, 3), np.uint8), 1.0, {"stats"})
+    assert called == ["read_exp", "read_level", "read_job", "read_stat_window"]
+    assert got == Reading(1.0, "read_exp", "read_level", "read_job", None, stats="read_stat_window")
+
+
+def _in_frame(name):
+    """A 1366x768 fixture pasted into a black frame where the game shows it."""
+    frame = np.zeros((768, 1366, 3), np.uint8)
+    fixture = screen(name)
+    h, w = fixture.shape[:2]
+    if name.startswith("tracker_"):
+        frame[:h, -w:] = fixture
+    elif name.startswith(("pos_", "minimap_")):
+        frame[:h, :w] = fixture
+    elif name.startswith("exp_"):
+        frame[-h:, :w] = fixture
+    else:
+        frame[100 : 100 + h, 300 : 300 + w] = fixture
+    return frame
+
+
+@needs_ocr
+def test_read_all_warm_matches_cold():
+    names = sorted(
+        p.name
+        for p in SCREENS.glob("*_1366x768_100.png")
+        if p.name.startswith(("exp_", "stat_", "skill_", "quest_", "tracker_", "pos_", "minimap_"))
+    )
+    for name in names:  # each on the caches the previous ones left
+        frame = _in_frame(name)
+        warm = read_all(frame, 0)
+        glyphs.clear_cache()
+        window.clear_cache()
+        assert warm == read_all(frame, 0), name  # MinimapView leaves its pixels out of ==
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("pos_*.png")))
