@@ -5,7 +5,17 @@ import cv2
 import numpy as np
 import pytest
 
-from maplelens.readers import ExpValue, Reading, glyphs, job, map_name, ocr, read_all, skill_window
+from maplelens.readers import (
+    ExpValue,
+    Reading,
+    glyphs,
+    job,
+    map_name,
+    ocr,
+    read_all,
+    skill_window,
+    window,
+)
 from maplelens.readers.exp import EXP_DX, EXP_DY, EXP_H, EXP_INK_HI, EXP_INK_LO, EXP_W, read_exp
 from maplelens.readers.job import JOB_DX, JOB_DY, JOB_H, read_job
 from maplelens.readers.level import LV_DX, LV_DY, LV_H, LV_INK_HI, LV_INK_LO, LV_W, read_level
@@ -170,6 +180,7 @@ def screen(name: str):
 @pytest.fixture(autouse=True)
 def fresh_cache():
     glyphs.clear_cache()
+    window.clear_cache()
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in SCREENS.glob("exp_*.png")))
@@ -718,6 +729,88 @@ def test_stat_reads_at_every_offset(name, ks):
         for key, (x, y) in want.plus.items():
             assert abs(got.plus[key][0] - (x - k / scale)) <= 1, (k, key, got.plus)
             assert abs(got.plus[key][1] - (y - k / scale)) <= 1, (k, key, got.plus)
+
+
+ALIGNED = ["stat_a_2560x1440_100.png", "skill_a_1920x1080_100.png", "tracker_two_1920x1080_100.png"]
+
+
+def _align(name, native, scale, frame=None):
+    """window.align for the reader whose fixture is `name`, on `native` at `scale`."""
+    from maplelens.readers import quest_tracker, stat_window
+
+    if name.startswith("stat"):
+        m, size = stat_window, (stat_window.WIN_W, stat_window.WIN_H)
+    elif name.startswith("skill"):
+        m, size = skill_window, (skill_window.WIN_W, skill_window.WIN_H)
+    else:
+        m, size = quest_tracker, (quest_tracker.PANEL_W, quest_tracker.WIN_H)
+    frame = _scaled(native, scale) if frame is None else frame
+    return window.align(frame, native, scale, m.ANCHORS, size)
+
+
+def _same_hit(a, b):
+    assert a is not None and b is not None
+    assert a[1] == b[1]
+    assert np.array_equal(a[0], b[0])
+
+
+def _cold(name, native, scale):
+    window.clear_cache()
+    return _align(name, native, scale)
+
+
+@pytest.mark.parametrize("name", ALIGNED)
+def test_align_reuses_the_last_spot(name, monkeypatch):
+    frame, native, scale = _window_args(name)
+    first = _align(name, native, scale, frame)
+    calls = []
+    real = window.cv2.resize
+    monkeypatch.setattr(window.cv2, "resize", lambda *a, **k: calls.append(1) or real(*a, **k))
+    _same_hit(_align(name, native, scale, frame), first)
+    assert len(calls) <= 9 + 1
+
+
+@pytest.mark.parametrize("name", ALIGNED)
+def test_align_after_a_one_pixel_drag_matches_a_fresh_search(name):
+    _, native, scale = _window_args(name)
+    _align(name, native, scale)
+    right = np.concatenate([native[:, :1], native[:, :-1]], axis=1)
+    down = np.concatenate([right[:1], right[:-1]], axis=0)
+    for moved in (right, down):
+        warm = _align(name, moved, scale)
+        _same_hit(warm, _cold(name, moved, scale))
+
+
+def test_align_forgets_a_spot_from_another_scale():
+    _, native, scale = _window_args("stat_a_2560x1440_100.png")
+    _align("stat", native, scale)
+    _, native, scale = _window_args("stat_a_1920x1080_100.png")
+    warm = _align("stat", native, scale)
+    _same_hit(warm, _cold("stat", native, scale))
+
+
+def test_align_finds_the_other_anchor_when_the_last_one_is_covered():
+    from maplelens.readers import stat_window
+
+    _, native, scale = _window_args("stat_a_2560x1440_100.png")
+    _, (x, y) = _align("stat", native, scale)
+    key = tuple(n for n, _ in stat_window.ANCHORS)
+    won = window._last_spot[key][0]  # stat_bottom here, not the title
+    ax, ay = dict(stat_window.ANCHORS)[won]
+    x0, y0 = round((x + ax) * scale), round((y + ay) * scale)
+    t = glyphs.load(won)
+    covered = native.copy()
+    covered[y0 : y0 + round(t.shape[0] * scale), x0 : x0 + round(t.shape[1] * scale)] = 128
+    warm = _align("stat", covered, scale)
+    assert window._last_spot[key][0] != won
+    _same_hit(warm, _cold("stat", covered, scale))
+
+
+def test_align_forgets_a_closed_window():
+    _, native, scale = _window_args("stat_a_2560x1440_100.png")
+    assert _align("stat", native, scale) is not None
+    assert _align("stat", np.zeros_like(native), scale) is None
+    assert window._last_spot == {}
 
 
 def test_stat_ap_check(monkeypatch):
