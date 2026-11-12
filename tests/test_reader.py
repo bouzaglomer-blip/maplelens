@@ -1,5 +1,6 @@
 import contextlib
 import time
+import types
 
 import numpy as np
 
@@ -125,8 +126,6 @@ class _Conn:
         return True
 
     def recv(self):
-        if isinstance(self.value, BaseException) and not isinstance(self.value, Exception):
-            raise self.value
         if isinstance(self.value, _Boom):
             raise ValueError("won't unpickle")
         return self.value
@@ -155,6 +154,10 @@ def test_an_answer_that_wont_unpickle_leaves_the_reader_idle():
     with contextlib.suppress(ValueError):
         r._collect()
     assert r._sent_at is None
+    r._held = None
+    r._proc = types.SimpleNamespace(is_alive=lambda: True)
+    r.ask(JOB)
+    assert r._conn.sent == [JOB]
 
 
 def test_serve_reports_the_answer_that_wont_pickle():
@@ -177,3 +180,30 @@ def test_serve_reports_the_answer_that_wont_pickle():
     c = Conn()
     reader.serve(c, lambda job: "the answer")
     assert "the answer" in str(c.sent[0]) and "cannot pickle" not in str(c.sent[0])
+
+
+class _OneJob:
+    def __init__(self, fail=None):
+        self.sent, self.fail, self.jobs = [], fail, iter([(1,)])
+
+    def recv(self):
+        try:
+            return next(self.jobs)
+        except StopIteration:
+            raise EOFError from None
+
+    def send(self, x):
+        if self.fail:
+            raise self.fail
+        self.sent.append(x)
+
+
+def test_serve_adds_the_helpers_traceback_to_the_error():
+    c = _OneJob()
+    reader.serve(c, int)
+    notes = "".join(c.sent[0].__notes__)
+    assert "in the helper" in notes and "work(job)" in notes
+
+
+def test_serve_returns_quietly_when_the_parent_is_gone():
+    reader.serve(_OneJob(fail=BrokenPipeError()), repr)

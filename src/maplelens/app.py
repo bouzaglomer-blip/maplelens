@@ -776,6 +776,12 @@ class Tick:
     seen_at: dict[str, int] = field(default_factory=dict)  # part -> turn it was last on screen
     reader: InlineReader | ProcessReader = field(default_factory=InlineReader)
 
+    def remember(self, got, turn: int) -> None:
+        """Note which windows a reading answer saw, as of the turn of the job it answers."""
+        if got is not None and not isinstance(got, Exception):
+            for p in found(got[1]):
+                self.seen_at[p] = turn
+
     def run(self, now: float) -> None:
         poll_updates(self.updates, now, self.seen)  # before the game lookup: shows with no game
         if self.box.about_open:  # its updates line follows the check
@@ -802,8 +808,14 @@ class Tick:
             )
             return
         try:
-            self.reader.ask((self.hwnd, rect, now, due(self.turn, self.seen_at)))
+            # take first: what the last job saw makes this job's `due` (InlineReader has nothing
+            # to give yet; its answer comes from the second take)
             got = self.reader.take()
+            self.remember(got, self.turn - 1)
+            self.reader.ask((self.hwnd, rect, now, due(self.turn, self.seen_at)))
+            if got is None:
+                got = self.reader.take()
+                self.remember(got, self.turn)
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
             got = e
         self.turn += 1  # bad ticks too: the turns keep going
@@ -818,10 +830,6 @@ class Tick:
             reading = None
         else:
             rect, reading = got  # the picture without any fullscreen black bars
-            # with ProcessReader this answer is from an earlier tick's job: a part counts as
-            # seen up to a tick late (harmless for `due`)
-            for p in found(reading):
-                self.seen_at[p] = self.turn - 1
         self.layer.follow(rect)
         if self.shown.on:  # hidden by the player: the tools still run, nothing shows
             self.layer.show()

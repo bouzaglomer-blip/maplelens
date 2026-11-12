@@ -2,6 +2,7 @@
 
 import multiprocessing
 import time
+import traceback
 from collections.abc import Callable
 
 from maplelens import capture
@@ -51,9 +52,12 @@ def serve(conn, work: Callable) -> None:
         try:
             answer = work(job)
         except Exception as e:
+            e.add_note("in the helper:\n" + "".join(traceback.format_tb(e.__traceback__)))
             answer = e
         try:
             conn.send(answer)
+        except OSError:  # the parent is gone
+            return
         except Exception:  # an answer that won't pickle
             conn.send(RuntimeError(repr(answer)))
 

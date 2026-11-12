@@ -1350,6 +1350,34 @@ def test_a_tick_searches_a_closed_window_on_its_turn(hide, game_found, monkeypat
     assert [i for i, d in enumerate(dues) if "stats" in d] == [0, 4]
 
 
+def test_a_window_found_in_a_lagging_answer_is_due_on_the_next_job(hide, game_found):
+    box, layer, _, shown = hide
+    tick, _ = _tick(box, layer, shown)
+    jobs = []
+
+    class Lagging:  # like ProcessReader: an answer is there on the next tick, not this one
+        inflight, fresh = None, False
+
+        def ask(self, job):
+            jobs.append(job)
+            self.inflight = (game_found, Reading(5.0, None, None, None, None, stats="s"))
+            self.fresh = True
+
+        def take(self):
+            if self.fresh:
+                self.fresh = False
+                return None
+            answer, self.inflight = self.inflight, None
+            return answer
+
+    tick.reader = Lagging()
+    for i in range(3):
+        tick.run(float(i))
+    assert "stats" in jobs[0][3]  # its search turn (turn 0)
+    assert "stats" in jobs[1][3]  # found in the answer taken first thing on tick 1
+    assert "stats" in jobs[2][3]
+
+
 def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypatch):
     box, layer, _, shown = hide
     monkeypatch.setattr(app, "find_game", lambda settings, save: None)
