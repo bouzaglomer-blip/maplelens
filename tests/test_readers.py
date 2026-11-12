@@ -538,19 +538,19 @@ def test_read_all_normalizes_once(monkeypatch):
 
 
 def test_due_takes_turns():
-    assert [due(t, {}) for t in range(5)] == [{p} for p in OPTIONAL]
-    assert due(5, {}) == {"minimap"}
+    assert [due(t, {}) for t in range(4)] == [{p} for p in OPTIONAL]
+    assert due(4, {}) == {"stats"}
 
 
 def test_due_keeps_a_part_seen_within_grace():
-    for t in range(10, 15):
-        assert "tracker" in due(t, {"tracker": 10}), t
-    assert "tracker" not in due(15, {"tracker": 10})  # 15 % 5 is "minimap"
+    for t in range(8, 13):
+        assert "tracker" in due(t, {"tracker": 8}), t
+    assert "tracker" not in due(13, {"tracker": 8})  # 13 % 4 is "skills"
 
 
 def test_found_names_what_is_on_screen():
     r = Reading(1.0, None, None, None, "A / B", stats="unreadable")
-    assert found(r) == {"minimap", "stats"}
+    assert found(r) == {"stats"}  # the minimap is read always: not a part
     assert found(Reading(1.0, None, None, None, None)) == set()
 
 
@@ -564,7 +564,7 @@ def test_read_all_reads_only_what_is_due(monkeypatch):
         stat_window,
     )
 
-    called = []
+    called, view = [], minimap_pos.MinimapView((10, 20), (5.0, 5.0), ())
     for mod, fn in [
         (exp, "read_exp"),
         (level, "read_level"),
@@ -576,10 +576,22 @@ def test_read_all_reads_only_what_is_due(monkeypatch):
         (quest_window, "read_quest_window"),
         (quest_tracker, "read_quest_tracker"),
     ]:
-        monkeypatch.setattr(mod, fn, lambda *a, fn=fn: called.append(fn) or fn)
+        value = view if fn == "read_view" else fn
+        monkeypatch.setattr(mod, fn, lambda *a, fn=fn, v=value: called.append(fn) or v)
     got = read_all(np.zeros((768, 1366, 3), np.uint8), 1.0, {"stats"})
-    assert called == ["read_exp", "read_level", "read_job", "read_stat_window"]
-    assert got == Reading(1.0, "read_exp", "read_level", "read_job", None, stats="read_stat_window")
+    assert sorted(called) == sorted(
+        ["read_exp", "read_level", "read_job", "read_map_name", "read_view", "read_stat_window"]
+    )
+    assert got == Reading(
+        1.0,
+        "read_exp",
+        "read_level",
+        "read_job",
+        "read_map_name",
+        view.fraction,
+        view,
+        stats="read_stat_window",
+    )
 
 
 def _in_frame(name):

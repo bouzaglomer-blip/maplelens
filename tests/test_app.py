@@ -1334,8 +1334,8 @@ def test_a_tick_searches_a_closed_window_on_its_turn(hide, game_found, monkeypat
     tick, _ = _tick(box, layer, shown)
     for i in range(7):
         tick.run(float(i))
-    assert [i for i, d in enumerate(dues) if "tracker" in d] == [4, 5, 6]  # its turn, then seen
-    assert [i for i, d in enumerate(dues) if "stats" in d] == [1, 6]
+    assert [i for i, d in enumerate(dues) if "tracker" in d] == [3, 4, 5, 6]  # its turn, then seen
+    assert [i for i, d in enumerate(dues) if "stats" in d] == [0, 4]
 
 
 def test_a_tick_without_the_game_hides_the_layer_and_says_looking(hide, monkeypatch):
