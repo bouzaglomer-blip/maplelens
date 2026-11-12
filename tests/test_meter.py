@@ -329,3 +329,71 @@ def test_quests_only_no_rate():
 def test_town_with_monsters_counts_kills():
     assert TOWN in monster_free_maps()
     assert "Maple Road / East Entrance to Mushroom Town" not in monster_free_maps()
+
+
+def test_session_none_before_first_counted_gain():
+    m = ExpMeter()
+    feed(m, 0, 1000, 10.0)  # the first reading is only the baseline
+    assert m.session() is None
+    feed(m, 20, 1100, 10.5)  # timed from the segment's open at 0.5
+    s = m.session()
+    assert s.active_s == pytest.approx(20)
+    assert s.exp_per_min is None  # under a minute
+
+
+def test_session_matches_open_segment():
+    m = ExpMeter()
+    steady(m, 13)
+    s, seg = m.session(), m.open_segment()
+    assert s.active_s == pytest.approx(seg.active_s)
+    assert s.exp_per_min == pytest.approx(seg.exp / seg.active_s * 60)
+
+
+def test_session_spans_level_up_and_map_change():
+    m = ExpMeter()
+    for i, pct in enumerate([94, 95, 96, 97, 98]):
+        feed(m, i * 30, pct * 1000, pct)
+    feed(m, 150, 1000, 1.0, level=23)  # level-up: closes the level-22 segment
+    feed(m, 180, 2000, 2.0, level=23)
+    feed(m, 210, 3000, 3.0, level=23, map_name="Other Map")  # map change
+    feed(m, 240, 4000, 4.0, level=23, map_name="Other Map")
+    segs = [*m.pop_closed(), m.open_segment()]
+    assert len(segs) >= 3
+    s = m.session()
+    assert s.active_s == pytest.approx(sum(seg.active_s for seg in segs))
+    assert s.exp_per_min * s.active_s / 60 == pytest.approx(sum(seg.exp for seg in segs))
+
+
+@pytest.mark.parametrize("brk, active", [(1800, 120 + 30), (1801, 30)])
+def test_session_split_boundary(brk, active):
+    m = ExpMeter()
+    steady(m, 5)  # counted gains at 30..120: 120 s
+    last = 4 * 30
+    feed(m, last + brk - 30, 5000, 50.0)  # after the break: starts the clock only
+    feed(m, last + brk, 5100, 50.5)  # counted, `brk` s after the last counted gain
+    assert m.session().active_s == pytest.approx(active)
+
+
+def test_session_kept_while_game_gone():
+    m = ExpMeter()
+    steady(m, 5)
+    for _ in range(200):  # the game closed for a while
+        m.feed(None)
+    feed(m, 730, 5000, 50.0)
+    feed(m, 760, 5100, 50.5)
+    assert m.session().active_s == pytest.approx(120 + 30)
+
+
+def test_session_skips_paused_gains():
+    m = ExpMeter()
+    steady(m, 5)
+    feed(m, 150, 1250, 12.5, map_name=None)  # map unreadable: not counted
+    assert m.session().active_s == pytest.approx(120)
+
+
+def test_session_skips_town_quest_rewards():
+    m = ExpMeter()
+    steady(m, 5)
+    before = m.session()
+    feed(m, 160, 9000, 40.0, map_name=TOWN)
+    assert m.session() == before
