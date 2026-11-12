@@ -1,3 +1,4 @@
+import contextlib
 import time
 
 import numpy as np
@@ -111,3 +112,68 @@ def test_read_game_trims_the_black_bars(monkeypatch):
     )
     assert reader.read_game(JOB) == ((0, 50, 800, 500), READING)
     assert seen == [(500, 800, 3)]
+
+
+class _Conn:
+    """A pipe end that is always readable and hands out `value`, or raises it."""
+
+    def __init__(self, value):
+        self.value = value
+        self.sent = []
+
+    def poll(self):
+        return True
+
+    def recv(self):
+        if isinstance(self.value, BaseException) and not isinstance(self.value, Exception):
+            raise self.value
+        if isinstance(self.value, _Boom):
+            raise ValueError("won't unpickle")
+        return self.value
+
+    def send(self, x):
+        self.sent.append(x)
+
+
+class _Boom:
+    pass
+
+
+def test_collect_keeps_an_untaken_answer():
+    r = reader.ProcessReader(work=repr)
+    r._conn = _Conn("new")
+    r._sent_at = 1.0
+    r._held = "old"
+    r._collect()
+    assert r._held == "old"
+
+
+def test_an_answer_that_wont_unpickle_leaves_the_reader_idle():
+    r = reader.ProcessReader(work=repr)
+    r._conn = _Conn(_Boom())
+    r._sent_at = 1.0
+    with contextlib.suppress(ValueError):
+        r._collect()
+    assert r._sent_at is None
+
+
+def test_serve_reports_the_answer_that_wont_pickle():
+    class Conn:
+        def __init__(self):
+            self.sent = []
+            self.jobs = iter([1])
+
+        def recv(self):
+            try:
+                return next(self.jobs)
+            except StopIteration:
+                raise EOFError from None
+
+        def send(self, x):
+            if not isinstance(x, RuntimeError):
+                raise TypeError("cannot pickle")
+            self.sent.append(x)
+
+    c = Conn()
+    reader.serve(c, lambda job: "the answer")
+    assert "the answer" in str(c.sent[0]) and "cannot pickle" not in str(c.sent[0])

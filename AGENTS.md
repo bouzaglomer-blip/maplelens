@@ -45,7 +45,7 @@ with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
   - `update.py` — the update check's pure part: GitHub's latest-release reply → `Release`, version compare, digest check (`MAPLELENS_UPDATE_REPO` overrides the repo)
   - `update_mac.py` — the Mac update helper: swaps the app from the downloaded dmg, then relaunches it
   - `reader.py` — the per-tick grab, trim and `read_all` (`read_game`), run here (`InlineReader`) or in a child process (`ProcessReader`)
-  - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`), the Windows tray icon (`make_tray`), Hide / Show (`Shown`) and the tick (`Tick`, which keeps `turn` / `seen_at` for that schedule)
+  - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`), the Windows tray icon (`make_tray`), Hide / Show (`Shown`) and the tick (`Tick`, which keeps `turn` / `seen_at` for that schedule; on the Mac it reads through `ProcessReader`, a helper process macOS doesn't slow, `make_reader`)
   - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`
   - `tools/path_arrow/` — the path arrow: `maps`, `route`, `camera`, `ui`
   - `tools/class_helper/` — the class helper: `data`, `plan`, `ui` (the Class tab and the marks on the stat and skill windows)

@@ -1583,3 +1583,28 @@ def test_build_menu_lists_and_picks(qt_box):
     assert [a.text() for a in menu.actions()] == ["LUK", "Sindit"]
     menu.actions()[1].trigger()
     assert tool.picked == ["Sindit"]
+
+
+def test_make_reader_uses_a_helper_on_the_mac():
+    assert isinstance(app.make_reader("darwin"), reader.ProcessReader)
+    assert isinstance(app.make_reader("win32"), reader.InlineReader)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the helper process is the Mac's")
+def test_self_check_fails_when_the_helper_never_answers(monkeypatch, no_cache):
+    class Silent:
+        def __init__(self, work=None):
+            pass
+
+        def ask(self, job):
+            pass
+
+        def take(self):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app, "ProcessReader", Silent)
+    monkeypatch.setattr(app, "HELPER_CHECK_S", 0.2)
+    assert app.self_check() == 1

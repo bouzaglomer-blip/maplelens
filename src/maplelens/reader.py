@@ -37,6 +37,9 @@ class InlineReader:
         answer, self._answer = self._answer, None
         return answer
 
+    def close(self) -> None:
+        pass
+
 
 def serve(conn, work: Callable) -> None:
     """The child's loop: answer each job with the result or the error, until the parent closes."""
@@ -51,8 +54,8 @@ def serve(conn, work: Callable) -> None:
             answer = e
         try:
             conn.send(answer)
-        except Exception as e:  # an answer that won't pickle
-            conn.send(RuntimeError(repr(e)))
+        except Exception:  # an answer that won't pickle
+            conn.send(RuntimeError(repr(answer)))
 
 
 class ProcessReader:
@@ -71,12 +74,12 @@ class ProcessReader:
         self._sent_at: float | None = None  # when the unanswered job went out
 
     def _collect(self) -> None:
-        if self._conn is None or self._sent_at is None:
+        if self._conn is None or self._sent_at is None or self._held is not None:
             return
         try:
             if self._conn.poll():
+                self._sent_at = None  # even if recv raises: the reader stays able to send
                 self._held = self._conn.recv()
-                self._sent_at = None
         except (EOFError, OSError):  # the child is gone
             self._kill()
 

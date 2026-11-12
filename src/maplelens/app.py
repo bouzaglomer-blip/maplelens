@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import multiprocessing
 import os
 import shutil
 import ssl
@@ -231,6 +232,29 @@ def quest_go(path_tool, select):
     return go
 
 
+HELPER_CHECK_S = 20.0  # how long the build's self-check waits for the helper process
+
+
+def make_reader(platform: str) -> InlineReader | ProcessReader:
+    """macOS slows this app while the game is in front; a child process isn't slowed."""
+    return ProcessReader() if platform == "darwin" else InlineReader()
+
+
+def _helper_answers() -> bool:
+    """True if a helper process starts and answers (a frozen app that can't spawn fails here)."""
+    helper = ProcessReader(work=repr)  # never captures the screen
+    try:
+        helper.ask(0)
+        end = time.monotonic() + HELPER_CHECK_S
+        while time.monotonic() < end:
+            if (got := helper.take()) is not None:
+                return not isinstance(got, Exception)
+            time.sleep(0.05)
+        return False
+    finally:
+        helper.close()
+
+
 def self_check() -> int:
     """0 if everything MapleLens ships loads, else 1: the build's smoke test.
 
@@ -250,6 +274,8 @@ def self_check() -> int:
         if QImage(str(ICON)).isNull():  # missing, or no plugin to decode it
             return 1
         if not version("maplelens"):  # None when its metadata file is missing
+            return 1
+        if sys.platform == "darwin" and not _helper_answers():
             return 1
     except Exception:
         return 1
@@ -792,6 +818,8 @@ class Tick:
             reading = None
         else:
             rect, reading = got  # the picture without any fullscreen black bars
+            # with ProcessReader this answer is from an earlier tick's job: a part counts as
+            # seen up to a tick late (harmless for `due`)
             for p in found(reading):
                 self.seen_at[p] = self.turn - 1
         self.layer.follow(rect)
@@ -850,6 +878,7 @@ def early_exit() -> int | None:
 
 
 def main() -> int:
+    multiprocessing.freeze_support()  # a spawned child of the frozen app runs here, then exits
     if (code := early_exit()) is not None:
         return code
     app = _start_qt()
@@ -894,6 +923,7 @@ def main() -> int:
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     shown = add_hide(box, layer, tray, click=sys.platform == "win32")
     add_about(box, updates)  # after Hide: just before Quit
+    reader = make_reader(sys.platform)
     tick = Tick(
         settings,
         save,
@@ -907,11 +937,13 @@ def main() -> int:
         updates,
         seen,
         shown,
+        reader=reader,
     )
     timer = QTimer()
     timer.timeout.connect(lambda: tick.run(time.time()))
     timer.start(_TICK_MS)
     app.aboutToQuit.connect(lambda: tool.shutdown(time.time()))
+    app.aboutToQuit.connect(reader.close)
     return app.exec()
 
 
