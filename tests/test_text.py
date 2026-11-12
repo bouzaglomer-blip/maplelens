@@ -19,9 +19,16 @@ def test_box_lines_values():
 
 def test_box_lines_no_rate():
     assert box_lines(None, False) == [
-        ("EXP · last 5 min", ["— /h", "—% /h"]),
+        ("EXP · measuring", ["— /h", "—% /h"]),
         ("Level up in", ["—"]),
     ]
+
+
+def test_box_lines_early_rate():
+    assert box_lines(Rate(12480, 0.42, 137, early=True), False)[0] == (
+        "EXP · measuring",
+        ["748,800 /h", "25.20% /h"],
+    )
 
 
 def test_box_lines_no_level_eta():

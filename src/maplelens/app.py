@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import multiprocessing
 import os
 import shutil
 import ssl
@@ -12,7 +13,7 @@ import time
 import traceback
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
 
@@ -23,7 +24,8 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import maplelens
 from maplelens import capture, update, update_mac
 from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
-from maplelens.readers import glyphs, ocr, quest_window, read_all
+from maplelens.reader import InlineReader, ProcessReader
+from maplelens.readers import due, found, glyphs, ocr, quest_window
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.class_helper import data as class_data
 from maplelens.tools.class_helper.ui import MARKS, ClassHelperTool
@@ -230,6 +232,29 @@ def quest_go(path_tool, select):
     return go
 
 
+HELPER_CHECK_S = 20.0  # how long the build's self-check waits for the helper process
+
+
+def make_reader(platform: str) -> InlineReader | ProcessReader:
+    """macOS slows this app while the game is in front; a child process isn't slowed."""
+    return ProcessReader() if platform == "darwin" else InlineReader()
+
+
+def _helper_answers() -> bool:
+    """True if a helper process starts and answers (a frozen app that can't spawn fails here)."""
+    helper = ProcessReader(work=repr)  # never captures the screen
+    try:
+        helper.ask(0)
+        end = time.monotonic() + HELPER_CHECK_S
+        while time.monotonic() < end:
+            if (got := helper.take()) is not None:
+                return not isinstance(got, Exception)
+            time.sleep(0.05)
+        return False
+    finally:
+        helper.close()
+
+
 def self_check() -> int:
     """0 if everything MapleLens ships loads, else 1: the build's smoke test.
 
@@ -249,6 +274,8 @@ def self_check() -> int:
         if QImage(str(ICON)).isNull():  # missing, or no plugin to decode it
             return 1
         if not version("maplelens"):  # None when its metadata file is missing
+            return 1
+        if sys.platform == "darwin" and not _helper_answers():
             return 1
     except Exception:
         return 1
@@ -745,6 +772,15 @@ class Tick:
     seen: set[str]  # error types/messages already logged
     shown: Shown
     hwnd: int | None = None
+    turn: int = 0  # ticks that tried to read a frame: whose turn it is (readers.due)
+    seen_at: dict[str, int] = field(default_factory=dict)  # part -> turn it was last on screen
+    reader: InlineReader | ProcessReader = field(default_factory=InlineReader)
+
+    def remember(self, got, turn: int) -> None:
+        """Note which windows a reading answer saw, as of the turn of the job it answers."""
+        if got is not None and not isinstance(got, Exception):
+            for p in found(got[1]):
+                self.seen_at[p] = turn
 
     def run(self, now: float) -> None:
         poll_updates(self.updates, now, self.seen)  # before the game lookup: shows with no game
@@ -772,14 +808,28 @@ class Tick:
             )
             return
         try:
-            frame = capture.grab(self.hwnd, rect)
-            # Fullscreen on a screen of another shape: the game is its picture, bars left out
-            x, y, w, h = capture.picture_box(frame)
-            rect = (rect[0] + x, rect[1] + y, w, h)
-            reading = read_all(frame[y : y + h, x : x + w], now)
+            # take first: what the last job saw makes this job's `due` (InlineReader has nothing
+            # to give yet; its answer comes from the second take)
+            got = self.reader.take()
+            self.remember(got, self.turn - 1)
+            self.reader.ask((self.hwnd, rect, now, due(self.turn, self.seen_at)))
+            if got is None:
+                got = self.reader.take()
+                self.remember(got, self.turn)
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
-            report_once(e, self.seen)
+            got = e
+        self.turn += 1  # bad ticks too: the turns keep going
+        if got is None:  # no answer yet: follow the game, leave the tools alone
+            self.layer.follow(rect)
+            if self.shown.on:
+                self.layer.show()
+            self.box.place(rect)
+            return
+        if isinstance(got, Exception):
+            report_once(got, self.seen)
             reading = None
+        else:
+            rect, reading = got  # the picture without any fullscreen black bars
         self.layer.follow(rect)
         if self.shown.on:  # hidden by the player: the tools still run, nothing shows
             self.layer.show()
@@ -836,6 +886,7 @@ def early_exit() -> int | None:
 
 
 def main() -> int:
+    multiprocessing.freeze_support()  # a spawned child of the frozen app runs here, then exits
     if (code := early_exit()) is not None:
         return code
     app = _start_qt()
@@ -880,6 +931,7 @@ def main() -> int:
     tray = make_tray(box, ICON, available=tray_available())  # held, or it leaves the tray
     shown = add_hide(box, layer, tray, click=sys.platform == "win32")
     add_about(box, updates)  # after Hide: just before Quit
+    reader = make_reader(sys.platform)
     tick = Tick(
         settings,
         save,
@@ -893,11 +945,13 @@ def main() -> int:
         updates,
         seen,
         shown,
+        reader=reader,
     )
     timer = QTimer()
     timer.timeout.connect(lambda: tick.run(time.time()))
     timer.start(_TICK_MS)
     app.aboutToQuit.connect(lambda: tool.shutdown(time.time()))
+    app.aboutToQuit.connect(reader.close)
     return app.exec()
 
 

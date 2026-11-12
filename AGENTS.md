@@ -36,7 +36,7 @@ with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
 
 - `src/maplelens/` — the package
   - `capture.py` (shared: `pick_window`) + `capture_win.py` / `capture_mac.py` — find the game window, grab its pixels
-  - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`), `stat_window`, `skill_window`, `quest_window`, `quest_tracker` (the game's Quest Helper panel); `read_all` in `__init__`); numbers via glyph templates, words (map, class, skill names) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`. The draggable game windows (`window.py`, shared) are read differently: scaled from the window's own corner, digits by correlation with a margin, since exact templates miss at most sub-pixel offsets
+  - `readers/` — screenshot → value (`glyphs`, `ocr`, `exp`, `level`, `job`, `map_name`, `minimap_pos` (`read_view`), `stat_window`, `skill_window`, `quest_window`, `quest_tracker` (the game's Quest Helper panel); `read_all` in `__init__`, with `due` / `found` for which windows to read this tick: one that isn't on screen is searched one tick in four, the minimap every tick); numbers via glyph templates, words (map, class, skill names) via the system OCR: `ocr.py` (shared) + `ocr_win.py` / `ocr_mac.py`. The draggable game windows (`window.py`, shared) are read differently: scaled from the window's own corner, digits by correlation with a margin, since exact templates miss at most sub-pixel offsets
   - `overlay.py` — the see-through `Layer` and draggable `Box` (its ••• menu button, `attach_menu`); `overlay_mac.py` — the macOS panels
   - `data/maps.json` — the map data; `data/minimaps/` — minimap pictures; `data/icon.ico` — the app icon (the exe, Setup and the tray)
   - `data/classes.json` — per-job advice (training maps, AP/SP plans, gear)
@@ -44,13 +44,15 @@ with the identity in `MAPLELENS_SIGN_IDENTITY` (ad-hoc when unset).
   - `store.py` — settings file and data folder
   - `update.py` — the update check's pure part: GitHub's latest-release reply → `Release`, version compare, digest check (`MAPLELENS_UPDATE_REPO` overrides the repo)
   - `update_mac.py` — the Mac update helper: swaps the app from the downloaded dmg, then relaunches it
-  - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`), the Windows tray icon (`make_tray`), Hide / Show (`Shown`) and the tick (`Tick`)
+  - `reader.py` — the per-tick grab, trim and `read_all` (`read_game`), run here (`InlineReader`) or in a child process (`ProcessReader`)
+  - `app.py` — entry point (`uv run maplelens`); also the update check's threads, download and handoff to Setup (`UpdateCheck`), the Windows tray icon (`make_tray`), Hide / Show (`Shown`) and the tick (`Tick`, which keeps `turn` / `seen_at` for that schedule; on the Mac it reads through `ProcessReader`, a helper process macOS doesn't slow, `make_reader`)
   - `tools/exp_meter/` — the EXP meter: `meter`, `history`, `text`, `ui`
   - `tools/path_arrow/` — the path arrow: `maps`, `route`, `camera`, `ui`
   - `tools/class_helper/` — the class helper: `data`, `plan`, `ui` (the Class tab and the marks on the stat and skill windows)
   - `tools/quest_helper/` — the quest helper: `data`, `plan`, `ui` (the Quests tab; the box switches to it while a quest window is open)
 - `scripts/check_screen_only.py` — the guard; banned lists live there, with reasons
 - `scripts/grab.py` — save a cropped fixture screenshot of the game; `--screen` grabs the screen over it, MapleLens included, for README shots
+- `scripts/profile_reads.py` — time `read_all` per reader on saved frames (`FRAME... [--passes N]`), to measure a change to the per-tick work
 - `scripts/make_level_font.py` — build the level digit templates from `scripts/level_sprites/`
 - `scripts/make_icon.py` — draw the icon: `src/maplelens/data/icon.ico`, `packaging/mac/icon.icns` (the Mac app), `docs/icon.png` (README), `docs/social-preview.png` (uploaded by hand: repo Settings → Social preview)
 - `scripts/build_installer.py` — the Windows build (also the Mac freeze, sign and dmg stages): freeze, check the bundle, `MapleLens.exe --self-check`, Inno Setup; run locally and by `release.yml`

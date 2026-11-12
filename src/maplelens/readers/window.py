@@ -37,6 +37,12 @@ GLYPH_H = 13
 INK = 90  # grey below this is ink (dark digits on a light field)
 
 _fonts: dict[str, list[tuple[str, np.ndarray]]] = {}
+# The last hit per anchor set: anchor names -> (winning anchor, native x0, y0, scale).
+_last_spot: dict[tuple[str, ...], tuple[str, int, int, float]] = {}
+
+
+def clear_cache() -> None:
+    _last_spot.clear()
 
 
 def _gray(img: np.ndarray) -> np.ndarray:
@@ -66,7 +72,50 @@ def align(
     the window's top-left); then each native start within 2 frame px is tried, the native
     crop scaled by exactly 1/scale, and the start whose anchor matches best at its exact
     spot wins. None if no anchor scores ANCHOR_MIN.
+
+    The last winner is tried first: kept if it still scores ANCHOR_MIN and none of its 8
+    neighbouring starts scores higher (a 1 px drag lowers its score by as little as 0.015,
+    so only a better neighbour shows the window moved).
     """
+    key = tuple(name for name, _ in anchors)
+    spot = _reused(native, scale, dict(anchors), _last_spot.get(key))
+    if spot is None:
+        spot = _search(frame, native, scale, anchors)
+    if spot is None:
+        _last_spot.pop(key, None)
+        return None
+    _, x0, y0 = spot
+    _last_spot[key] = (*spot, scale)
+    return _window_at(native, scale, x0, y0, size), (round(x0 / scale), round(y0 / scale))
+
+
+def _reused(
+    native: np.ndarray,
+    scale: float,
+    offsets: dict[str, tuple[int, int]],
+    last: tuple[str, int, int, float] | None,
+) -> tuple[str, int, int] | None:
+    """`last`'s (anchor, x0, y0) if it is still the best start around it, else None."""
+    if last is None or last[3] != scale:
+        return None
+    name, x0, y0, _ = last
+    anchor = (name, offsets[name])
+    s = _spot_score(native, scale, anchor, (x0, y0))
+    if s <= ANCHOR_MIN:  # the full search needs more than ANCHOR_MIN too
+        return None
+    around = ((x0 + dx, y0 + dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dx or dy)
+    if any(_spot_score(native, scale, anchor, xy) > s for xy in around):
+        return None
+    return name, x0, y0
+
+
+def _search(
+    frame: np.ndarray,
+    native: np.ndarray,
+    scale: float,
+    anchors: list[tuple[str, tuple[int, int]]],
+) -> tuple[str, int, int] | None:
+    """The best (anchor, native x0, y0) over every anchor, or None (see align)."""
     g = _gray(frame)
     top = (ANCHOR_MIN, None, 0, 0)  # (score at its exact spot, anchor, native x0, y0)
     for name, (ax, ay) in anchors:
@@ -79,33 +128,45 @@ def align(
             continue
         ox, oy = (loc[0] - ax) * scale, (loc[1] - ay) * scale
         k = 0 if scale == 1 else math.ceil(2 * scale)
-        cw, ch = math.ceil((ax + tw + 1) * scale) + 1, math.ceil((ay + th + 1) * scale) + 1
         for ky in range(-k, k + 1):
             for kx in range(-k, k + 1):
                 x0, y0 = int(ox) + kx, int(oy) + ky
-                w = _gray(
-                    cv2.resize(
-                        _cut(native, x0, y0, cw, ch),
-                        None,
-                        fx=1 / scale,
-                        fy=1 / scale,
-                        interpolation=cv2.INTER_AREA,
-                    )
-                )
-                patch = w[ay : ay + th, ax : ax + tw]
-                if patch.shape != t.shape:
-                    continue
-                s = cv2.matchTemplate(patch, t, cv2.TM_CCOEFF_NORMED)[0, 0]
+                s = _spot_score(native, scale, (name, (ax, ay)), (x0, y0))
                 if s > top[0]:
                     top = (s, name, x0, y0)
-    if top[1] is None:
-        return None
-    _, _, x0, y0 = top
+    return None if top[1] is None else top[1:]
+
+
+def _spot_score(
+    native: np.ndarray,
+    scale: float,
+    anchor: tuple[str, tuple[int, int]],
+    start: tuple[int, int],
+) -> float:
+    """The anchor's score (name, offset) at its exact spot for native `start`; -1 if the
+    patch doesn't fit."""
+    name, (ax, ay) = anchor
+    x0, y0 = start
+    t = _gray(glyphs.load(name))
+    th, tw = t.shape
+    cw, ch = math.ceil((ax + tw + 1) * scale) + 1, math.ceil((ay + th + 1) * scale) + 1
+    w = _gray(_resized(_cut(native, x0, y0, cw, ch), scale))
+    patch = w[ay : ay + th, ax : ax + tw]
+    if patch.shape != t.shape:
+        return -1
+    return float(cv2.matchTemplate(patch, t, cv2.TM_CCOEFF_NORMED)[0, 0])
+
+
+def _window_at(
+    native: np.ndarray, scale: float, x0: int, y0: int, size: tuple[int, int]
+) -> np.ndarray:
+    """The 768-scale window of `size` (w, h) whose native top-left is x0, y0."""
     cw, ch = math.ceil(size[0] * scale) + 1, math.ceil(size[1] * scale) + 1
-    win = cv2.resize(
-        _cut(native, x0, y0, cw, ch), None, fx=1 / scale, fy=1 / scale, interpolation=cv2.INTER_AREA
-    )[: size[1], : size[0]]
-    return win, (round(x0 / scale), round(y0 / scale))
+    return _resized(_cut(native, x0, y0, cw, ch), scale)[: size[1], : size[0]]
+
+
+def _resized(img: np.ndarray, scale: float) -> np.ndarray:
+    return cv2.resize(img, None, fx=1 / scale, fy=1 / scale, interpolation=cv2.INTER_AREA)
 
 
 def font(name: str = "window_font") -> list[tuple[str, np.ndarray]]:
