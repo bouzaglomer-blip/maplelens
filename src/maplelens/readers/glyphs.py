@@ -1,5 +1,7 @@
 """Template matching on screenshots: find an anchor, read bitmap-font text."""
 
+import math
+from functools import cache
 from pathlib import Path
 
 import cv2
@@ -24,6 +26,13 @@ CHAR_NAMES = {
     "slash": "/",
 }
 
+# read_scaled: ink is the min of B, G, R at or above SCALED_INK (light digits; the status
+# bar and the green brackets stay lower). On Mac fullscreen grabs (1512x850) the right
+# char scored 0.76 or more and beat the next by 0.148 or more; the bars are set lower.
+SCALED_INK = 150
+SCALED_MIN = 0.6
+SCALED_MARGIN = 0.04
+
 Font = list[tuple[str, np.ndarray]]  # (char, ink mask) per template file
 
 _images: dict[str, np.ndarray] = {}
@@ -37,6 +46,7 @@ def clear_cache() -> None:
     _fonts.clear()
     _anchors.clear()
     _last_hit.clear()
+    _scaled_font.cache_clear()
 
 
 def imread(path: Path, flags: int) -> np.ndarray | None:
@@ -167,6 +177,60 @@ def _split(run: np.ndarray, templates: Font) -> str | None:
             if ch and j not in best:
                 best[j] = best[i] + ch
     return best.get(w)
+
+
+@cache
+def _scaled_font(font: str, s: float) -> list[tuple[str, np.ndarray]]:
+    """`font`'s masks as grey images (1 px of background around), scaled by `s`."""
+    return [
+        (ch, cv2.resize(np.pad(t * np.float32(255), 1), None, fx=s, fy=s)) for ch, t in _font(font)
+    ]
+
+
+def read_scaled(
+    frame: np.ndarray, native: np.ndarray, box: tuple[int, int, int, int], font: str, space_px: int
+) -> str | None:
+    """Light text in `box` (x, y, w, h of the normalized `frame`), read from `native` (the
+    same shot at any size) with `font`; None if any glyph is unsure.
+
+    For a game resolution no exact template fits (Mac fullscreen draws 1512x850): glyphs
+    are cut where the native pixels show ink, and each must match one char by grey
+    correlation SCALED_MIN and beat every other char by SCALED_MARGIN.
+    """
+    s = native.shape[0] / frame.shape[0]
+    x, y, w, h = box
+    x0, x1 = int(x * s), int((x + w) * s)
+    text = native[int(y * s) : int((y + h) * s), x0:x1].min(axis=2)
+    # 2 px above and below, so a glyph can slide onto its template
+    strip = native[max(0, int((y - 2) * s)) : int((y + h + 2) * s), x0:x1].min(axis=2)
+    strip = strip.astype(np.float32)
+    cols = np.flatnonzero((text >= SCALED_INK).any(axis=0))
+    if cols.size == 0:
+        return None
+    templates = _scaled_font(font, round(s, 3))
+    widest = max(t.shape[1] for _, t in templates)
+    pad = math.ceil(2 * s)
+    out, prev_end = "", None
+    for run in np.split(cols, np.flatnonzero(np.diff(cols) > 1) + 1):
+        a, b = run[0], run[-1] + 1
+        if b - a > widest:  # touching glyphs: no single char fits
+            return None
+        if prev_end is not None and a - prev_end >= space_px * s:
+            out += " "
+        prev_end = b
+        patch = strip[:, max(0, a - pad) : b + pad]
+        best: dict[str, float] = {}
+        for ch, t in templates:
+            if patch.shape[0] >= t.shape[0] and patch.shape[1] >= t.shape[1]:
+                sc = float(cv2.matchTemplate(patch, t, cv2.TM_CCOEFF_NORMED).max())
+                best[ch] = max(best.get(ch, -1.0), sc)
+        top = sorted(best.items(), key=lambda kv: kv[1], reverse=True)
+        if not top or top[0][1] < SCALED_MIN:
+            return None
+        if len(top) > 1 and top[0][1] - top[1][1] < SCALED_MARGIN:
+            return None
+        out += top[0][0]
+    return out
 
 
 def read_text(m: np.ndarray, font: str, space_px: int) -> str | None:

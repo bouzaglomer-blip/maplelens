@@ -2,6 +2,7 @@
 
 import functools
 
+import cv2
 import numpy as np
 import Quartz
 from AppKit import NSMakeRect, NSScreen, NSWindow, NSWindowStyleMaskTitled
@@ -108,6 +109,9 @@ def client_rect(wid: int) -> tuple[int, int, int, int] | None:
     )
 
 
+DOUBLING_STEP = 8
+
+
 def game_top(rgb: np.ndarray, top: int) -> int:
     """`top`, or `top + 1` when the game sits one backing pixel lower.
 
@@ -115,19 +119,23 @@ def game_top(rgb: np.ndarray, top: int) -> int:
     equal pairs. The game's own surface can sit half a point below the title bar (seen
     after the window moved), which puts the pairs at odd rows from `top`.
     """
-    eq = (rgb[top:-1] == rgb[top + 1 :]).all(axis=(1, 2))
+    # Every DOUBLING_STEP-th column decides as well as all of them, at a fraction of the cost
+    a, b = rgb[top:-1, ::DOUBLING_STEP, :3], rgb[top + 1 :, ::DOUBLING_STEP, :3]
+    eq = (a == b).all(axis=(1, 2))
     even, odd = int(eq[0::2].sum()), int(eq[1::2].sum())
     # Flat rows are equal in both phases; only doubled content gives one phase a clear lead.
     return top + 1 if odd > len(eq) // 4 and odd > 2 * even else top
 
 
 def crop_bgr(rgb: np.ndarray, rect: tuple[int, int, int, int]) -> np.ndarray:
-    """RGB frame -> BGR client area: rect[3] rows from the game's top, left rect[2] columns."""
+    """RGB (or RGBX) frame -> BGR client area: rect[3] rows from the game's top, left
+    rect[2] columns."""
     h, w = rgb.shape[:2]
     if rect[3] > h or rect[2] > w:
         raise RuntimeError("window shrank since its size was read")
     top = game_top(rgb, h - rect[3])
-    out = rgb[top : top + rect[3], : rect[2], ::-1]
+    code = cv2.COLOR_RGBA2BGR if rgb.shape[2] == 4 else cv2.COLOR_RGB2BGR
+    out = cv2.cvtColor(rgb[top : top + rect[3], : rect[2]], code)  # a numpy flip: 15x slower
     if len(out) < rect[3]:  # the window cuts the game's last backing row: its pair repeats it
         out = np.vstack([out, out[-1:]])
     return np.ascontiguousarray(out)
@@ -147,7 +155,7 @@ def grab(wid: int, rect: tuple[int, int, int, int]) -> np.ndarray:
     ctx = Quartz.CGBitmapContextCreate(None, w, h, 8, w * 4, srgb, Quartz.kCGImageAlphaNoneSkipLast)
     Quartz.CGContextDrawImage(ctx, Quartz.CGRectMake(0, 0, w, h), img)
     buf = Quartz.CGBitmapContextGetData(ctx).as_buffer(w * h * 4)
-    rgb = np.frombuffer(buf, np.uint8).reshape(h, w, 4)[:, :, :3]
+    rgb = np.frombuffer(buf, np.uint8).reshape(h, w, 4)  # RGBX: crop_bgr drops the X
     return crop_bgr(rgb, rect)
 
 

@@ -54,8 +54,8 @@ def read_all(frame: np.ndarray, t: float) -> Reading:
     view = minimap_pos.read_view(img)
     return Reading(
         t,
-        exp.read_exp(img),
-        level.read_level(img),
+        exp.read_exp(img, frame),
+        level.read_level(img, frame),
         job.read_job(img, frame),
         map_name.read_map_name(img, frame),
         None if view is None else view.fraction,
