@@ -9,7 +9,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -31,6 +33,7 @@ from maplelens.readers import Reading
 from maplelens.tools.exp_meter.history import MIN_VISIT_S, best_maps, history, save_segment
 from maplelens.tools.exp_meter.meter import ExpMeter
 from maplelens.tools.exp_meter.text import (
+    Column,
     best_lines,
     box_lines,
     format_duration,
@@ -142,16 +145,16 @@ class ExpMeterTool:
         self._lines.setContentsMargins(0, 4, 0, 0)
         self._lines.setSpacing(0)
         self._button_row = secondary_button("History", self._show_history)
-        self._shape: list[int] | None = None  # values per row of what's shown
+        self._shape: list[list[int]] | None = None  # values per row of what's shown
         self._texts: list[QLabel] = []
-        self._show(box_lines(None, True))
+        self._show(box_lines(None, None, True))
 
     def set_tab_w(self, width: int) -> None:
         self.tab.setFixedWidth(width)
 
-    def _show(self, lines: list[tuple[str, list[str]]]) -> None:
-        texts = [t for label, values in lines for t in (label, *values)]
-        shape = [len(values) for _, values in lines]
+    def _show(self, rows: list[list[Column]]) -> None:
+        texts = [t for row in rows for label, values in row for t in (label, *values)]
+        shape = [[len(values) for _, values in row] for row in rows]
         if shape == self._shape:  # same rows: new text only, or the box blinks each tick
             for w, t in zip(self._texts, texts, strict=True):
                 w.setText(t)
@@ -162,12 +165,24 @@ class ExpMeterTool:
             if (w := item.widget()) and w is not self._button_row:
                 w.deleteLater()
         self._texts = []
-        for label, values in lines:
-            row = [text_label(label, LABEL_PT, LABEL_COLOR)]
-            row += [text_label(v, VALUE_PT, VALUE_COLOR, bold=True) for v in values]
-            for w in row:
-                self._lines.addWidget(w)
-            self._texts += row
+        for row in rows:
+            # several columns share the row in equal parts of the tab's width, never widening it
+            box = QWidget()
+            side = QHBoxLayout(box)
+            side.setContentsMargins(0, 0, 0, 0)
+            side.setSpacing(8)
+            for label, values in row:
+                column = QVBoxLayout()
+                column.setSpacing(0)
+                ws = [text_label(label, LABEL_PT, LABEL_COLOR)]
+                ws += [text_label(v, VALUE_PT, VALUE_COLOR, bold=True) for v in values]
+                for w in ws:
+                    if len(row) > 1:
+                        w.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+                    column.addWidget(w)
+                side.addLayout(column, 1)
+                self._texts += ws
+            self._lines.addWidget(box)
             self._lines.addSpacing(6)
         self._lines.addWidget(self._button_row)
 
@@ -195,7 +210,7 @@ class ExpMeterTool:
         if r is None or r.exp is not None or self._exp_seen is None:
             self._exp_seen = now
         unread = now - self._exp_seen > _UNREAD_S
-        self._show(box_lines(self._meter.rate(now), r is None, unread))
+        self._show(box_lines(self._meter.rate(now), self._meter.session(), r is None, unread))
         self._texts[0].setStyleSheet(f"color: {ACCENT if unread else LABEL_COLOR};")
 
     def shutdown(self, now: float) -> None:

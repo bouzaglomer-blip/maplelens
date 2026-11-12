@@ -56,14 +56,15 @@ def test_tool_says_when_bar_unreadable(monkeypatch, tmp_path):
         tool.update(Reading(t, exp, 50, "Mage", "Ant Tunnel"), None, t)
         return tool._texts[0].text()
 
-    assert label(0, ExpValue(1000, 10)) == "EXP · measuring"  # no rate yet
-    assert label(10, None) == "EXP · measuring"  # 10 s: not yet
-    assert label(10.5, None) == "EXP · can't read bar"
+    assert label(0, ExpValue(1000, 10)) == "Measuring"  # no rate yet
+    assert tool._texts[3].text() == "Session"
+    assert label(10, None) == "Measuring"  # 10 s: not yet
+    assert label(10.5, None) == "Can't read bar"
     assert "#ffcc33" in tool._texts[0].styleSheet()  # amber, to be seen
-    assert label(11, ExpValue(1000, 10)) == "EXP · measuring"
+    assert label(11, ExpValue(1000, 10)) == "Measuring"
     assert "#ffcc33" not in tool._texts[0].styleSheet()
     tool.update(None, None, 100)  # game gone: the clock restarts when it's back
-    assert label(105, None) == "EXP · measuring"
+    assert label(105, None) == "Measuring"
 
 
 def test_closing_history_window_does_not_quit(monkeypatch, tmp_path):

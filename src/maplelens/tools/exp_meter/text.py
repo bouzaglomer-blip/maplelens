@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from maplelens.tools.exp_meter.meter import Rate
+from maplelens.tools.exp_meter.meter import Rate, SessionRate
 
 
 def format_duration(minutes: float) -> str:
@@ -13,12 +13,15 @@ def format_duration(minutes: float) -> str:
     return f"{h}h {m}m" if h else f"{m}m"
 
 
+Column = tuple[str, list[str]]  # (grey label, value lines)
+
+
 def box_lines(
-    rate: Rate | None, waiting: bool, unread: bool = False
-) -> list[tuple[str, list[str]]]:
-    """The EXP tab's content as (grey label, value lines) pairs; `unread`: the bar is unreadable."""
+    rate: Rate | None, session: SessionRate | None, waiting: bool, unread: bool = False
+) -> list[list[Column]]:
+    """The EXP tab's content as rows of side-by-side columns; `unread`: the bar is unreadable."""
     if waiting:
-        return [("waiting for game", [])]
+        return [[("waiting for game", [])]]
     if rate is None:
         exp, pct, eta = "— /h", "—% /h", "—"
     else:
@@ -26,12 +29,20 @@ def box_lines(
         pct = f"{rate.pct_per_min * 60:.2f}% /h"
         eta = "—" if rate.minutes_to_level is None else format_duration(rate.minutes_to_level)
     if unread:
-        label = "EXP · can't read bar"
+        label = "Can't read bar"
     elif rate is None or rate.early:
-        label = "EXP · measuring"
+        label = "Measuring"
     else:
-        label = "EXP · paused" if rate.paused else "EXP · last 5 min"
-    return [(label, [exp, pct]), ("Level up in", [eta])]
+        label = "Paused" if rate.paused else "Last 5 min"
+    s_label, s_exp = "Session", "— /h"
+    if session:
+        hours = session.active_s / 3600
+        # from 10 h, hours only: "Session · 12h 10m" fills half the box to the pixel
+        s_label += f" · {int(hours)}h" if hours >= 10 else f" · {format_duration(hours * 60)}"
+        if session.exp_per_min is not None:
+            s_exp = f"{session.exp_per_min * 60:,.0f} /h"
+    # the session has no %/h: a percent doesn't add up across levels
+    return [[(label, [exp, pct]), (s_label, [s_exp, ""])], [("Level up in", [eta])]]
 
 
 def format_last(ts: float, now: float) -> str:
