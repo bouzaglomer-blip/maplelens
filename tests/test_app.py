@@ -10,7 +10,7 @@ import pytest
 from PySide6.QtCore import QObject, Signal
 
 import maplelens
-from maplelens import app, overlay, update_mac
+from maplelens import app, overlay, reader, update_mac
 from maplelens.readers import Reading, glyphs, ocr
 from maplelens.tools.path_arrow import maps
 
@@ -1257,7 +1257,7 @@ def game_found(monkeypatch):
     monkeypatch.setattr(app, "find_game", lambda settings, save: 42)
     monkeypatch.setattr(app.capture, "client_rect", lambda hwnd: rect)
     monkeypatch.setattr(app.capture, "grab", lambda hwnd, r: np.full((600, 800, 3), 60, np.uint8))
-    monkeypatch.setattr(app, "read_all", lambda frame, now, due=None: READING)
+    monkeypatch.setattr(reader, "read_all", lambda frame, now, due=None: READING)
     return rect
 
 
@@ -1314,11 +1314,23 @@ def test_a_tick_leaves_fullscreen_black_bars_out(hide, game_found, monkeypatch):
     frame[50:550] = 60  # the picture, between two 50-row bars
     monkeypatch.setattr(app.capture, "grab", lambda hwnd, r: frame)
     seen = []
-    monkeypatch.setattr(app, "read_all", lambda f, now, due=None: seen.append(f.shape) or READING)
+    monkeypatch.setattr(
+        reader, "read_all", lambda f, now, due=None: seen.append(f.shape) or READING
+    )
     tick, exp = _tick(box, layer, shown)
     tick.run(5.0)
     assert seen == [(500, 800, 3)]
     assert exp.updates == [(READING, (0, 50, 800, 500), 5.0)]
+
+
+def test_a_tick_without_an_answer_leaves_the_tools_alone(hide, game_found):
+    box, layer, _, shown = hide
+    layer.hide()
+    tick, exp = _tick(box, layer, shown)
+    tick.reader = types.SimpleNamespace(ask=lambda job: None, take=lambda: None)
+    tick.run(5.0)
+    assert exp.updates == []
+    assert layer.isVisible()
 
 
 def test_a_tick_searches_a_closed_window_on_its_turn(hide, game_found, monkeypatch):
@@ -1330,7 +1342,7 @@ def test_a_tick_searches_a_closed_window_on_its_turn(hide, game_found, monkeypat
         tracker = "a tracker" if len(dues) > 2 and "tracker" in due else None  # open from tick 2
         return Reading(now, None, None, None, None, tracker=tracker)
 
-    monkeypatch.setattr(app, "read_all", read_all)
+    monkeypatch.setattr(reader, "read_all", read_all)
     tick, _ = _tick(box, layer, shown)
     for i in range(7):
         tick.run(float(i))

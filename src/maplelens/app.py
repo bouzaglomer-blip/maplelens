@@ -23,7 +23,8 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import maplelens
 from maplelens import capture, update, update_mac
 from maplelens.overlay import ABOUT, MENU_MARK, Box, Layer
-from maplelens.readers import due, found, glyphs, ocr, quest_window, read_all
+from maplelens.reader import InlineReader, ProcessReader
+from maplelens.readers import due, found, glyphs, ocr, quest_window
 from maplelens.store import data_dir, load_settings, save_settings
 from maplelens.tools.class_helper import data as class_data
 from maplelens.tools.class_helper.ui import MARKS, ClassHelperTool
@@ -747,6 +748,7 @@ class Tick:
     hwnd: int | None = None
     turn: int = 0  # ticks that tried to read a frame: whose turn it is (readers.due)
     seen_at: dict[str, int] = field(default_factory=dict)  # part -> turn it was last on screen
+    reader: InlineReader | ProcessReader = field(default_factory=InlineReader)
 
     def run(self, now: float) -> None:
         poll_updates(self.updates, now, self.seen)  # before the game lookup: shows with no game
@@ -774,17 +776,24 @@ class Tick:
             )
             return
         try:
-            frame = capture.grab(self.hwnd, rect)
-            # Fullscreen on a screen of another shape: the game is its picture, bars left out
-            x, y, w, h = capture.picture_box(frame)
-            rect = (rect[0] + x, rect[1] + y, w, h)
-            reading = read_all(frame[y : y + h, x : x + w], now, due(self.turn, self.seen_at))
-            for p in found(reading):
-                self.seen_at[p] = self.turn
+            self.reader.ask((self.hwnd, rect, now, due(self.turn, self.seen_at)))
+            got = self.reader.take()
         except Exception as e:  # a bad tick counts as no reading; the box still follows the game
-            report_once(e, self.seen)
-            reading = None
+            got = e
         self.turn += 1  # bad ticks too: the turns keep going
+        if got is None:  # no answer yet: follow the game, leave the tools alone
+            self.layer.follow(rect)
+            if self.shown.on:
+                self.layer.show()
+            self.box.place(rect)
+            return
+        if isinstance(got, Exception):
+            report_once(got, self.seen)
+            reading = None
+        else:
+            rect, reading = got  # the picture without any fullscreen black bars
+            for p in found(reading):
+                self.seen_at[p] = self.turn - 1
         self.layer.follow(rect)
         if self.shown.on:  # hidden by the player: the tools still run, nothing shows
             self.layer.show()
