@@ -71,7 +71,9 @@ def _contribution(quest: Quest) -> str | None:
 
 
 def chain_rest(data: QuestData, quest: Quest) -> list[Quest]:
-    """Quests of this quest's chain that come after it, following `after` links only."""
+    """Quests of this quest's chain that need it done first. The `after` links are followed
+    through any chain (a story may pass through another chain and come back), but only
+    quests of this chain are counted, so a branch into another chain adds nothing."""
     if not quest.chain:
         return []
     found: set[int] = {quest.id}
@@ -79,11 +81,12 @@ def chain_rest(data: QuestData, quest: Quest) -> list[Quest]:
     while grew:
         grew = False
         for q in data.quests.values():
-            if q.chain == quest.chain and q.id not in found and found.intersection(q.after):
+            if q.id not in found and found.intersection(q.after):
                 found.add(q.id)
                 grew = True
-    found.discard(quest.id)
-    return [q for q in data.quests.values() if q.id in found]
+    return [
+        q for q in data.quests.values() if q.id in found - {quest.id} and q.chain == quest.chain
+    ]
 
 
 def _class_label(classed: list, job_branch: str | None) -> str:

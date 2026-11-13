@@ -113,10 +113,12 @@ Indented under the reward line, in this order. Text lines **wrap**; nothing is c
    citizenship grade (OSMS `by_grade`), the range `+100–325`.
 6. **Rest of the chain**: `Rest of chain (4 quests): +28,080 EXP · 4,560 mesos`. "Rest" is
    every quest with the same chain name that needs this one done first, directly or
-   through another quest of that chain. Prerequisites outside the chain don't count:
-   they branch (10508 leads into two chains) and would inflate the total. Every kept
-   OSMS chain is linear with one first quest. A quest with no chain, or the last of one,
-   gets no line.
+   through other quests of any chain: a story can pass through another chain and come
+   back (owner, 2026-11-13: the Abyss story runs Echoes of the Abyss 10612–10614, A Fragile
+   Sanctuary 10615–10616, Echoes again 10617–10618, Sanctuary again 10619–10620). Only
+   quests of this chain are counted, so a branch into another chain (10508 leads into
+   two) adds nothing. Quests not out yet count too (owner: 10617–10620 start
+   2026-12-09). A quest with no chain, or whose rest pays nothing, gets no line.
 
 **Items, layout A:** each item group (1–4) is one wrapping row of icons. An icon sits on a
 small square slot (the mockup's: 26 px, dark fill), the count in its corner when above 1,
@@ -148,9 +150,8 @@ which it already receives.
 
 - EXP, mesos; items with count and kind (always, pick, random), classes, gender;
   citizenship contribution (town, amount or by-grade range).
-- The chain: enough to find "the rest" (e.g. each quest's chain name and its
-  prerequisite quests within that chain, or the precomputed list of later quests).
-  Schema is the builder's.
+- The chain: each quest's chain name and its prerequisite quests (`after`, every
+  prerequisite in the file, whatever its chain).
 - Names of every reward item (the `items` table, or a separate name table; builder's
   call).
 
@@ -164,14 +165,16 @@ committed. Check that the Windows and Mac builds ship the new folder (the specs 
 `quests.json` (existing fields unchanged):
 
 - **OSMS** `quests.json` and `items.json` (CC BY 4.0, already credited): every quest it
-  has, joined by quest id. Four of our 10600s are in OSMS under other ids with the same
-  name (10613–10616 → 10617–10620): joined by name *(my call)*.
+  has, joined by quest id.
 - **meowdb** `https://meowdb.com/_data/quests.json` (owner's permission; credited) for the
-  other 11 of the 10600s (10600–10604, 10607–10612), which OSMS doesn't have (owner):
+  15 of the 10600s OSMS doesn't have (10600–10604, 10607–10616) (owner). 10613–10616 are
+  round one of the Abyss story, separate quests from round two's 10617–10620 (same
+  names, other rewards); they were first joined to round two by name, which gave them
+  round two's rewards (fixed 2026-11-13). From meowdb:
   `exp`, `mesos`, `get` (items with `itemId`, `name`, `count`), `parent` (the chain name),
   `requiresAll` (prerequisites). **Known gap:** meowdb lists only guaranteed items (for
   10201 it lists none where OSMS lists six random ores), so any random or class rewards of
-  these 11 quests don't show. Item names and icons come from OSMS by `itemId` where it has
+  these 15 quests don't show. Item names and icons come from OSMS by `itemId` where it has
   them, else meowdb's name and no icon.
 
 Data checks in `tests/`: every reward item id has a name; every chain's "rest" refers to

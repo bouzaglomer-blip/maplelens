@@ -37,6 +37,16 @@ def test_random_group_and_chain():
     assert not any(isinstance(x, str) and x.startswith("Rest of chain") for x in last)
 
 
+def test_chain_continues_past_another_chain():
+    # Echoes of the Abyss: 10612-10614, then A Fragile Sanctuary 10615-10616, then 10617-10618
+    d = load()
+    assert [q.id for q in chain_rest(d, d.quests[10612])] == [10613, 10614, 10617, 10618]
+    assert [q.id for q in chain_rest(d, d.quests[10614])] == [10617, 10618]
+    assert [q.id for q in chain_rest(d, d.quests[10616])] == [10619, 10620]
+    out = details(d, d.quests[10612], None)
+    assert out[-1] == "Rest of chain (4 quests): +32,189 EXP · 5,736 mesos"
+
+
 def test_class_items():
     d = load()
     mine = details(d, d.quests[10205], "Thief")
