@@ -1,6 +1,8 @@
 """The quest helper's Quests tab: the quest open in the game, then the tracked ones."""
 
 import functools
+import html
+import re
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
@@ -9,6 +11,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QLabel,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -158,6 +161,38 @@ class Slot(QWidget):
             p.drawText(corner.translated(1, 1), Qt.AlignRight | Qt.AlignBottom, str(self._count))
             p.setPen(QColor(VALUE_COLOR))
             p.drawText(corner, Qt.AlignRight | Qt.AlignBottom, str(self._count))
+
+
+class RewardLine(QLabel):
+    """The closed reward line: grey words, white numbers, cut to `room`; the full text is the
+    tooltip. With `on_click`, a left click acts, as a Row's does."""
+
+    def __init__(self, text: str, room: int, on_click: Callable[[], None] | None = None):
+        super().__init__()
+        self.clickable, self._on_click = on_click is not None, on_click
+        self.setFont(QFont(FONT, LABEL_PT))
+        self.setStyleSheet(f"color: {LABEL_COLOR};")
+        self.setTextFormat(Qt.RichText)
+        self.setFocusPolicy(Qt.NoFocus)
+        if self.clickable:
+            self.setCursor(Qt.PointingHandCursor)
+        cut = html.escape(self.fontMetrics().elidedText(text, Qt.ElideRight, room), quote=False)
+        self.setText(re.sub(r"\d[\d,]*", rf'<span style="color: {VALUE_COLOR};">\g<0></span>', cut))
+        self.setToolTip(text)
+
+    def click(self) -> None:
+        if self._on_click:
+            self._on_click()
+
+    def mousePressEvent(self, event):  # taken when clickable, so the box doesn't start a drag
+        event.setAccepted(self.clickable and event.button() == Qt.LeftButton)
+
+    def mouseReleaseEvent(self, event):
+        if not (self.clickable and event.button() == Qt.LeftButton):
+            event.ignore()
+            return
+        if self.rect().contains(event.position().toPoint()):
+            self.click()
 
 
 def _wrapped(text: str, color: str = LABEL_COLOR):
@@ -429,8 +464,9 @@ class QuestHelperTool:
             return []
         parts = details(self._data, quest, branch(self._job))
         shown = self._settings["quest_rewards_open"]
-        out: list = [("reward", text, bool(parts), shown)]
-        if parts and shown:
+        opens = bool(parts) and parts != (text,)  # the details add something
+        out: list = [("reward", text, opens, shown)]
+        if opens and shown:
             out += [
                 ("icons", p.label, p.items) if isinstance(p, Group) else ("detail", p)
                 for p in parts
@@ -514,12 +550,9 @@ class QuestHelperTool:
         if kind == "reward":
             _, text, opens, shown = item
             if not opens:
-                line = text_label("", LABEL_PT, LABEL_COLOR)
-                _fit(line, text, self._tab_w - BAR)
-                return line
-            line = mark_button("", LABEL_PT, self._flip_rewards)
-            _fit(line, f"{SHOWN if shown else SHUT} {text}", self._tab_w - BAR)
-            return line
+                return RewardLine(text, self._tab_w - BAR)
+            mark = SHOWN if shown else SHUT
+            return RewardLine(f"{mark} {text}", self._tab_w - BAR, self._flip_rewards)
         if kind == "detail":
             line = _wrapped(item[1])
             line.setContentsMargins(INDENT, 0, 0, 0)
@@ -535,22 +568,25 @@ class QuestHelperTool:
         col.setSpacing(2)
         if label:
             col.addWidget(_wrapped(label))
-        if len(items) <= 2:
-            for s in items:
-                row = QHBoxLayout()
-                row.setSpacing(6)
-                name = s.name + (f" {TIMES}{s.count}" if s.count > 1 else "")
-                row.addWidget(Slot(s))
-                row.addWidget(_wrapped(name, VALUE_COLOR), 1)
-                col.addLayout(row)
-            return box
-        grid = QGridLayout()
-        grid.setSpacing(SLOT_GAP)
-        cols = max(1, (self._tab_w - BAR - INDENT) // (SLOT + SLOT_GAP))
-        for i, s in enumerate(items):
-            grid.addWidget(Slot(s), i // cols, i % cols)
-        grid.setColumnStretch(cols, 1)  # the slots stay at the left
-        col.addLayout(grid)
+        # an item with no icon is named beside its empty slot, in a group of any size
+        row_of = [s for s in items if _icon(s.item) is not None] if len(items) > 2 else []
+        if row_of:
+            grid = QGridLayout()
+            grid.setSpacing(SLOT_GAP)
+            cols = max(1, (self._tab_w - BAR - INDENT) // (SLOT + SLOT_GAP))
+            for i, s in enumerate(row_of):
+                grid.addWidget(Slot(s), i // cols, i % cols)
+            grid.setColumnStretch(cols, 1)  # the slots stay at the left
+            col.addLayout(grid)
+        for s in items:
+            if s in row_of:
+                continue
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            name = s.name + (f" {TIMES}{s.count}" if s.count > 1 else "")
+            row.addWidget(Slot(s))
+            row.addWidget(_wrapped(name, VALUE_COLOR), 1)
+            col.addLayout(row)
         return box
 
     def _switch(self, qid: int, closest: bool | None) -> list[QWidget]:

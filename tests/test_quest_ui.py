@@ -19,6 +19,7 @@ BIG = 1003  # Big Hunt: Sera gives it, four Snail rows, Heena takes it: 6 rows
 SHARED = "Test of Qualification"  # 1004 and 1005
 MYSTERY = 1006  # Mystery Quest: one item nobody drops or sells, hand in to Heena
 TALK = 1007  # Small Talk: Sera gives it, Heena takes it, nothing to hunt
+PRIDE = 1009  # Town Pride: as Small Talk, its only reward a Henesys contribution
 SNAIL_MAP, TOWN = "000000040", "000000001"
 
 
@@ -33,6 +34,7 @@ def data():
         Quest(MYSTERY, "Mystery Quest", None, 1, (), ((9, 1),), ()),
         Quest(TALK, "Small Talk", 2, 1, (), (), ()),
         Quest(1008, "Mirror Two", None, 1, (), (), (), Rewards(100, 50), "Mirror", (1001,)),
+        Quest(PRIDE, "Town Pride", 2, 1, (), (), (), Rewards(contribution=("Henesys", 100, 325))),
     ]
     items = {**d.items, 9: Item(9, "Odd Stone", (), ())}
     snail = replace(d.mobs[2], spawns={**d.mobs[2].spawns, TOWN: 1})  # a few in town too
@@ -603,11 +605,16 @@ def test_bad_followed_setting_is_replaced(make):
 # --- rewards ------------------------------------------------------------------------
 
 
-def reward_button(tool):
-    from PySide6.QtWidgets import QPushButton
+def reward_line(tool):
+    from maplelens.tools.quest_helper.ui import RewardLine
 
-    # the reward line's tooltip keeps its mark; a tracked header's is the bare name
-    (found,) = [b for b in visible(tool, QPushButton) if b.toolTip().startswith(("▸", "▾"))]
+    (found,) = visible(tool, RewardLine)
+    return found
+
+
+def reward_button(tool):
+    found = reward_line(tool)
+    assert found.clickable and found.toolTip().startswith(("▸", "▾")), found.toolTip()
     return found
 
 
@@ -660,6 +667,42 @@ def test_missing_icon_draws_an_empty_slot(make):  # Review Focus 2
     tool = make(quest_rewards_open=True)
     tool.update(opened(), RECT, 0)  # fixture item ids have no icon files
     assert len(slots(tool)) == 3
+    assert f"Odd Stone {TIMES}7" in texts(tool)  # its name beside it
+
+
+def test_iconless_item_of_a_big_group_has_its_name(make):
+    from PySide6.QtWidgets import QGridLayout, QLabel
+
+    from maplelens.tools.quest_helper.rewards import Shown
+    from maplelens.tools.quest_helper.ui import Slot
+
+    tool = make()
+    hats = [Shown(i, f"Hat {i}", 1, f"Hat {i}") for i in (1002000, 1002001, 1002003)]  # icons
+    group = tool._widget(("icons", "Random, 1 of:", (*hats, Shown(9, "Odd Stone", 7, "x"))))
+    (grid,) = group.findChildren(QGridLayout)
+    assert grid.count() == 3  # the three with icons, in a row
+    assert len(group.findChildren(Slot)) == 4
+    assert f"Odd Stone {TIMES}7" in [w.text() for w in group.findChildren(QLabel)]
+
+
+def test_contribution_only_line_does_not_open(make):
+    tool = make()
+    tool.update(opened("Town Pride"), RECT, 0)
+    line = reward_line(tool)
+    assert line.toolTip() == "Henesys contribution +100–325" and not line.clickable
+    assert "▸" not in line.text()
+    line.click()
+    assert tool.settings["quest_rewards_open"] is False and tool.calls["changed"] == 0
+
+
+def test_closed_line_numbers_are_white(make):
+    from maplelens.overlay import LABEL_COLOR, VALUE_COLOR
+
+    tool = make()
+    tool.update(opened(), RECT, 0)
+    html = reward_button(tool).text()
+    assert f'<span style="color: {VALUE_COLOR};">7,020</span>' in html
+    assert LABEL_COLOR in reward_button(tool).styleSheet()
 
 
 def test_icon_columns_follow_the_tab_width(make):  # Review Focus 4
