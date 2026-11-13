@@ -68,16 +68,27 @@ def test_rewards_from_osms():
     q = load().quests[10201]  # Collecting 50 Cursed Dolls: the issue's screenshot
     assert (q.rewards.exp, q.rewards.mesos) == (7020, 1140)
     assert [(r.item, r.count, r.kind) for r in q.rewards.items][:2] == [
-        (4010000, 7, "random"), (4010001, 7, "random")]
-    assert q.chain == "Rowen the Fairy and the Cursed Doll" and q.after == ()  # 10508 is another chain
+        (4010000, 7, "random"),
+        (4010001, 7, "random"),
+    ]
+    assert (
+        q.chain == "Rowen the Fairy and the Cursed Doll" and q.after == ()
+    )  # 10508 is another chain
+
 
 def test_pick_class_and_contribution():
     d = load()
     assert {r.kind for r in d.quests[10401].rewards.items} == {"pick"}  # Blackbull: choose one
     assert {r.cls for r in d.quests[10205].rewards.items} == {
-        "Beginner", "Warrior", "Magician", "Bowman", "Thief"}
+        "Beginner",
+        "Warrior",
+        "Magician",
+        "Bowman",
+        "Thief",
+    }
     assert d.quests[506001].rewards.contribution == ("Henesys", 100, 325)
     assert d.quests[506019].rewards.contribution == ("Henesys", 700, 700)
+
 
 def test_rewards_from_meowdb_and_by_name():
     d = load()
@@ -86,11 +97,13 @@ def test_rewards_from_meowdb_and_by_name():
     assert [(r.item, r.count, r.kind) for r in q.rewards.items] == [(2000003, 20, "always")]
     assert d.quests[10613].rewards.exp == 10400  # OSMS 10617, joined by name
 
+
 def test_chain_links():
     d = load()
     assert d.quests[10202].after == (10201,)
     for q in d.quests.values():
         assert all(d.quests[a].chain == q.chain for a in q.after), q.id
+
 
 def test_every_reward_item_has_a_name_and_most_an_icon():
     d = load()
@@ -154,7 +167,13 @@ def test_summary():
     assert summary(d, d.quests[10201]) == "7,020 EXP · 1,140 mesos"
     assert summary(d, d.quests[506001]) == "334 EXP · 409 mesos"
     assert "Henesys contribution +100–325" in details(d, d.quests[506001], None)
-    assert summary(d, replace(d.quests[10600], rewards=replace(d.quests[10600].rewards, exp=0, mesos=0))) == "Blue Potion ×20"
+    assert (
+        summary(
+            d, replace(d.quests[10600], rewards=replace(d.quests[10600].rewards, exp=0, mesos=0))
+        )
+        == "Blue Potion ×20"
+    )
+
 
 def test_random_group_and_chain():
     d = load()
@@ -166,6 +185,7 @@ def test_random_group_and_chain():
     last = details(d, d.quests[10205], None)  # the last of its chain: no chain line
     assert not any(isinstance(x, str) and x.startswith("Rest of chain") for x in last)
 
+
 def test_class_items():
     d = load()
     mine = details(d, d.quests[10205], "Thief")
@@ -173,12 +193,16 @@ def test_class_items():
     every = details(d, d.quests[10205], None)
     assert every[0].label == "By class:" and every[0].items[0].tip == "Old Wisconsin (Beginner)"
 
+
 def test_pick_and_always():
     d = load()
     mage = [x for x in details(d, d.quests[10401], "Magician") if isinstance(x, Group)]
     assert [g.label for g in mage] == ["For your class:"]  # Blackbull: class-only picks
     assert [s.item for s in mage[0].items] == [2043702, 2043802]
-    assert details(d, d.quests[10600], None)[0] == Group("", (Shown(2000003, "Blue Potion", 20, "Blue Potion ×20"),))
+    assert details(d, d.quests[10600], None)[0] == Group(
+        "", (Shown(2000003, "Blue Potion", 20, "Blue Potion ×20"),)
+    )
+
 
 def test_branch():
     assert branch("Rogue") == "Thief" and branch("Arch Mage (Ice, Lightning)") == "Magician"
@@ -237,6 +261,7 @@ def test_reward_line_under_the_open_quest(make):
     t = texts(tool)  # top to bottom
     assert t.index(MIRROR) < t.index("▸ 7,020 EXP · 1,140 mesos") < t.index("Sera")  # giver row
 
+
 def test_reward_line_opens_and_is_saved(make):
     tool = make(tracked=[SNAILS], expanded=SNAILS)
     tool.update(opened(), RECT, 0)
@@ -244,38 +269,45 @@ def test_reward_line_opens_and_is_saved(make):
     assert tool.settings["quest_rewards_open"] is True and tool.calls["changed"] == 1
     assert "Rest of chain (1 quest): +100 EXP · 50 mesos" in texts(tool)
 
-def test_no_reward_line_without_rewards(make):            # Review Focus 3
+
+def test_no_reward_line_without_rewards(make):  # Review Focus 3
     tool = make()
     tool.update(opened("Small Talk"), RECT, 0)
     assert not [x for x in texts(tool) if "EXP" in x]
+
 
 def test_collapsed_tracked_quest_has_no_reward_line(make):
     tool = make(tracked=[1001])
     tool.update(R(), RECT, 0)
     assert not [x for x in texts(tool) if "EXP" in x]
 
-def test_bad_setting_reads_closed(make):                   # hand-edited settings
+
+def test_bad_setting_reads_closed(make):  # hand-edited settings
     tool = make(quest_rewards_open="yes")
     assert tool.settings["quest_rewards_open"] is False
 
-def test_job_kept_when_a_tick_misses_it(make):             # Review Focus 1
+
+def test_job_kept_when_a_tick_misses_it(make):  # Review Focus 1
     tool = make(quest_rewards_open=True)
     tool.update(replace(opened(), job="Rogue"), RECT, 0)
-    tool.update(opened(), RECT, 0)                       # job None this tick
+    tool.update(opened(), RECT, 0)  # job None this tick
     assert tool._job == "Rogue"
 
-def test_missing_icon_draws_an_empty_slot(make):           # Review Focus 2
+
+def test_missing_icon_draws_an_empty_slot(make):  # Review Focus 2
     tool = make(quest_rewards_open=True)
-    tool.update(opened(), RECT, 0)                       # fixture item ids have no icon files
+    tool.update(opened(), RECT, 0)  # fixture item ids have no icon files
     assert len(slots(tool)) == 3
 
-def test_icon_columns_follow_the_tab_width(make):          # Review Focus 4
+
+def test_icon_columns_follow_the_tab_width(make):  # Review Focus 4
     tool = make(quest_rewards_open=True)
     tool.update(opened(), RECT, 0)
     tool.set_tab_w(480)
     assert all(s.isVisibleTo(tool.tab) for s in slots(tool))
 
-def test_same_reading_does_not_redraw(make):               # Review Focus 5
+
+def test_same_reading_does_not_redraw(make):  # Review Focus 5
     tool = make(quest_rewards_open=True)
     tool.update(opened(), RECT, 0)
     body = tool._body
