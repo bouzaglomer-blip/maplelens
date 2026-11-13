@@ -43,7 +43,7 @@ LICENSES = DIST / "MapleLens" / "licenses"
 SRC_PKG = REPO / "src" / "maplelens"
 BUNDLE_PKG = DIST / "MapleLens" / "_internal" / "maplelens"
 # Data folders, relative to the package, whose PNG count must survive the freeze.
-COUNTED = ["readers/templates", "data/minimaps"]
+COUNTED = ["readers/templates", "data/minimaps", "data/item_icons"]
 # Files, relative to the app folder, the bundle must have. The self-check opens no
 # window, so it can't miss Qt's Windows platform plugin, without which the app can't show
 # its box. The icon it does load; checking it here names the missing file.
