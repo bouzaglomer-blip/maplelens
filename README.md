@@ -166,7 +166,7 @@ checks, the workflow and how releases are made.
 > open in the game).
 >
 > Map and portal data adapted from [meowdb](https://meowdb.com/msclassic).
-> Minimap pictures and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
+> Minimap pictures, item icons and portal types from [OSMS Data Explorer](https://osmsdataexplorer.com).
 > Quest data adapted from [meowdb](https://meowdb.com/msclassic) (NiaDB) and [OSMS Data Explorer](https://osmsdataexplorer.com) (CC BY 4.0).
 >
 > Class plans adapted from the NiaDB class guides:

@@ -21,6 +21,7 @@ DEFAULTS = {
     "quests_followed": [],  # quest ids seen in the game's Quest Helper; they leave with it
     "quests_expanded": None,  # the tracked quest shown open in the Quests tab
     "quests_closest": {},  # quest id (as text) -> True: Closest, False: Best; once switched
+    "quest_rewards_open": False,  # the Quests tab's reward details shown, for every quest
 }
 
 

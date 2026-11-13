@@ -7,6 +7,7 @@ from pathlib import Path
 
 DATA = Path(__file__).parents[2] / "data" / "quests.json"
 MAPS = Path(__file__).parents[2] / "data" / "maps.json"
+ICONS = Path(__file__).parents[2] / "data" / "item_icons"
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,23 @@ class Item:
 
 
 @dataclass(frozen=True)
+class Reward:
+    item: int
+    count: int
+    kind: str  # "always" | "pick" | "random"
+    cls: str | None = None  # Beginner, Warrior, Magician, Bowman, Thief
+    gender: str | None = None  # "male" | "female"
+
+
+@dataclass(frozen=True)
+class Rewards:
+    exp: int = 0
+    mesos: int = 0
+    items: tuple[Reward, ...] = ()
+    contribution: tuple[str, int, int] | None = None  # (town, low, high)
+
+
+@dataclass(frozen=True)
 class Quest:
     id: int
     name: str
@@ -40,6 +58,9 @@ class Quest:
     mobs: tuple[tuple[int, int], ...]  # (monster id, count), in the quest's order
     items: tuple[tuple[int, int], ...]  # (item id, count)
     start_items: tuple[int, ...]
+    rewards: Rewards = Rewards()
+    chain: str | None = None
+    after: tuple[int, ...] = ()  # prerequisite quest ids in the same chain
 
 
 @dataclass(frozen=True)
@@ -49,6 +70,16 @@ class QuestData:
     mobs: dict[int, Mob]
     items: dict[int, Item]
     map_names: dict[str, str]
+
+
+def _rewards(r: dict) -> Rewards:
+    c = r.get("contribution")
+    return Rewards(
+        r.get("exp", 0),
+        r.get("mesos", 0),
+        tuple(Reward(*i) for i in r.get("items", ())),
+        tuple(c) if c else None,
+    )
 
 
 def _load(path: Path, maps: Path) -> QuestData:
@@ -63,6 +94,9 @@ def _load(path: Path, maps: Path) -> QuestData:
                 tuple(map(tuple, q["mobs"])),
                 tuple(map(tuple, q["items"])),
                 tuple(q["start_items"]),
+                _rewards(q.get("rewards", {})),
+                q.get("chain"),
+                tuple(q.get("after", ())),
             )
             for q in raw["quests"]
         },

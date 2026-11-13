@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
 
-from maplelens.tools.quest_helper.data import DATA, MAPS, load
+from maplelens.tools.quest_helper.data import DATA, ICONS, MAPS, load
 
 SMALL = Path(__file__).parent / "fixtures" / "quests_small.json"
+NO_ICON: list[int] = []  # reward items OSMS has no icon for (meowdb-only)
 MAP_JSON = json.loads(MAPS.read_text("utf-8"))
 
 
@@ -59,3 +60,57 @@ def test_every_quest_has_somewhere_to_go():
 
 def test_default_path_is_the_shipped_file():
     assert DATA.name == "quests.json"
+
+
+def test_rewards_from_osms():
+    q = load().quests[10201]  # Collecting 50 Cursed Dolls: the issue's screenshot
+    assert (q.rewards.exp, q.rewards.mesos) == (7020, 1140)
+    assert [(r.item, r.count, r.kind) for r in q.rewards.items][:2] == [
+        (4010000, 7, "random"),
+        (4010001, 7, "random"),
+    ]
+    assert q.chain == "Rowen the Fairy and the Cursed Doll"
+    assert q.after == (10508,)  # every prerequisite, whatever its chain
+
+
+def test_pick_class_and_contribution():
+    d = load()
+    assert {r.kind for r in d.quests[10401].rewards.items} == {"pick"}  # Blackbull: choose one
+    assert {r.cls for r in d.quests[10205].rewards.items} == {
+        "Beginner",
+        "Warrior",
+        "Magician",
+        "Bowman",
+        "Thief",
+    }
+    assert d.quests[506001].rewards.contribution == ("Henesys", 100, 325)
+    assert d.quests[506019].rewards.contribution == ("Henesys", 700, 700)
+
+
+def test_rewards_from_meowdb():
+    d = load()
+    q = d.quests[10600]  # Zelya's Map: not in OSMS
+    assert (q.rewards.exp, q.rewards.mesos) == (5062, 1140)
+    assert [(r.item, r.count, r.kind) for r in q.rewards.items] == [(2000003, 20, "always")]
+    # Round one of the Abyss story (10613-10616) is its own quests, not round two's
+    # (10617-10620, same names, from OSMS): Matters of the Heart pays 5,255, not 10,400.
+    assert (d.quests[10613].rewards.exp, d.quests[10617].rewards.exp) == (5255, 10400)
+
+
+def test_chain_links():
+    d = load()
+    assert d.quests[10202].after == (10201,)
+    # the Abyss story runs 10611 -> 10612 -> ... -> 10620, switching chains as it goes
+    assert [d.quests[i].after for i in range(10612, 10621)] == [
+        (i - 1,) for i in range(10612, 10621)
+    ]
+    for q in d.quests.values():
+        assert set(q.after) <= d.quests.keys(), q.id
+
+
+def test_every_reward_item_has_a_name_and_most_an_icon():
+    d = load()
+    ids = {r.item for q in d.quests.values() for r in q.rewards.items}
+    assert ids <= d.items.keys()
+    missing = sorted(i for i in ids if not (ICONS / f"{i}.png").exists())
+    assert missing == NO_ICON  # the converter's list of meowdb-only items, pinned

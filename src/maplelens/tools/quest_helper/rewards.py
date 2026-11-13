@@ -1,0 +1,135 @@
+"""A quest's rewards as the Quests tab shows them: the closed line and the opened groups."""
+
+from collections import Counter
+from dataclasses import dataclass
+
+from maplelens.tools.quest_helper.data import Quest, QuestData
+from maplelens.tools.quest_helper.plan import TIMES
+
+EN_DASH = chr(0x2013)
+
+_BRANCHES = {
+    "Beginner": ("Beginner",),
+    "Warrior": (
+        "Warrior Fighter Page Spearman Crusader White_Knight Dragon_Knight Hero Paladin Dark_Knight"
+    ),
+    "Magician": (
+        "Magician Wizard_(Fire,_Poison) Wizard_(Ice,_Lightning) Cleric Mage_(Fire,_Poison) "
+        "Mage_(Ice,_Lightning) Priest Arch_Mage_(Fire,_Poison) Arch_Mage_(Ice,_Lightning) Bishop"
+    ),
+    "Bowman": "Bowman Hunter Crossbowman Ranger Sniper Bowmaster Marksman",
+    "Thief": "Thief Rogue Assassin Bandit Hermit Chief_Bandit Night_Lord Shadower",
+}
+BRANCH = {
+    j.replace("_", " "): b
+    for b, jobs in _BRANCHES.items()
+    for j in (jobs.split() if isinstance(jobs, str) else jobs)
+}
+
+
+def branch(job: str | None) -> str | None:
+    return BRANCH.get(job) if job else None
+
+
+@dataclass(frozen=True)
+class Shown:
+    item: int
+    name: str
+    count: int
+    tip: str  # hover text
+
+
+@dataclass(frozen=True)
+class Group:
+    label: str  # "" for the items a quest always gives
+    items: tuple[Shown, ...]
+
+
+def _shown(data: QuestData, r, by_class: bool = False) -> Shown:
+    item = data.items.get(r.item)
+    name = item.name if item else f"Item {r.item}"
+    tip = name + (f" {TIMES}{r.count}" if r.count > 1 else "")
+    if by_class and r.cls:
+        tip += f" ({r.cls})"
+    if r.gender:
+        tip += f" ({r.gender})"
+    return Shown(r.item, name, r.count, tip)
+
+
+def _money(exp: int, mesos: int) -> str:
+    return " · ".join(
+        p for p in (f"{exp:,} EXP" if exp else "", f"{mesos:,} mesos" if mesos else "") if p
+    )
+
+
+def _contribution(quest: Quest) -> str | None:
+    c = quest.rewards.contribution
+    if not c:
+        return None
+    town, low, high = c
+    return f"{town} contribution +{low}" + (f"{EN_DASH}{high}" if high != low else "")
+
+
+def chain_rest(data: QuestData, quest: Quest) -> list[Quest]:
+    """Quests of this quest's chain that need it done first. The `after` links are followed
+    through any chain (a story may pass through another chain and come back), but only
+    quests of this chain are counted, so a branch into another chain adds nothing."""
+    if not quest.chain:
+        return []
+    found: set[int] = {quest.id}
+    grew = True
+    while grew:
+        grew = False
+        for q in data.quests.values():
+            if q.id not in found and found.intersection(q.after):
+                found.add(q.id)
+                grew = True
+    return [
+        q for q in data.quests.values() if q.id in found - {quest.id} and q.chain == quest.chain
+    ]
+
+
+def _class_label(classed: list, job_branch: str | None) -> str:
+    base = "By class" if job_branch is None else "For your class"
+    per = Counter(r.cls for r in classed)
+    if max(per.values()) > 1:  # a class with a choice: say which kind
+        kinds = {r.kind for r in classed}
+        if kinds == {"pick"}:
+            return f"{base}, you pick 1 of:"
+        if kinds == {"random"}:
+            return f"{base}, random 1 of:"
+    return f"{base}:"
+
+
+def details(data: QuestData, quest: Quest, job_branch: str | None) -> tuple[Group | str, ...]:
+    items = quest.rewards.items
+    plain = [r for r in items if not r.cls]
+    out: list[Group | str] = []
+    for kind, label in (("always", ""), ("pick", "You pick 1 of:"), ("random", "Random, 1 of:")):
+        if group := tuple(_shown(data, r) for r in plain if r.kind == kind):
+            out.append(Group(label, group))
+    classed = [r for r in items if r.cls and (job_branch is None or r.cls == job_branch)]
+    if classed:
+        out.append(
+            Group(
+                _class_label(classed, job_branch),
+                tuple(_shown(data, r, job_branch is None) for r in classed),
+            )
+        )
+    if line := _contribution(quest):
+        out.append(line)
+    rest = chain_rest(data, quest)
+    money = _money(sum(q.rewards.exp for q in rest), sum(q.rewards.mesos for q in rest))
+    if money:
+        n = len(rest)
+        out.append(f"Rest of chain ({n} quest{'s' * (n > 1)}): +{money}")
+    return tuple(out)
+
+
+def summary(data: QuestData, quest: Quest) -> str:
+    if money := _money(quest.rewards.exp, quest.rewards.mesos):
+        return money
+    first = next((x for x in details(data, quest, None) if isinstance(x, Group)), None)
+    if first:
+        return first.items[0].tip if len(first.items) == 1 else f"{len(first.items)} items"
+    return _contribution(quest) or ""
