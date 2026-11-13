@@ -99,6 +99,13 @@ def test_rewards_from_meowdb_and_by_name():
 def test_chain_links():
     d = load()
     assert d.quests[10202].after == (10201,)
+    assert d.quests[10618].after == (10617,) and d.quests[10614].after == (10613,)
+    followers = {}
+    for q in d.quests.values():
+        for a in q.after:
+            followers.setdefault(a, []).append(q.name)
+    # the same quest under two ids would show up as two followers with one name
+    assert all(len(n) == len(set(n)) for n in followers.values())
     for q in d.quests.values():
         assert all(d.quests[a].chain == q.chain for a in q.after), q.id
 
