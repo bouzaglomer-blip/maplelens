@@ -1,16 +1,25 @@
 """The quest helper's Quests tab: the quest open in the game, then the tracked ones."""
 
+import functools
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QFontMetrics
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 from shiboken6 import delete
 
 from maplelens.overlay import (
     ACCENT,
     EDGE,
     FONT,
+    HERE_BG,
     LABEL_COLOR,
     LABEL_PT,
     TAB_W,
@@ -26,9 +35,10 @@ from maplelens.readers import Reading
 from maplelens.readers.quest_tracker import PARTLY, Tracker
 from maplelens.readers.quest_window import NAME_UNREADABLE, QuestOpen
 from maplelens.readers.window import UNREADABLE
-from maplelens.tools.quest_helper.data import Quest, QuestData, load
+from maplelens.tools.quest_helper.data import ICONS, Quest, QuestData, load
 from maplelens.tools.quest_helper.plan import (
     SEVERAL,
+    TIMES,
     Part,
     Target,
     also_for,
@@ -45,6 +55,7 @@ from maplelens.tools.quest_helper.plan import (
 from maplelens.tools.quest_helper.plan import (
     UNKNOWN as NO_MATCH,
 )
+from maplelens.tools.quest_helper.rewards import Group, Shown, branch, details, summary
 
 EMPTY = "Open a quest in the game to see where to go"
 UNKNOWN = "This quest isn't in MapleLens's list yet"
@@ -107,6 +118,54 @@ def _room(*right: QWidget) -> int:
     return sum(w.sizeHint().width() + 6 for w in right)
 
 
+INDENT = 13  # the reward details, under the reward line
+SLOT, ICON_MAX, SLOT_GAP = 26, 24, 3  # an item's square, the largest icon in it, between two
+
+
+@functools.cache
+def _icon(item: int) -> QPixmap | None:
+    """The item's icon, scaled down to fit a slot if it must; None without a file."""
+    pix = QPixmap(str(ICONS / f"{item}.png"))
+    if pix.isNull():
+        return None
+    if pix.width() > ICON_MAX or pix.height() > ICON_MAX:
+        pix = pix.scaled(ICON_MAX, ICON_MAX, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    return pix
+
+
+class Slot(QWidget):
+    """One reward item: its icon on a dark square, the count in the corner, the name on hover."""
+
+    def __init__(self, shown: Shown):
+        super().__init__()
+        self.setFixedSize(SLOT, SLOT)
+        self.setToolTip(shown.tip)
+        self._pix, self._count = _icon(shown.item), shown.count
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(HERE_BG))
+        p.drawRoundedRect(self.rect(), 4, 4)
+        if self._pix is not None:
+            x, y = (SLOT - self._pix.width()) // 2, (SLOT - self._pix.height()) // 2
+            p.drawPixmap(x, y, self._pix)
+        if self._count > 1:
+            p.setFont(QFont(FONT, 7, QFont.Bold))
+            corner = self.rect().adjusted(0, 0, -1, 1)
+            p.setPen(QColor("#000000"))  # a shadow, so the count reads over the icon
+            p.drawText(corner.translated(1, 1), Qt.AlignRight | Qt.AlignBottom, str(self._count))
+            p.setPen(QColor(VALUE_COLOR))
+            p.drawText(corner, Qt.AlignRight | Qt.AlignBottom, str(self._count))
+
+
+def _wrapped(text: str, color: str = LABEL_COLOR):
+    label = text_label(text, LABEL_PT, color)
+    label.setWordWrap(True)
+    return label
+
+
 class QuestHelperTool:
     def __init__(  # noqa: PLR0913, PLR0917 - the tool's collaborators, as the other tools take
         self,
@@ -133,6 +192,7 @@ class QuestHelperTool:
         self._quest: QuestOpen | str | None = None  # the quest window, as shown
         self._misses = 0  # readings in a row without it
         self._shown: list | None = None  # the items now drawn
+        self._job: str | None = None  # the last job read: a tick can miss it
         self._tab_w = TAB_W
         self.tab = QWidget()
         self.tab.setFixedWidth(self._tab_w)
@@ -183,8 +243,12 @@ class QuestHelperTool:
         s["quests_followed"] = list(
             dict.fromkeys(i for i in ids if type(i) is int and i in s["quests_tracked"])
         )
+        if type(s.get("quest_rewards_open")) is not bool:
+            s["quest_rewards_open"] = False
 
     def update(self, r: Reading | None, _game_rect, _now: float) -> None:
+        if r is not None and r.job is not None:
+            self._job = r.job
         quest = r.quest if r is not None else None
         self.open = quest is not None
         if quest is not None:
@@ -278,6 +342,10 @@ class QuestHelperTool:
         self._settings["quests_expanded"] = None if shown else qid
         self._save()
 
+    def _flip_rewards(self) -> None:
+        self._settings["quest_rewards_open"] = not self._settings["quest_rewards_open"]
+        self._save()
+
     def _pick(self, qid: int, closest: bool) -> None:
         self._settings["quests_closest"][str(qid)] = closest
         self._save()
@@ -302,7 +370,8 @@ class QuestHelperTool:
     def _items(self) -> list:
         """Items are tuples, drawn in order: ("info", text), ("label", text),
         ("open", id, name, tracked, closest), ("head", id, name, expanded, closest),
-        ("row", title, sub, map id, at, npc, info), ("run", title, sub), ("action", text)."""
+        ("row", title, sub, map id, at, npc, info), ("run", title, sub), ("action", text),
+        ("reward", text, opens, open), ("detail", text), ("icons", label, items)."""
         d, q = self._data, self._quest
         tracked = self._settings["quests_tracked"]
         out, top = self._top(q, tracked) if q is not None else ([], None)
@@ -339,7 +408,7 @@ class QuestHelperTool:
             return [self._row(t, others, going) for t in plans[qid]]
 
         if top is not None:
-            out += rows(top.id)
+            out += self._rewards(top) + rows(top.id)
         if self._panel_line is not None:
             out.append(self._panel_line)
         out += [("info", note) for note in self._notes]
@@ -350,8 +419,23 @@ class QuestHelperTool:
             expanded = i == self._settings["quests_expanded"]
             out.append(("head", i, d.quests[i].name, expanded, self._switch_at(d.quests[i])))
             if expanded:
-                out += rows(i)
+                out += self._rewards(d.quests[i]) + rows(i)
         return out or [("info", EMPTY)]
+
+    def _rewards(self, quest: Quest) -> list:
+        """The reward line, then its details while open; nothing for a quest with no rewards."""
+        text = summary(self._data, quest)
+        if not text:
+            return []
+        parts = details(self._data, quest, branch(self._job))
+        shown = self._settings["quest_rewards_open"]
+        out: list = [("reward", text, bool(parts), shown)]
+        if parts and shown:
+            out += [
+                ("icons", p.label, p.items) if isinstance(p, Group) else ("detail", p)
+                for p in parts
+            ]
+        return out
 
     def _top(self, q: QuestOpen | str, tracked: list[int]) -> tuple[list, Quest | None]:
         """The top part's first lines, and the quest it shows rows for, if any."""
@@ -402,6 +486,8 @@ class QuestHelperTool:
             _, title, sub = item
             stop = secondary_button(STOP, self._stop_trip)
             return Row(title, sub, None, outline=True, trailing=stop, width=self._tab_w)
+        if kind in ("reward", "detail", "icons"):
+            return self._reward_widget(item)
         if kind == "open":
             _, qid, name, tracked, closest = item
             if tracked:
@@ -422,6 +508,50 @@ class QuestHelperTool:
         _fit(head, name, room)
         head.setText(mark + head.text())
         return _line(head, *ends)
+
+    def _reward_widget(self, item) -> QWidget:
+        kind = item[0]
+        if kind == "reward":
+            _, text, opens, shown = item
+            if not opens:
+                line = text_label("", LABEL_PT, LABEL_COLOR)
+                _fit(line, text, self._tab_w - BAR)
+                return line
+            line = mark_button("", LABEL_PT, self._flip_rewards)
+            _fit(line, f"{SHOWN if shown else SHUT} {text}", self._tab_w - BAR)
+            return line
+        if kind == "detail":
+            line = _wrapped(item[1])
+            line.setContentsMargins(INDENT, 0, 0, 0)
+            return line
+        return self._icons(item[1], item[2])
+
+    def _icons(self, label: str, items: tuple[Shown, ...]) -> QWidget:
+        """A reward group: its label, then one or two items each with its name, or more in
+        rows of slots, the names on hover."""
+        box = QWidget()
+        col = QVBoxLayout(box)
+        col.setContentsMargins(INDENT, 0, 0, 0)
+        col.setSpacing(2)
+        if label:
+            col.addWidget(_wrapped(label))
+        if len(items) <= 2:
+            for s in items:
+                row = QHBoxLayout()
+                row.setSpacing(6)
+                name = s.name + (f" {TIMES}{s.count}" if s.count > 1 else "")
+                row.addWidget(Slot(s))
+                row.addWidget(_wrapped(name, VALUE_COLOR), 1)
+                col.addLayout(row)
+            return box
+        grid = QGridLayout()
+        grid.setSpacing(SLOT_GAP)
+        cols = max(1, (self._tab_w - BAR - INDENT) // (SLOT + SLOT_GAP))
+        for i, s in enumerate(items):
+            grid.addWidget(Slot(s), i // cols, i % cols)
+        grid.setColumnStretch(cols, 1)  # the slots stay at the left
+        col.addLayout(grid)
+        return box
 
     def _switch(self, qid: int, closest: bool | None) -> list[QWidget]:
         """Closest | Best: the side that's on in yellow, the other a mark that picks it."""

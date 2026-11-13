@@ -8,7 +8,7 @@ from maplelens.readers.quest_tracker import PARTLY, Tracker, TrackerLine, Tracke
 from maplelens.readers.quest_window import QuestOpen
 from maplelens.readers.window import UNREADABLE
 from maplelens.store import DEFAULTS
-from maplelens.tools.quest_helper.data import MAPS, Item, Quest, load
+from maplelens.tools.quest_helper.data import MAPS, Item, Quest, Reward, Rewards, load
 from maplelens.tools.quest_helper.plan import TIMES
 
 SMALL = Path(__file__).parent / "fixtures" / "quests_small.json"
@@ -32,10 +32,13 @@ def data():
         replace(q, id=1005, name=SHARED),
         Quest(MYSTERY, "Mystery Quest", None, 1, (), ((9, 1),), ()),
         Quest(TALK, "Small Talk", 2, 1, (), (), ()),
+        Quest(1008, "Mirror Two", None, 1, (), (), (), Rewards(100, 50), "Mirror", (1001,)),
     ]
     items = {**d.items, 9: Item(9, "Odd Stone", (), ())}
     snail = replace(d.mobs[2], spawns={**d.mobs[2].spawns, TOWN: 1})  # a few in town too
-    quests = {**d.quests, **{x.id: x for x in extra}}
+    ores = (Reward(9, 7, "random"), Reward(4031000, 7, "random"), Reward(4000001, 2, "random"))
+    paid = replace(q, rewards=Rewards(7020, 1140, ores), chain="Mirror")
+    quests = {**d.quests, **{x.id: x for x in extra}, 1001: paid}
     return replace(d, quests=quests, mobs={**d.mobs, 2: snail}, items=items)
 
 
@@ -108,14 +111,13 @@ def visible(tool, kind):
 
 
 def texts(tool):
-    from PySide6.QtWidgets import QLabel, QPushButton
+    from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 
     from maplelens.overlay import InfoLine
 
-    # a name cut to fit has its full text as the tooltip
-    return [
-        w.toolTip() or w.text() for k in (QLabel, QPushButton, InfoLine) for w in visible(tool, k)
-    ]
+    # top to bottom; a name cut to fit has its full text as the tooltip
+    kinds = (QLabel, QPushButton, InfoLine)
+    return [w.toolTip() or w.text() for w in visible(tool, QWidget) if isinstance(w, kinds)]
 
 
 def rows(tool):
@@ -596,3 +598,80 @@ def test_bad_followed_setting_is_replaced(make):
     assert tool.settings["quests_followed"] == []
     tool = make(tracked=[], quests_followed=[1001, 999999])
     assert tool.settings["quests_followed"] == []
+
+
+# --- rewards ------------------------------------------------------------------------
+
+
+def reward_button(tool):
+    from PySide6.QtWidgets import QPushButton
+
+    # the reward line's tooltip keeps its mark; a tracked header's is the bare name
+    (found,) = [b for b in visible(tool, QPushButton) if b.toolTip().startswith(("▸", "▾"))]
+    return found
+
+
+def slots(tool):
+    from maplelens.tools.quest_helper.ui import Slot
+
+    return visible(tool, Slot)
+
+
+def test_reward_line_under_the_open_quest(make):
+    tool = make()
+    tool.update(opened(), RECT, 0)
+    t = texts(tool)  # top to bottom
+    assert t.index(MIRROR) < t.index("▸ 7,020 EXP · 1,140 mesos") < t.index("Sera")  # giver row
+
+
+def test_reward_line_opens_and_is_saved(make):
+    tool = make(tracked=[SNAILS], expanded=SNAILS)
+    tool.update(opened(), RECT, 0)
+    reward_button(tool).click()
+    assert tool.settings["quest_rewards_open"] is True and tool.calls["changed"] == 1
+    assert "Rest of chain (1 quest): +100 EXP · 50 mesos" in texts(tool)
+
+
+def test_no_reward_line_without_rewards(make):  # Review Focus 3
+    tool = make()
+    tool.update(opened("Small Talk"), RECT, 0)
+    assert not [x for x in texts(tool) if "EXP" in x]
+
+
+def test_collapsed_tracked_quest_has_no_reward_line(make):
+    tool = make(tracked=[1001])
+    tool.update(R(), RECT, 0)
+    assert not [x for x in texts(tool) if "EXP" in x]
+
+
+def test_bad_setting_reads_closed(make):  # hand-edited settings
+    tool = make(quest_rewards_open="yes")
+    assert tool.settings["quest_rewards_open"] is False
+
+
+def test_job_kept_when_a_tick_misses_it(make):  # Review Focus 1
+    tool = make(quest_rewards_open=True)
+    tool.update(replace(opened(), job="Rogue"), RECT, 0)
+    tool.update(opened(), RECT, 0)  # job None this tick
+    assert tool._job == "Rogue"
+
+
+def test_missing_icon_draws_an_empty_slot(make):  # Review Focus 2
+    tool = make(quest_rewards_open=True)
+    tool.update(opened(), RECT, 0)  # fixture item ids have no icon files
+    assert len(slots(tool)) == 3
+
+
+def test_icon_columns_follow_the_tab_width(make):  # Review Focus 4
+    tool = make(quest_rewards_open=True)
+    tool.update(opened(), RECT, 0)
+    tool.set_tab_w(480)
+    assert all(s.isVisibleTo(tool.tab) for s in slots(tool))
+
+
+def test_same_reading_does_not_redraw(make):  # Review Focus 5
+    tool = make(quest_rewards_open=True)
+    tool.update(opened(), RECT, 0)
+    body = tool._body
+    tool.update(opened(), RECT, 1)
+    assert tool._body is body
