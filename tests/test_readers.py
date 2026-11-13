@@ -198,13 +198,16 @@ def test_read_level(name):
     assert read_level(screen(name)) == EXPECTED[name]
 
 
-# Mac fullscreen: the game draws 1512x850 and the screen doubles it; no exact template
-# fits, so EXP and level are read from the native pixels (glyphs.read_scaled).
+# Mac fullscreen: the game's 16:9 picture fills the screen's width, 3024x1700 on a 3024x1964
+# screen (1512x850 doubled), 2880x1620 on a 2880x1800 one; no exact template fits, so EXP
+# and level are read from the native pixels (glyphs.read_scaled).
 FULLSCREEN = {
     "fullscreen_exp_a_3024x1700_100.png": ExpValue(42138, 50.33),
     "fullscreen_exp_b_3024x1700_100.png": ExpValue(42286, 50.51),  # 8 beats 9 by 0.06
     "fullscreen_exp_c_3024x1700_100.png": ExpValue(42397, 50.64),
     "fullscreen_level_a_3024x1700_100.png": 29,
+    # a 2880x1800 screen: its picture is 2880x1620; the decimal point is faint (SCALED_FAINT)
+    "fullscreen_exp_d_2880x1620_100.png": ExpValue(19159, 66.11),
 }
 
 

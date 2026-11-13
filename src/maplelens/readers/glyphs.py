@@ -26,9 +26,15 @@ CHAR_NAMES = {
 }
 
 # read_scaled: ink is the min of B, G, R at or above SCALED_INK (light digits; the status
-# bar and the green brackets stay lower). On Mac fullscreen grabs (1512x850) the right
-# char scored 0.76 or more and beat the next by 0.148 or more; the bars are set lower.
+# bar, about 88, and the green brackets stay lower). On Mac fullscreen grabs (1512x850) the
+# right char scored 0.76 or more and beat the next by 0.148 or more; the bars are set lower.
 SCALED_INK = 150
+# A faint glyph alone in a gap between glyphs: ink from SCALED_FAINT up. At 2880x1620 (a
+# 2880x1800 screen) the blurred decimal point peaks near 107, under SCALED_INK: it went
+# missing, its gap read as a space and no value parsed. All glyphs at this level would
+# blur together at 1512x850 (the bar is about 88; 100 is exp.EXP_INK_LO's floor).
+SCALED_FAINT = 100
+FAINT_CHARS = ".,"
 SCALED_MIN = 0.6
 SCALED_MARGIN = 0.04
 
@@ -238,18 +244,32 @@ def read_scaled(
     return out
 
 
+def _ink_runs(text: np.ndarray) -> list[tuple[int, int, bool]]:
+    """Glyph column spans (a, b, faint) of `text`: runs of SCALED_INK ink, and runs of
+    fainter SCALED_FAINT ink that touch none of them (a small glyph in a gap)."""
+
+    def runs(level: int) -> list[tuple[int, int]]:
+        cols = np.flatnonzero((text >= level).any(axis=0))
+        if cols.size == 0:
+            return []
+        return [(r[0], r[-1] + 1) for r in np.split(cols, np.flatnonzero(np.diff(cols) > 1) + 1)]
+
+    strong = runs(SCALED_INK)
+    faint = [r for r in runs(SCALED_FAINT) if not any(r[0] <= b and r[1] >= a for a, b in strong)]
+    return sorted([(a, b, False) for a, b in strong] + [(a, b, True) for a, b in faint])
+
+
 def _read_scaled(
     strip: np.ndarray, text: np.ndarray, s: float, font: str, space_px: int
 ) -> str | None:
-    cols = np.flatnonzero((text >= SCALED_INK).any(axis=0))
-    if cols.size == 0:
+    runs = _ink_runs(text)
+    if not runs:
         return None
     templates = _scaled_font(font, round(s, 3))
     widest = max(t.shape[1] for _, t in templates)
     pad = math.ceil(2 * s)
     out, prev_end = "", None
-    for run in np.split(cols, np.flatnonzero(np.diff(cols) > 1) + 1):
-        a, b = run[0], run[-1] + 1
+    for a, b, faint in runs:
         if b - a > widest:  # touching glyphs: no single char fits
             return None
         if prev_end is not None and a - prev_end >= space_px * s:
@@ -266,6 +286,8 @@ def _read_scaled(
             return None
         if len(top) > 1 and top[0][1] - top[1][1] < SCALED_MARGIN:
             return None
+        if faint and top[0][0] not in FAINT_CHARS:
+            return None  # only punctuation is that faint: anything else there is unsure
         out += top[0][0]
     return out
 
