@@ -3,6 +3,9 @@
 from dataclasses import dataclass
 
 from maplelens.tools.quest_helper.data import Quest, QuestData
+from maplelens.tools.quest_helper.plan import TIMES
+
+EN_DASH = chr(0x2013)
 
 _BRANCHES = {
     "Beginner": ("Beginner",),
@@ -44,7 +47,7 @@ class Group:
 def _shown(data: QuestData, r, by_class: bool = False) -> Shown:
     item = data.items.get(r.item)
     name = item.name if item else f"Item {r.item}"
-    tip = name + (f" ×{r.count}" if r.count > 1 else "")  # noqa: RUF001
+    tip = name + (f" {TIMES}{r.count}" if r.count > 1 else "")
     if by_class and r.cls:
         tip += f" ({r.cls})"
     if r.gender:
@@ -63,7 +66,7 @@ def _contribution(quest: Quest) -> str | None:
     if not c:
         return None
     town, low, high = c
-    return f"{town} contribution +{low}" + (f"–{high}" if high != low else "")  # noqa: RUF001
+    return f"{town} contribution +{low}" + (f"{EN_DASH}{high}" if high != low else "")
 
 
 def chain_rest(data: QuestData, quest: Quest) -> list[Quest]:
