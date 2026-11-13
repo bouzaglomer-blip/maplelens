@@ -41,7 +41,6 @@ from maplelens.readers.window import UNREADABLE
 from maplelens.tools.quest_helper.data import ICONS, Quest, QuestData, load
 from maplelens.tools.quest_helper.plan import (
     SEVERAL,
-    TIMES,
     Part,
     Target,
     also_for,
@@ -139,11 +138,12 @@ def _icon(item: int) -> QPixmap | None:
 class Slot(QWidget):
     """One reward item: its icon on a dark square, the count in the corner, the name on hover."""
 
-    def __init__(self, shown: Shown):
+    def __init__(self, shown: Shown, corner: bool = True):
         super().__init__()
         self.setFixedSize(SLOT, SLOT)
         self.setToolTip(shown.tip)
-        self._pix, self._count = _icon(shown.item), shown.count
+        # in the list form the name beside the slot carries the count
+        self._pix, self._count = _icon(shown.item), shown.count if corner else 0
 
     def paintEvent(self, _event):
         p = QPainter(self)
@@ -583,9 +583,8 @@ class QuestHelperTool:
                 continue
             row = QHBoxLayout()
             row.setSpacing(6)
-            name = s.name + (f" {TIMES}{s.count}" if s.count > 1 else "")
-            row.addWidget(Slot(s))
-            row.addWidget(_wrapped(name, VALUE_COLOR), 1)
+            row.addWidget(Slot(s, corner=False))
+            row.addWidget(_wrapped(s.tip, VALUE_COLOR), 1)
             col.addLayout(row)
         return box
 

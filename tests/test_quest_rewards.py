@@ -45,11 +45,21 @@ def test_class_items():
     assert every[0].label == "By class:" and every[0].items[0].tip == "Old Wisconsin (Beginner)"
 
 
+def labels(d, qid, job):
+    return [g.label for g in details(d, d.quests[qid], job) if isinstance(g, Group)]
+
+
 def test_pick_and_always():
     d = load()
     mage = [x for x in details(d, d.quests[10401], "Magician") if isinstance(x, Group)]
-    assert [g.label for g in mage] == ["For your class:"]  # Blackbull: class-only picks
+    assert [g.label for g in mage] == ["For your class, you pick 1 of:"]  # Blackbull
     assert [s.item for s in mage[0].items] == [2043702, 2043802]
+    assert labels(d, 10401, "Warrior") == ["For your class, you pick 1 of:"]
+    assert labels(d, 10401, None) == ["By class, you pick 1 of:"]
+    assert labels(d, 10205, "Thief") == ["For your class:"]
+    assert labels(d, 10205, None) == ["By class:"]
+    last = details(d, d.quests[10129], None)  # the rest of its chain pays nothing
+    assert not any(isinstance(x, str) and x.startswith("Rest of chain") for x in last)
     assert details(d, d.quests[10600], None)[0] == Group(
         "", (Shown(2000003, "Blue Potion", 20, "Blue Potion ×20"),)
     )

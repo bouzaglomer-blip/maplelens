@@ -1,5 +1,6 @@
 """A quest's rewards as the Quests tab shows them: the closed line and the opened groups."""
 
+from collections import Counter
 from dataclasses import dataclass
 
 from maplelens.tools.quest_helper.data import Quest, QuestData
@@ -85,24 +86,40 @@ def chain_rest(data: QuestData, quest: Quest) -> list[Quest]:
     return [q for q in data.quests.values() if q.id in found]
 
 
-def details(data: QuestData, quest: Quest, branch: str | None) -> tuple[Group | str, ...]:
+def _class_label(classed: list, job_branch: str | None) -> str:
+    base = "By class" if job_branch is None else "For your class"
+    per = Counter(r.cls for r in classed)
+    if max(per.values()) > 1:  # a class with a choice: say which kind
+        kinds = {r.kind for r in classed}
+        if kinds == {"pick"}:
+            return f"{base}, you pick 1 of:"
+        if kinds == {"random"}:
+            return f"{base}, random 1 of:"
+    return f"{base}:"
+
+
+def details(data: QuestData, quest: Quest, job_branch: str | None) -> tuple[Group | str, ...]:
     items = quest.rewards.items
     plain = [r for r in items if not r.cls]
     out: list[Group | str] = []
     for kind, label in (("always", ""), ("pick", "You pick 1 of:"), ("random", "Random, 1 of:")):
         if group := tuple(_shown(data, r) for r in plain if r.kind == kind):
             out.append(Group(label, group))
-    classed = [r for r in items if r.cls and (branch is None or r.cls == branch)]
+    classed = [r for r in items if r.cls and (job_branch is None or r.cls == job_branch)]
     if classed:
-        label = "By class:" if branch is None else "For your class:"
-        out.append(Group(label, tuple(_shown(data, r, branch is None) for r in classed)))
+        out.append(
+            Group(
+                _class_label(classed, job_branch),
+                tuple(_shown(data, r, job_branch is None) for r in classed),
+            )
+        )
     if line := _contribution(quest):
         out.append(line)
     rest = chain_rest(data, quest)
-    if rest:
+    money = _money(sum(q.rewards.exp for q in rest), sum(q.rewards.mesos for q in rest))
+    if money:
         n = len(rest)
-        money = _money(sum(q.rewards.exp for q in rest), sum(q.rewards.mesos for q in rest))
-        out.append(f"Rest of chain ({n} quest{'s' * (n > 1)}): +{money}".rstrip(" +"))
+        out.append(f"Rest of chain ({n} quest{'s' * (n > 1)}): +{money}")
     return tuple(out)
 
 

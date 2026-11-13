@@ -678,11 +678,28 @@ def test_iconless_item_of_a_big_group_has_its_name(make):
 
     tool = make()
     hats = [Shown(i, f"Hat {i}", 1, f"Hat {i}") for i in (1002000, 1002001, 1002003)]  # icons
-    group = tool._widget(("icons", "Random, 1 of:", (*hats, Shown(9, "Odd Stone", 7, "x"))))
+    group = tool._widget(
+        ("icons", "Random, 1 of:", (*hats, Shown(9, "Odd Stone", 7, f"Odd Stone {TIMES}7")))
+    )
     (grid,) = group.findChildren(QGridLayout)
     assert grid.count() == 3  # the three with icons, in a row
-    assert len(group.findChildren(Slot)) == 4
+    slots_ = group.findChildren(Slot)
+    assert len(slots_) == 4
     assert f"Odd Stone {TIMES}7" in [w.text() for w in group.findChildren(QLabel)]
+    assert [s._count for s in slots_] == [1, 1, 1, 0]  # the list form draws no corner count
+
+
+def test_list_form_shows_the_tip_text(make):
+    from PySide6.QtWidgets import QLabel
+
+    from maplelens.tools.quest_helper.rewards import Shown
+    from maplelens.tools.quest_helper.ui import Slot
+
+    tool = make()
+    robe = Shown(9, "Blue Sauna Robe", 1, "Blue Sauna Robe (male)")
+    group = tool._widget(("icons", "", (robe,)))
+    assert "Blue Sauna Robe (male)" in [w.text() for w in group.findChildren(QLabel)]
+    assert [s._count for s in group.findChildren(Slot)] == [0]
 
 
 def test_contribution_only_line_does_not_open(make):
